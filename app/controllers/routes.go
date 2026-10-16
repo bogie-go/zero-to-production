@@ -32,6 +32,7 @@ func (s *Server) SetupRoutes() {
 	//
 	//	s.Posts.SetupRoutes(&r.RouterGroup)
 	//
+	s.Products.SetupRoutes(&r.RouterGroup)
 	// bogie:routes
 
 	// Development only, and only while nothing above claims /. Goes with

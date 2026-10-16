@@ -26,6 +26,7 @@ type Server struct {
 	Router *gin.Engine
 	Log    *slog.Logger
 
+	Products *ProductsController
 	// bogie:controllers
 }
 
