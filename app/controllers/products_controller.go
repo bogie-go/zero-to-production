@@ -1,30 +1,40 @@
 package controllers
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
+	"ecommerce/app/domain"
 	"ecommerce/app/views"
 )
 
-// ProductsController is the HTTP surface of products: its dependencies, its routes
-// and its actions, one Rails controller in one file. Dependencies are small
-// interfaces declared here (rule 2), holding only the methods the actions
-// call, and the real thing is passed in from app/application.go, where this
-// controller is wired:
-//
-//	type productsService interface {
-//		Get(ctx context.Context, id string) (domain.Thing, error)
-//	}
+// productsStore is the slice of the store this controller uses, declared next
+// to its caller and holding only the methods the actions call.
+// *models.Store satisfies it, and app/application.go passes it in; the
+// test's fake is a few lines.
+type productsStore interface {
+	GetProduct(ctx context.Context, id string) (domain.Product, error)
+	ListProducts(ctx context.Context, limit int32) ([]domain.Product, error)
+}
+
+// productsListLimit is how many a listing returns, newest first. Paging is
+// yours to add when a client needs more.
+const productsListLimit = 100
+
+// ProductsController is the HTTP surface of products: its dependencies, its
+// routes and its actions, one Rails controller in one file.
 type ProductsController struct {
-	Log *slog.Logger
+	Store productsStore
+	Log   *slog.Logger
 }
 
 // NewProductsController builds the controller.
-func NewProductsController(log *slog.Logger) *ProductsController {
-	return &ProductsController{Log: log}
+func NewProductsController(store productsStore, log *slog.Logger) *ProductsController {
+	return &ProductsController{Store: store, Log: log}
 }
 
 // SetupRoutes mounts the controller under its own prefix. Middleware the
@@ -42,7 +52,12 @@ func (ctl *ProductsController) SetupRoutes(router *gin.RouterGroup) {
 // and converts the result back. Nothing below app/controllers sees
 // *gin.Context (rule 5).
 func (ctl *ProductsController) Index(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, views.ErrorMessage("products#index is not implemented yet"))
+	products, err := ctl.Store.ListProducts(c.Request.Context(), productsListLimit)
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, productsView(products))
 }
 
 // Show handles GET /products/:id.
@@ -51,5 +66,48 @@ func (ctl *ProductsController) Index(c *gin.Context) {
 // and converts the result back. Nothing below app/controllers sees
 // *gin.Context (rule 5).
 func (ctl *ProductsController) Show(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, views.ErrorMessage("products#show is not implemented yet"))
+	product, err := ctl.Store.GetProduct(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, productView(product))
+}
+
+// fail maps a domain error to a status, the one place that mapping lives:
+// not found is 404, and anything else is logged and answered 500 without
+// leaking its text.
+func (ctl *ProductsController) fail(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		c.JSON(http.StatusNotFound, views.ErrorMessage("no such product"))
+	default:
+		ctl.Log.ErrorContext(c.Request.Context(), "products: request failed",
+			"path", c.FullPath(), "err", err, "request_id", c.GetString("request_id"))
+		c.JSON(http.StatusInternalServerError, views.ErrorMessage("internal error"))
+	}
+}
+
+// The controller converts between the domain and the wire. views never
+// imports domain, so this is where ProductResponse is built.
+
+func productView(p domain.Product) views.ProductResponse {
+	return views.ProductResponse{
+		ID:          p.ID,
+		Name:        p.Name,
+		Description: p.Description,
+		PriceCents:  p.PriceCents,
+		Stock:       p.Stock,
+		ImageUrl:    p.ImageUrl,
+		CreatedAt:   p.CreatedAt,
+		UpdatedAt:   p.UpdatedAt,
+	}
+}
+
+func productsView(products []domain.Product) views.ProductsResponse {
+	out := views.ProductsResponse{Products: make([]views.ProductResponse, 0, len(products))}
+	for _, p := range products {
+		out.Products = append(out.Products, productView(p))
+	}
+	return out
 }
