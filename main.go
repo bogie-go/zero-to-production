@@ -11,7 +11,10 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+
+	"github.com/gin-gonic/gin"
 
 	"ecommerce/app"
 )
@@ -22,6 +25,7 @@ Commands:
   serve               the HTTP server (default)
   migrate <command>   inspect or move the embedded schema
   db <command>        create, drop or prepare the database itself
+  routes              every mounted route, method and path (rails routes)
 
 With no command this serves, which is what the container does. Every command
 reads the same ECOMMERCE_ENV, so they all act on the same database.
@@ -51,6 +55,7 @@ func main() {
 		"serve":   runServe,
 		"migrate": runMigrate,
 		"db":      runDB,
+		"routes":  runRoutes,
 		// bogie:commands
 	}
 	if command == "help" || command == "-h" || command == "--help" {
@@ -79,4 +84,20 @@ func runServe(ctx context.Context, _ []string) error {
 		return err
 	}
 	return application.Start(ctx)
+}
+
+// runRoutes prints every mounted route, as `rails routes` does, by pointing
+// gin's own debug route print at the format Rails uses rather than fetching
+// Router.Routes() and writing a second lister: this fires from inside the
+// same SetupRoutes serve runs, so the list is what is actually wired, in the
+// order it was wired, not a guess read off the templates. Like gin's own
+// print, it only fires in development: ecommerce routes in test or
+// production prints nothing, the same trade `NewServer` already makes.
+func runRoutes(ctx context.Context, _ []string) error {
+	gin.DebugPrintRouteFunc = func(method, path, handler string, _ int) {
+		handler = strings.TrimSuffix(strings.TrimPrefix(handler, "ecommerce/"), "-fm")
+		fmt.Printf("%-7s  %-30s  %s\n", method, path, handler)
+	}
+	_, err := app.NewApplication(ctx)
+	return err
 }
