@@ -1,0 +1,80 @@
+package controllers
+
+import (
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+
+	"ecommerce/config"
+)
+
+// testServer builds a root server and mounts its routes. Every controller
+// and namespace field is given an empty value first, by reflection so this
+// test needs no edit when `bogie g controller` adds one: mounting only binds
+// method values and never calls a handler, and app/application.go is what
+// builds the real ones. `bogie doctor` checks that every controller is both
+// constructed and mounted.
+func testServer(env string) *Server {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s := NewServer(config.Config{Env: env, App: config.AppConfig{Addr: ":0", LogLevel: "info"}}, log)
+	fields := reflect.ValueOf(s).Elem()
+	for i := range fields.NumField() {
+		if f := fields.Field(i); f.Kind() == reflect.Pointer && f.IsNil() && f.CanSet() {
+			f.Set(reflect.New(f.Type().Elem()))
+		}
+	}
+	s.SetupRoutes()
+	return s
+}
+
+func TestHealthz(t *testing.T) {
+	s := testServer(config.EnvTest)
+
+	rec := httptest.NewRecorder()
+	s.Router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
+		t.Fatalf("GET /healthz = %d %q, want 200 ok", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("X-Request-Id") == "" {
+		t.Error("no X-Request-Id header: the middleware chain is not mounted")
+	}
+}
+
+func get(s *Server, path string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	s.Router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	return rec
+}
+
+// The welcome page greets a developer at / and nobody else: development only,
+// GET / only, and gone the moment a route claims /.
+func TestWelcomeInDevelopmentOnly(t *testing.T) {
+	dev := testServer(config.EnvDevelopment)
+	if rec := get(dev, "/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "is running") {
+		t.Errorf("development GET / = %d, want the welcome page", rec.Code)
+	}
+	if rec := get(dev, "/nothing-here"); rec.Code != http.StatusNotFound {
+		t.Errorf("development GET /nothing-here = %d, want 404: the welcome page answers / only", rec.Code)
+	}
+
+	prod := testServer(config.EnvProduction)
+	if rec := get(prod, "/"); rec.Code != http.StatusNotFound {
+		t.Errorf("production GET / = %d, want 404", rec.Code)
+	}
+}
+
+func TestARouteAtRootReplacesTheWelcomePage(t *testing.T) {
+	s := testServer(config.EnvDevelopment)
+	s.Router.GET("/", func(c *gin.Context) { c.String(http.StatusOK, "mine") })
+
+	if rec := get(s, "/"); rec.Body.String() != "mine" {
+		t.Errorf("GET / = %q, want the app's own route", rec.Body.String())
+	}
+}

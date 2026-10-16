@@ -1,0 +1,46 @@
+# Everything ecommerce needs to run on its own.
+#
+#   make up        start it (and wait until it is healthy)
+#   make down      stop it, keeping the data
+#   make reset     stop it and DESTROY the data
+#
+# Postgres listens on 5440, not 5432, because the Rails app next door almost
+# certainly holds 5432 already. To move it, change the number here and in
+# every place that repeats it, or the app keeps dialing 5440:
+#
+#   config/config.go                    the development and test defaults
+#   config/credentials.yml.enc          database_url (bogie credentials:edit)
+#   app/services/database/database.go   bundledPort, which picks the hint,
+#                                       and the URL its test expects
+#   Makefile                            the "ready" line of make up
+#
+# The database starts EMPTY on purpose: ecommerce owns its schema and applies
+# the migrations embedded in its own binary at boot (make db-prepare, or just
+# make server). Seed data is separate and deliberate.
+#
+# An explicit project name, because Compose would otherwise derive one from the
+# directory, and a Rails app checked out under the same name would share this
+# volume.
+name: ecommerce-service
+
+services:
+  db:
+    container_name: ecommerce-db
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ecommerce_development
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data/pgdata
+    ports:
+      - "5440:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d ecommerce_development" ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  pgdata:

@@ -1,0 +1,24 @@
+// Package db carries the schema ecommerce owns, and the seed data that goes
+// with it.
+//
+// Both are embedded rather than copied into an image as files: one binary,
+// one schema, and no way for a container to run a version of the schema that
+// does not match the code expecting it. sqlc compiles the queries against
+// these same migration files, so there is no schema dump to keep in sync.
+package db
+
+import "embed"
+
+// Migrations holds the goose migration files, applied in filename order.
+// `all:` so the .keep file counts and an app with no migrations yet still
+// compiles; goose reads only *.sql.
+//
+//go:embed all:migrate
+var Migrations embed.FS
+
+// Seeds holds the goose seed files. They are versioned like migrations but
+// tracked in their own table, so re-seeding never looks like a pending schema
+// change and a seed can be rolled back without touching the schema.
+//
+//go:embed all:seeds
+var Seeds embed.FS

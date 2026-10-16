@@ -1,0 +1,40 @@
+package controllers
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"ecommerce/app/middlewares"
+)
+
+// SetupRoutes is the whole routing table, in one readable place: the one
+// Rails convention that translates without compromise. The answer to "what
+// does this service expose" is this file, and "how is this endpoint
+// authenticated" is the group it sits in.
+func (s *Server) SetupRoutes() {
+	r := s.Router
+
+	r.Use(
+		middlewares.RequestID(),
+		middlewares.Recover(s.Log),
+		middlewares.Logger(s.Log),
+	)
+
+	// Unauthenticated, no side effects: what a load balancer polls.
+	r.GET("/healthz", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+
+	// Each controller mounts its own routes under a group it names; a
+	// namespace (`bogie g controller admin/reports`) mounts its group and
+	// the controllers in it, with the middleware they share, in its own
+	// routes.go. `bogie g controller` inserts one line above the marker; by
+	// hand it is the same one line:
+	//
+	//	s.Posts.SetupRoutes(&r.RouterGroup)
+	//
+	// bogie:routes
+
+	// Development only, and only while nothing above claims /. Goes with
+	// app/controllers/welcome.go: delete both together.
+	s.mountWelcome()
+}

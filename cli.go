@@ -1,0 +1,188 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strconv"
+
+	"ecommerce/app/services/database"
+	"ecommerce/app/services/migrate"
+	"ecommerce/config"
+	"ecommerce/lib/logger"
+)
+
+const migrateUsage = `Usage: ecommerce migrate <command>
+
+Commands:
+  status              which migrations have run, and which are pending
+  version             the current schema version
+  up                  apply every pending migration (also done at boot)
+  down --yes          roll back the most recent migration
+  down-to N --yes     roll back until the schema is at version N (0 = empty)
+
+The migrations are compiled into this binary, so these run against whatever
+database the current ECOMMERCE_ENV selects: the same one the server would
+use. On a deployed host:
+
+  docker exec <container> ecommerce migrate status
+
+--yes is required for anything that rolls back. Migrations drop tables on the
+way down, and there is no undo.
+`
+
+// runMigrate handles `ecommerce migrate ...`.
+//
+// It exists because the migrations are embedded: the binary that applies them
+// is also the only thing that can roll them back, so it has to expose that.
+// Shipping the goose CLI alongside would be a second artifact carrying its own
+// copy of the migrations, which is the version skew embedding avoids.
+func runMigrate(ctx context.Context, args []string) (err error) {
+	if len(args) == 0 {
+		fmt.Fprint(os.Stderr, migrateUsage)
+		return fmt.Errorf("migrate: no command given")
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	log := logger.New(cfg.App.LogLevel, cfg.Env)
+	url := cfg.App.DatabaseURL
+	// Every branch below ends in a connection, so the hint goes on once here
+	// rather than at each return.
+	defer func() { err = database.Hint(err, url) }()
+
+	rest := args[1:]
+	confirmed := false
+	for _, a := range rest {
+		if a == "--yes" {
+			confirmed = true
+		}
+	}
+
+	switch args[0] {
+	case "status":
+		return migrate.Status(ctx, url)
+
+	case "version":
+		v, err := migrate.Version(ctx, url)
+		if err != nil {
+			return err
+		}
+		fmt.Println(v)
+		return nil
+
+	case "up":
+		return migrate.Run(ctx, url, log)
+
+	case "down":
+		if !confirmed {
+			return fmt.Errorf("migrate: down drops the most recent migration's tables; pass --yes to confirm")
+		}
+		return migrate.Down(ctx, url, log)
+
+	case "down-to":
+		if len(rest) == 0 {
+			return fmt.Errorf("migrate: down-to needs a version, e.g. ecommerce migrate down-to 20261002000000 --yes")
+		}
+		target, err := strconv.ParseInt(rest[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("migrate: down-to: %q is not a version", rest[0])
+		}
+		if !confirmed {
+			return fmt.Errorf("migrate: down-to %d drops every migration above it; pass --yes to confirm", target)
+		}
+		return migrate.DownTo(ctx, url, target, log)
+
+	default:
+		fmt.Fprint(os.Stderr, migrateUsage)
+		return fmt.Errorf("migrate: unknown command %q", args[0])
+	}
+}
+
+const dbUsage = `Usage: ecommerce db <command>
+
+Commands:
+  create              create the database this environment points at
+  drop --yes          DROP that database, and everything in it
+  prepare             create if needed, migrate, seed (rails db:prepare)
+  seed                apply pending seeds from db/seeds
+  seed-down --yes     roll back the most recent seed
+
+Rails' db:create and db:drop. Both connect to the server's "postgres" database
+rather than the target, so they work before it exists and after it is gone,
+and, like migrate, they need no psql on the host.
+
+create is idempotent: an existing database is reported, not an error.
+
+drop is refused in production. --yes is required everywhere else. There is no
+undo: this is not a rollback of one migration, it is every table at once.
+`
+
+// runDB handles `ecommerce db ...`.
+//
+// Separate from `ecommerce migrate` because it is a different object: migrate
+// changes a schema inside a database, this creates and destroys the database
+// holding it. Rails draws the same line between db:create and db:migrate.
+func runDB(ctx context.Context, args []string) (err error) {
+	if len(args) == 0 {
+		fmt.Fprint(os.Stderr, dbUsage)
+		return fmt.Errorf("db: no command given")
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	log := logger.New(cfg.App.LogLevel, cfg.Env)
+	url := cfg.App.DatabaseURL
+	// Every branch below ends in a connection, so the hint goes on once here
+	// rather than at each return.
+	defer func() { err = database.Hint(err, url) }()
+
+	confirmed := false
+	for _, a := range args[1:] {
+		if a == "--yes" {
+			confirmed = true
+		}
+	}
+
+	switch args[0] {
+	case "create":
+		return database.Create(ctx, url, log)
+
+	case "prepare":
+		if err := database.Create(ctx, url, log); err != nil {
+			return err
+		}
+		if err := migrate.Run(ctx, url, log); err != nil {
+			return err
+		}
+		return migrate.Seed(ctx, url, log)
+
+	case "seed":
+		return migrate.Seed(ctx, url, log)
+
+	case "seed-down":
+		if !confirmed {
+			return fmt.Errorf("db: seed-down deletes the most recent seed's rows; pass --yes to confirm")
+		}
+		return migrate.SeedDown(ctx, url, log)
+
+	case "drop":
+		// Not a --yes that production can also pass. A deployed database is
+		// not something a flag should be able to remove.
+		if cfg.Production() {
+			return fmt.Errorf("db: drop is refused in production")
+		}
+		if !confirmed {
+			return fmt.Errorf("db: drop destroys every table in %s; pass --yes to confirm", cfg.Env)
+		}
+		return database.Drop(ctx, url, log)
+
+	default:
+		fmt.Fprint(os.Stderr, dbUsage)
+		return fmt.Errorf("db: unknown command %q", args[0])
+	}
+}

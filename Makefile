@@ -1,0 +1,115 @@
+MAKEFLAGS += --no-print-directory
+
+.PHONY: help up down reset logs psql credentials build server test sqlc vet fmt lint ci tidy db-create db-drop db-prepare db-reset db-migrate db-migrate-down db-rollback db-migrate-to db-rollback-to db-migrate-status db-version db-migrate-redo db-seed db-seed-down g_migration_% g_seed_%
+
+help: ## every task
+	@grep -E '^[a-z_%-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+up: ## start postgres (compose) and wait until it is healthy
+	docker compose up -d --wait
+	@echo "ready: postgres on :5440"
+
+down: ## stop it, keeping the data
+	docker compose down
+
+reset: ## stop it and DESTROY the data
+	docker compose down -v
+
+logs: ## tail the containers
+	docker compose logs -f
+
+psql: ## open a shell on the development database
+	docker exec -it ecommerce-db psql -U postgres -d ecommerce_development
+
+credentials: ## edit the encrypted settings (development); ENV=production for its own file and key
+	go tool credentials edit $(if $(ENV),-e $(ENV),)
+
+build: ## compile the binary
+	go build -o bin/ecommerce .
+
+# One boot, one set of logs, no watcher. `bogie server` runs the same thing
+# under live reload in development; this is what to run when a reload would
+# get in the way, or when reload itself is the suspect.
+server: ## run the HTTP server (bogie server adds live reload)
+	go run . serve
+
+
+test: ## run the suite with coverage, in the test environment (needs: make up, then ECOMMERCE_ENV=test bogie db:prepare once)
+	ECOMMERCE_ENV=test go test -race -cover ./...
+
+sqlc: ## regenerate app/models from db/queries against db/migrate
+	@ls db/queries/*.sql >/dev/null 2>&1 || { echo "no query files in db/queries yet; nothing to generate"; exit 0; }
+	cd db && go tool sqlc generate
+
+vet: ## stdlib static analysis
+	go vet ./...
+
+fmt: ## format
+	gofmt -s -w .
+
+lint: vet ## gofmt check + golangci-lint
+	@test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
+	golangci-lint run ./...
+
+ci: ## every check, locally; green ends with gh signoff (bin/ci)
+	@bin/ci
+
+tidy: ## prune and verify the module graph
+	go mod tidy && go mod verify
+
+# The db-* tasks are named after Rails' and go through the binary's own
+# subcommands rather than the goose CLI, so local development runs exactly
+# the code a deployed container runs. None of them names a database: the
+# binary resolves ECOMMERCE_DATABASE_URL (ECOMMERCE_TEST_DATABASE_URL in
+# test) for the current ECOMMERCE_ENV the way the server does, so `make db-migrate` and `make server` cannot end
+# up pointed at two different databases.
+db-create: ## create the database, like rails db:create; an existing one is fine
+	go run . db create
+
+db-drop: ## DROP the database and every table in it, like rails db:drop
+	go run . db drop --yes
+
+db-prepare: ## create if needed, migrate, seed, like rails db:prepare
+	go run . db prepare
+
+db-reset: ## drop it and rebuild it from the migrations, like rails db:reset
+	@$(MAKE) db-drop
+	@$(MAKE) db-prepare
+
+db-migrate: ## apply pending migrations (deployed containers do this at boot)
+	go run . migrate up
+
+db-migrate-down: ## roll back the last migration; DROPS ITS TABLES
+	go run . migrate down --yes
+
+db-rollback: ## rails' name for db-migrate-down; the same task
+	@$(MAKE) db-migrate-down
+
+db-migrate-to: ## roll back to a version: make db-migrate-to V=20261002000000
+	@test -n "$(V)" || { echo "usage: make db-migrate-to V=<version>   (or db-rollback-to)"; exit 1; }
+	go run . migrate down-to $(V) --yes
+
+db-rollback-to: ## rails' name for db-migrate-to; the same task
+	@$(MAKE) db-migrate-to V=$(V)
+
+db-migrate-status: ## which migrations have run, and which are pending
+	go run . migrate status
+
+db-version: ## the current schema version
+	go run . migrate version
+
+db-migrate-redo: ## roll the last migration back and re-apply it
+	@$(MAKE) db-migrate-down
+	@$(MAKE) db-migrate
+
+db-seed: ## apply pending seeds from db/seeds, through the binary
+	go run . db seed
+
+db-seed-down: ## roll back the most recent seed
+	go run . db seed-down --yes
+
+g_migration_%: ## author a migration: make g_migration_add_slug_to_posts
+	go tool goose -dir=db/migrate create $* sql
+
+g_seed_%: ## author a seed: make g_seed_add_demo_comments
+	go tool goose -dir=db/seeds create $* sql

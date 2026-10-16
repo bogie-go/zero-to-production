@@ -1,0 +1,69 @@
+package models
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"testing"
+
+	"ecommerce/app/services/migrate"
+	"ecommerce/config"
+)
+
+// dbHint names both things a fresh checkout is missing: Postgres itself, and
+// the test database, which db:prepare in development does not create.
+var dbHint = "Is the database up, and the test database created? Run: make up && " +
+	config.EnvVar + "=test bogie db:prepare (bin/ci does both)"
+
+// testStore opens the TEST database, migrates it, and empties every table, so
+// each test starts from nothing. The environment is forced to test here so
+// that `go test` run by hand in a development shell can never truncate
+// development data.
+//
+// It needs Postgres running and the test database created: make up, then
+// ECOMMERCE_ENV=test bogie db:prepare once (bin/ci does both). There is
+// no in-memory substitute on purpose; a store test that does not touch the
+// database tests nothing.
+func testStore(t *testing.T) *Store {
+	t.Helper()
+	t.Setenv(config.EnvVar, config.EnvTest)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if err := migrate.Run(ctx, cfg.App.DatabaseURL, quiet); err != nil {
+		t.Fatalf("migrate: %v\n%s", err, dbHint)
+	}
+	store, err := Open(ctx, cfg.App.DatabaseURL)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, dbHint)
+	}
+	t.Cleanup(store.Close)
+
+	// Every table of the app's, in one statement, CASCADE for the foreign
+	// keys between them. goose's version tables are left alone.
+	// goose's version tables are left alone, and so is River's schema,
+	// which keeps its own migration record.
+	rows, err := store.pool.Query(ctx,
+		"SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('goose_db_version', 'seed_db_version') AND tablename NOT LIKE 'river_%'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		tables = append(tables, name)
+	}
+	rows.Close()
+	for _, table := range tables {
+		if _, err := store.pool.Exec(ctx, "TRUNCATE "+table+" CASCADE"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return store
+}

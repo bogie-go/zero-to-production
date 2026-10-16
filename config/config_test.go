@@ -1,0 +1,197 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/bogie-go/credentials/pkg/credentials"
+)
+
+func TestLoadDefaults(t *testing.T) {
+	t.Setenv(EnvVar, "test")
+	// Defaults are what an unset environment gets. A developer on their own
+	// Postgres exports the test URL to run the suite, so clear it here.
+	t.Setenv(TestDatabaseURLVar, "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	a := cfg.App
+	if cfg.Env != EnvTest || a.Addr != ":8080" || a.LogLevel != "info" || a.ShutdownGrace.Seconds() != 10 {
+		t.Errorf("defaults = %+v", a)
+	}
+	if a.DatabaseURL != "postgres://postgres:postgres@localhost:5440/ecommerce_test?sslmode=disable" {
+		t.Errorf("test database = %q; want the compose stack's ecommerce_test", a.DatabaseURL)
+	}
+	if !a.MigrateAtBoot {
+		t.Error("MigrateAtBoot defaults to false; want true")
+	}
+}
+
+// The suite truncates every table and bin/ci drops the database, so test must
+// never follow a ECOMMERCE_DATABASE_URL exported for development; it
+// moves only with its own variable.
+func TestTestIgnoresTheSharedDatabaseURL(t *testing.T) {
+	t.Setenv(EnvVar, "test")
+	t.Setenv("ECOMMERCE_DATABASE_URL", "postgres://postgres:postgres@localhost:5440/ecommerce_development?sslmode=disable")
+	t.Setenv(TestDatabaseURLVar, "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "postgres://postgres:postgres@localhost:5440/ecommerce_test?sslmode=disable"; cfg.App.DatabaseURL != want {
+		t.Errorf("test database = %q; want %q, whatever ECOMMERCE_DATABASE_URL says", cfg.App.DatabaseURL, want)
+	}
+
+	t.Setenv(TestDatabaseURLVar, "postgres://ci:ci@db:5432/ecommerce_test")
+	if cfg, err = Load(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.App.DatabaseURL != "postgres://ci:ci@db:5432/ecommerce_test" {
+		t.Errorf("test database = %q; want the one %s names", cfg.App.DatabaseURL, TestDatabaseURLVar)
+	}
+}
+
+// The set is closed on purpose: staging reads perfectly naturally and would
+// otherwise fall through to production behaviour silently.
+func TestLoadRefusesUnknownEnv(t *testing.T) {
+	for _, env := range []string{"staging", "prod", "Production"} {
+		t.Setenv(EnvVar, env)
+		if _, err := Load(); err == nil {
+			t.Errorf("%s=%q accepted; want a refusal to boot", EnvVar, env)
+		}
+	}
+}
+
+func TestLoadRefusesBadValues(t *testing.T) {
+	t.Setenv(EnvVar, "test")
+	t.Setenv("ECOMMERCE_SHUTDOWN_GRACE", "soon")
+	if _, err := Load(); err == nil {
+		t.Error("SHUTDOWN_GRACE=soon accepted")
+	}
+	t.Setenv("ECOMMERCE_SHUTDOWN_GRACE", "5s")
+	t.Setenv("ECOMMERCE_MIGRATE_AT_BOOT", "maybe")
+	if _, err := Load(); err == nil {
+		t.Error("MIGRATE_AT_BOOT=maybe accepted")
+	}
+}
+
+// Production carries a real password in its URL, so there is no default to
+// fall through to: the setting is required and its absence refuses to boot.
+func TestLoadRequiresADatabaseInProduction(t *testing.T) {
+	t.Setenv(EnvVar, "production")
+	t.Setenv(ConfigDirVar, t.TempDir()) // no credentials file anywhere
+	t.Setenv("ECOMMERCE_DATABASE_URL", "")
+	if _, err := Load(); err == nil {
+		t.Error("production booted without ECOMMERCE_DATABASE_URL")
+	}
+}
+
+// writeCredentials seals yaml into a fresh config dir and returns the dir.
+func writeCredentials(t *testing.T, yaml string) string {
+	t.Helper()
+	dir := t.TempDir()
+	key, err := credentials.GenerateMasterKey(filepath.Join(dir, "master.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ed := credentials.NewConfigEditor(dir, "credentials.yml.enc", "master.key", "")
+	if err := ed.EncryptAndSave([]byte(yaml), hexOf(key)); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func hexOf(key []byte) string {
+	const digits = "0123456789abcdef"
+	out := make([]byte, 0, len(key)*2)
+	for _, b := range key {
+		out = append(out, digits[b>>4], digits[b&0x0f])
+	}
+	return string(out)
+}
+
+// Development reads the shared file. A key the file names is taken from it, a
+// key it omits keeps its default, and the environment beats both.
+func TestLoadReadsTheSharedFile(t *testing.T) {
+	dir := writeCredentials(t, "ecommerce:\n  addr: \":9999\"\n  log_level: debug\n")
+	t.Setenv(EnvVar, "development")
+	t.Setenv(ConfigDirVar, dir)
+	t.Setenv("ECOMMERCE_LOG_LEVEL", "warn")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.App.Addr != ":9999" {
+		t.Errorf("addr = %q; want the file's :9999", cfg.App.Addr)
+	}
+	if cfg.App.LogLevel != "warn" {
+		t.Errorf("log_level = %q; want the environment's warn over the file's debug", cfg.App.LogLevel)
+	}
+	if cfg.App.ShutdownGrace.Seconds() != 10 || !cfg.App.MigrateAtBoot {
+		t.Errorf("a key absent from the file lost its default: %+v", cfg.App)
+	}
+	if cfg.Source != filepath.Join(dir, "credentials.yml.enc") {
+		t.Errorf("source = %q", cfg.Source)
+	}
+}
+
+// Test never reads a file, even when one is right there.
+func TestTestEnvironmentIgnoresCredentials(t *testing.T) {
+	dir := writeCredentials(t, "ecommerce:\n  addr: \":9999\"\n")
+	t.Setenv(EnvVar, "test")
+	t.Setenv(ConfigDirVar, dir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.App.Addr != ":8080" {
+		t.Errorf("addr = %q; test read the credentials file", cfg.App.Addr)
+	}
+}
+
+// A deployment hands the key over in the environment and ships no key file.
+func TestMasterKeyFromTheEnvironment(t *testing.T) {
+	dir := writeCredentials(t, "ecommerce:\n  addr: \":7777\"\n")
+	key, err := os.ReadFile(filepath.Join(dir, "master.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "master.key")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvVar, "development")
+	t.Setenv(ConfigDirVar, dir)
+	t.Setenv(MasterKeyVar, string(key))
+	t.Setenv(credentials.EnvKeyVar, "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load without a key file: %v", err)
+	}
+	if cfg.App.Addr != ":7777" || !strings.Contains(cfg.KeyFile, MasterKeyVar) {
+		t.Errorf("cfg = %+v", cfg)
+	}
+}
+
+func TestPrintToRedactsThePassword(t *testing.T) {
+	t.Setenv(EnvVar, "test")
+	t.Setenv(TestDatabaseURLVar, "postgres://app:hunter2@db:5432/ecommerce")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	cfg.PrintTo(&out)
+	if strings.Contains(out.String(), "hunter2") {
+		t.Errorf("boot log leaks the password: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "app:xxxxx@db") {
+		t.Errorf("boot log does not show the redacted url: %s", out.String())
+	}
+}

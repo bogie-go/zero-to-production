@@ -1,0 +1,215 @@
+// Package database creates and drops the database the migrations run against.
+//
+// Rails has db:create and db:drop. Go projects usually leave that to createdb
+// and dropdb, but those are libpq binaries and nothing else here needs libpq
+// installed; Postgres is a container. So these live in the binary next to
+// migrate, for the same reason migrate does: one artifact, and the command a
+// developer runs is the code a deployed container would run.
+package database
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/url"
+	"strings"
+	"syscall"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver
+)
+
+// Postgres SQLSTATEs this package reacts to by name rather than by number.
+const (
+	// CREATE DATABASE against a name already taken.
+	duplicateDatabase = "42P04"
+	// Connected, but the database in the URL does not exist.
+	invalidCatalogName = "3D000"
+	// Reached the server; it rejected the user or the password.
+	invalidPassword = "28P01"
+	invalidAuth     = "28000"
+)
+
+// bundledPort is the port docker-compose.yml publishes. Postgres' own default
+// is 5432, and the Rails app next door almost certainly has it, so the
+// bundled container uses this one instead. A failure against this port is
+// almost always "the container is not running"; against any other it is
+// someone's own Postgres, and `make up` would be the wrong advice.
+const bundledPort = "5440"
+
+// Hint explains what to do about a database error and returns anything it
+// does not recognise unchanged. The original error is always kept: a hint
+// tells you which of several things went wrong, it does not replace the
+// evidence.
+//
+// Three failures look alike at a glance and want opposite responses, which is
+// why they are told apart here rather than left to the reader: nothing is
+// listening, the server rejected the credentials, or the server is fine and
+// the database simply has not been created yet.
+func Hint(err error, databaseURL string) error {
+	if err == nil {
+		return nil
+	}
+	var pgErr *pgconn.PgError
+	switch {
+	case unreachable(err):
+		return fmt.Errorf("%w\n\n%s", err, startPostgres(databaseURL))
+	case errors.As(err, &pgErr) && (pgErr.Code == invalidPassword || pgErr.Code == invalidAuth):
+		return fmt.Errorf("%w\n\nPostgres is running at %s and refused these credentials.\nThe URL comes from ECOMMERCE_DATABASE_URL if it is set, otherwise from\nthe encrypted settings: bogie credentials:edit", err, endpoint(databaseURL))
+	case errors.As(err, &pgErr) && pgErr.Code == invalidCatalogName:
+		return fmt.Errorf("%w\n\nPostgres is running at %s; this database is not there yet.\nCreate and migrate it:  bogie db:prepare\nFor the test database:   ECOMMERCE_ENV=test bogie db:prepare", err, endpoint(databaseURL))
+	}
+	return err
+}
+
+// unreachable reports whether nothing answered: the connection was refused,
+// the host does not resolve, or it timed out. Checked through the error chain
+// rather than by message, with a string fallback for a driver that wraps the
+// cause without keeping it.
+func unreachable(err error) bool {
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return true
+	}
+	var dns *net.DNSError
+	if errors.As(err, &dns) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	text := err.Error()
+	for _, s := range []string{"connection refused", "no such host", "i/o timeout", "network is unreachable"} {
+		if strings.Contains(text, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// startPostgres says how to start the server the URL points at. The bundled
+// container has a command; someone else's Postgres does not, so it gets told
+// what to check instead of being given advice that cannot work.
+func startPostgres(databaseURL string) string {
+	where := endpoint(databaseURL)
+	if _, port, err := net.SplitHostPort(where); err == nil && port == bundledPort {
+		return "Nothing is listening on " + where + ", which is the bundled Postgres.\nStart it, then create the database:\n  make up\n  bogie db:prepare"
+	}
+	return "Nothing is listening on " + where + ".\nStart your Postgres service, then:  bogie db:prepare\nTo point somewhere else, set ECOMMERCE_DATABASE_URL (or edit the\nencrypted settings: bogie credentials:edit)"
+}
+
+// endpoint is the host:port a URL points at, for a message that names where
+// the failure was rather than making the reader decode the URL.
+func endpoint(databaseURL string) string {
+	u, err := url.Parse(databaseURL)
+	if err != nil || u.Host == "" {
+		return "the configured database"
+	}
+	return u.Host
+}
+
+// maintenance splits a database URL into the name it points at and a URL for
+// the same server's "postgres" database.
+//
+// Neither command can run from inside its own target: CREATE DATABASE has
+// nothing to connect to yet, and DROP DATABASE cannot drop the session's own
+// database. Both go through the maintenance database every server has, naming
+// the target as an identifier instead.
+func maintenance(databaseURL string) (name, adminURL string, err error) {
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		return "", "", fmt.Errorf("database: parse url: %w", err)
+	}
+	name = strings.TrimPrefix(u.Path, "/")
+	if name == "" {
+		return "", "", fmt.Errorf("database: %s names no database", u.Redacted())
+	}
+
+	admin := *u
+	admin.Path = "/postgres"
+	return name, admin.String(), nil
+}
+
+func connect(adminURL string) (*sql.DB, error) {
+	conn, err := sql.Open("pgx", adminURL)
+	if err != nil {
+		return nil, fmt.Errorf("database: open: %w", err)
+	}
+	return conn, nil
+}
+
+// Create creates the database, and says so if it was already there.
+//
+// Existing is not an error, so this is safe to put in front of a migration,
+// which is what `db prepare` does and what `rails db:prepare` does.
+func Create(ctx context.Context, databaseURL string, log *slog.Logger) error {
+	name, adminURL, err := maintenance(databaseURL)
+	if err != nil {
+		return err
+	}
+	conn, err := connect(adminURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	// The name is an identifier, not a value, so it cannot be a placeholder.
+	// Sanitize quotes it the way Postgres expects.
+	_, err = conn.ExecContext(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize())
+
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &pgErr) && pgErr.Code == duplicateDatabase:
+		log.InfoContext(ctx, "database already exists", "database", name)
+		return nil
+	case err != nil:
+		return fmt.Errorf("database: create %s: %w", name, err)
+	}
+
+	log.InfoContext(ctx, "database created", "database", name)
+	return nil
+}
+
+// Drop drops the database and everything in it.
+//
+// Destructive with no undo: this is not a rollback, it is the whole database.
+// The caller is responsible for having asked.
+func Drop(ctx context.Context, databaseURL string, log *slog.Logger) error {
+	name, adminURL, err := maintenance(databaseURL)
+	if err != nil {
+		return err
+	}
+	conn, err := connect(adminURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	var exists bool
+	if err := conn.QueryRowContext(ctx,
+		"SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)", name,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("database: looking for %s: %w", name, err)
+	}
+	if !exists {
+		log.InfoContext(ctx, "database does not exist", "database", name)
+		return nil
+	}
+
+	// WITH (FORCE) closes whatever is still connected, usually a server left
+	// running in another window. Without it the drop fails on that one
+	// session, a poor default for a command whose purpose is to get back to
+	// nothing. Postgres 13 and up.
+	if _, err := conn.ExecContext(ctx,
+		"DROP DATABASE "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)",
+	); err != nil {
+		return fmt.Errorf("database: drop %s: %w", name, err)
+	}
+
+	log.InfoContext(ctx, "database dropped", "database", name)
+	return nil
+}
