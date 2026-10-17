@@ -53,21 +53,44 @@ func get(s *Server, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// The welcome page greets a developer at / and nobody else: development only,
-// GET / only, and gone the moment a route claims /.
+// The welcome page greets a developer at / and nobody else: development
+// only, GET / only. Exercised directly here, bypassing staticFile, since
+// public/index.html now answers / in every environment before welcome ever
+// gets a turn — the same way TestARouteAtRootReplacesTheWelcomePage shows a
+// real route retiring it.
 func TestWelcomeInDevelopmentOnly(t *testing.T) {
-	dev := testServer(config.EnvDevelopment)
-	if rec := get(dev, "/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "is running") ||
-		strings.Contains(rec.Body.String(), "404 Not Found") {
-		t.Errorf("development GET / = %d %q, want only the welcome page: notFound must not also run", rec.Code, rec.Body.String())
-	}
-	if rec := get(dev, "/nothing-here"); rec.Code != http.StatusNotFound {
-		t.Errorf("development GET /nothing-here = %d, want 404: the welcome page answers / only", rec.Code)
+	call := func(env string) *httptest.ResponseRecorder {
+		s := testServer(env)
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		s.welcome(c)
+		return rec
 	}
 
-	prod := testServer(config.EnvProduction)
-	if rec := get(prod, "/"); rec.Code != http.StatusNotFound {
-		t.Errorf("production GET / = %d, want 404", rec.Code)
+	if rec := call(config.EnvDevelopment); !strings.Contains(rec.Body.String(), "is running") {
+		t.Errorf("development: welcome() wrote %q, want the welcome page", rec.Body.String())
+	}
+	if rec := call(config.EnvProduction); rec.Body.Len() != 0 {
+		t.Errorf("production: welcome() wrote %q, want nothing", rec.Body.String())
+	}
+
+	dev := testServer(config.EnvDevelopment)
+	if rec := get(dev, "/nothing-here"); rec.Code != http.StatusNotFound {
+		t.Errorf("development GET /nothing-here = %d, want 404: nothing in public/ answers it either", rec.Code)
+	}
+}
+
+// public/index.html answers / before the welcome page gets a turn, in every
+// environment: there is no dev-only exception once the app has its own page.
+func TestPublicIndexAnsweredBeforeTheWelcomePage(t *testing.T) {
+	for _, env := range []string{config.EnvDevelopment, config.EnvProduction} {
+		s := testServer(env)
+		rec := get(s, "/")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Welcome to Ecommerce") ||
+			strings.Contains(rec.Body.String(), "is running") {
+			t.Errorf("%s GET / = %d %q, want public/index.html, not the welcome page", env, rec.Code, rec.Body.String())
+		}
 	}
 }
 
@@ -89,6 +112,17 @@ func TestStaticFileAnsweredBeforeTheWelcomePage(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "500 Internal Server Error") ||
 		strings.Contains(rec.Body.String(), "404 Not Found") {
 		t.Errorf("GET /500.html = %d %q, want 200 and only the file's own content: welcome and notFound must not also run", rec.Code, rec.Body.String())
+	}
+}
+
+// The images the error pages reference are embedded too, not just the HTML:
+// go:embed on public/ has to list "images" alongside "*.html" or these 404.
+func TestStaticFileServesImages(t *testing.T) {
+	s := testServer(config.EnvProduction)
+	for _, path := range []string{"/images/bogie-404.webp", "/images/bogie-500.webp"} {
+		if rec := get(s, path); rec.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", path, rec.Code)
+		}
 	}
 }
 
