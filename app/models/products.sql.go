@@ -77,6 +77,26 @@ func (q *Queries) GetProduct(ctx context.Context, id pgtype.UUID) (Product, erro
 	return i, err
 }
 
+const getProductByName = `-- name: GetProductByName :one
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products WHERE name = $1
+`
+
+func (q *Queries) GetProductByName(ctx context.Context, name string) (Product, error) {
+	row := q.db.QueryRow(ctx, getProductByName, name)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.Stock,
+		&i.ImageUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listProducts = `-- name: ListProducts :many
 SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products ORDER BY created_at DESC, id DESC LIMIT $1
 `
