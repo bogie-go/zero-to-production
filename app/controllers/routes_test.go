@@ -87,7 +87,7 @@ func TestPublicIndexAnsweredBeforeTheWelcomePage(t *testing.T) {
 	for _, env := range []string{config.EnvDevelopment, config.EnvProduction} {
 		s := testServer(env)
 		rec := get(s, "/")
-		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Welcome to Ecommerce") ||
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<title>Ecommerce</title>") ||
 			strings.Contains(rec.Body.String(), "is running") {
 			t.Errorf("%s GET / = %d %q, want public/index.html, not the welcome page", env, rec.Code, rec.Body.String())
 		}
@@ -119,7 +119,7 @@ func TestStaticFileAnsweredBeforeTheWelcomePage(t *testing.T) {
 // go:embed on public/ has to list "images" alongside "*.html" or these 404.
 func TestStaticFileServesImages(t *testing.T) {
 	s := testServer(config.EnvProduction)
-	for _, path := range []string{"/images/bogie-404.webp", "/images/bogie-500.webp"} {
+	for _, path := range []string{"/images/bogie-404.webp", "/images/bogie-500.webp", "/images/products/wireless-mouse.webp"} {
 		if rec := get(s, path); rec.Code != http.StatusOK {
 			t.Errorf("GET %s = %d, want 200", path, rec.Code)
 		}
