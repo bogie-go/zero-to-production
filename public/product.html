@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Product</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #1c1b19; --muted: #6a675f; --line: #e4e1d8; --bg: #f8f6f1; --panel: #fffdf9;
+        --accent: #c0392b; --accent-soft: #fbe9e6; --glow: #bfe8f2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --fg: #ecebe7; --muted: #9c9a93; --line: #2e2d2a; --bg: #151514; --panel: #1d1d1b;
+                --accent: #ea6e5f; --accent-soft: #3a2320; --glow: #1f3a42; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+             font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+      header { border-bottom: 1px solid var(--line); }
+      header .wrap { max-width: 72rem; margin: 0 auto; padding: 1.1rem 1.5rem; display: flex; align-items: baseline; gap: .6rem; }
+      header .brand { font-weight: 700; font-size: 1.15rem; letter-spacing: -.01em; text-decoration: none; color: inherit; }
+      header .tag { color: var(--muted); font-size: .85rem; }
+
+      main { max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+      .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: .9rem; margin-bottom: 1.5rem; }
+      .back:hover { color: var(--accent); }
+
+      .state { padding: 3rem 1rem; text-align: center; color: var(--muted); }
+
+      .detail { display: grid; gap: 2rem; grid-template-columns: 1fr; }
+      @media (min-width: 42rem) { .detail { grid-template-columns: 1fr 1fr; align-items: start; } }
+      .detail .thumb { aspect-ratio: 3 / 2; background: var(--accent-soft); border-radius: .9rem; overflow: hidden; }
+      .detail .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      h1 { font-size: clamp(1.5rem, 3vw, 2rem); margin: 0 0 .6rem; letter-spacing: -.01em; }
+      .desc { color: var(--muted); margin: 0 0 1.5rem; }
+      .price { font-size: 1.6rem; font-weight: 700; margin: 0 0 .75rem; }
+      .stock { display: inline-block; font-size: .82rem; padding: .25rem .65rem; border-radius: 1rem;
+               background: var(--accent-soft); color: var(--accent); }
+      .stock.out { background: var(--line); color: var(--muted); }
+
+      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
+      footer .wrap { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
+      footer code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel);
+                    border: 1px solid var(--line); border-radius: .3rem; padding: .05rem .35rem; }
+    </style>
+  </head>
+  <body x-data="productPage()" x-init="load()">
+    <header>
+      <div class="wrap">
+        <a class="brand" href="/">Ecommerce</a>
+        <span class="tag">built with Bogie</span>
+      </div>
+    </header>
+
+    <main>
+      <a class="back" href="/">&larr; Back to products</a>
+
+      <p class="state" x-show="loading">Loading product&hellip;</p>
+      <p class="state" x-show="!loading && error" x-text="error"></p>
+
+      <div class="detail" x-show="!loading && !error && product">
+        <div class="thumb">
+          <img :src="product && product.image_url" :alt="product && product.name" loading="lazy">
+        </div>
+        <div>
+          <h1 x-text="product && product.name"></h1>
+          <p class="desc" x-text="product && product.description"></p>
+          <p class="price" x-text="product && formatPrice(product.price_cents)"></p>
+          <span class="stock" :class="{ out: product && product.stock === 0 }"
+                x-text="product && (product.stock > 0 ? product.stock + ' in stock' : 'Out of stock')"></span>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="wrap">This page fetches <code>GET /products/:id</code> with Alpine.js, no build step. See <code>public/product.html</code>.</div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+    <script>
+      function productPage() {
+        return {
+          product: null,
+          loading: true,
+          error: null,
+          async load() {
+            const id = new URLSearchParams(location.search).get('id');
+            if (!id) {
+              this.error = 'No product id given.';
+              this.loading = false;
+              return;
+            }
+            try {
+              const res = await fetch('/products/' + encodeURIComponent(id));
+              if (res.status === 404) throw new Error('No such product.');
+              if (!res.ok) throw new Error('status ' + res.status);
+              this.product = await res.json();
+            } catch (e) {
+              this.error = 'Could not load product: ' + e.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+          formatPrice(cents) {
+            return '$' + (cents / 100).toFixed(2);
+          },
+        };
+      }
+    </script>
+  </body>
+</html>
