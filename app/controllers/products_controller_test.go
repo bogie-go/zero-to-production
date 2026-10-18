@@ -72,19 +72,19 @@ func TestProductsRoutesAreMounted(t *testing.T) {
 }
 
 func TestProductsIndexLists(t *testing.T) {
-	store := &fakeProductsStore{many: []domain.Product{{ID: "a"}, {ID: "b"}}}
+	store := &fakeProductsStore{many: []domain.Product{{ID: 1}, {ID: 2}}}
 	rec := productsRequest(t, store, http.MethodGet, "/products", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
 	var body struct {
-		Products []struct{ ID string } `json:"products"`
+		Products []struct{ ID int64 } `json:"products"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body.Products) != 2 || body.Products[1].ID != "b" {
+	if len(body.Products) != 2 || body.Products[1].ID != 2 {
 		t.Errorf("body = %+v", body)
 	}
 }
@@ -97,14 +97,14 @@ func TestProductsShowUnknownIs404(t *testing.T) {
 }
 
 func TestProductsShowFindsByID(t *testing.T) {
-	store := &fakeProductsStore{one: domain.Product{ID: "a", Name: "Widget"}}
-	rec := productsRequest(t, store, http.MethodGet, "/products/a", "")
+	store := &fakeProductsStore{one: domain.Product{ID: 1, Name: "Widget"}}
+	rec := productsRequest(t, store, http.MethodGet, "/products/1", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
-	if store.gotID != "a" {
-		t.Errorf("store got id = %q, want %q", store.gotID, "a")
+	if store.gotID != "1" {
+		t.Errorf("store got id = %q, want %q", store.gotID, "1")
 	}
 	if !strings.Contains(rec.Body.String(), `"name":"Widget"`) {
 		t.Errorf("body = %s", rec.Body)

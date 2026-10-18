@@ -4,10 +4,10 @@ import (
 	"time"
 )
 
-// Product is a product. Imports nothing third-party: ids are strings here and
-// become uuid at the store boundary.
+// Product is a product. Imports nothing third-party: ids are int64s here and
+// become bigint at the store boundary.
 type Product struct {
-	ID          string
+	ID          int64
 	Name        string
 	Description string
 	PriceCents  int32

@@ -7,8 +7,6 @@ package models
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createProduct = `-- name: CreateProduct :one
@@ -49,7 +47,7 @@ const deleteProduct = `-- name: DeleteProduct :execrows
 DELETE FROM products WHERE id = $1
 `
 
-func (q *Queries) DeleteProduct(ctx context.Context, id pgtype.UUID) (int64, error) {
+func (q *Queries) DeleteProduct(ctx context.Context, id int64) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteProduct, id)
 	if err != nil {
 		return 0, err
@@ -61,28 +59,8 @@ const getProduct = `-- name: GetProduct :one
 SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products WHERE id = $1
 `
 
-func (q *Queries) GetProduct(ctx context.Context, id pgtype.UUID) (Product, error) {
+func (q *Queries) GetProduct(ctx context.Context, id int64) (Product, error) {
 	row := q.db.QueryRow(ctx, getProduct, id)
-	var i Product
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Description,
-		&i.PriceCents,
-		&i.Stock,
-		&i.ImageUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getProductByName = `-- name: GetProductByName :one
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products WHERE name = $1
-`
-
-func (q *Queries) GetProductByName(ctx context.Context, name string) (Product, error) {
-	row := q.db.QueryRow(ctx, getProductByName, name)
 	var i Product
 	err := row.Scan(
 		&i.ID,
@@ -135,7 +113,7 @@ UPDATE products SET name = $2, description = $3, price_cents = $4, stock = $5, i
 `
 
 type UpdateProductParams struct {
-	ID          pgtype.UUID
+	ID          int64
 	Name        string
 	Description string
 	PriceCents  int32

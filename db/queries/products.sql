@@ -1,9 +1,6 @@
 -- name: GetProduct :one
 SELECT * FROM products WHERE id = $1;
 
--- name: GetProductByName :one
-SELECT * FROM products WHERE name = $1;
-
 -- name: ListProducts :many
 SELECT * FROM products ORDER BY created_at DESC, id DESC LIMIT $1;
 

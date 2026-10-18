@@ -28,13 +28,13 @@ func (s *Store) CreateProduct(ctx context.Context, p domain.Product) (domain.Pro
 	return productFromRow(row), nil
 }
 
-// GetProduct finds one product. An id that is not a uuid is simply not found.
+// GetProduct finds one product. An id that is not a valid id is simply not found.
 func (s *Store) GetProduct(ctx context.Context, id string) (domain.Product, error) {
-	uid, err := parseUUID(id)
+	pk, err := parseID(id)
 	if err != nil {
 		return domain.Product{}, domain.ErrNotFound
 	}
-	row, err := s.q.GetProduct(ctx, uid)
+	row, err := s.q.GetProduct(ctx, pk)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.Product{}, domain.ErrNotFound
@@ -42,34 +42,6 @@ func (s *Store) GetProduct(ctx context.Context, id string) (domain.Product, erro
 		return domain.Product{}, fmt.Errorf("models: get product %s: %w", id, err)
 	}
 	return productFromRow(row), nil
-}
-
-// GetProductByName finds one product by its name.
-func (s *Store) GetProductByName(ctx context.Context, name string) (domain.Product, error) {
-	row, err := s.q.GetProductByName(ctx, name)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return domain.Product{}, domain.ErrNotFound
-	case err != nil:
-		return domain.Product{}, fmt.Errorf("models: get product by name %q: %w", name, err)
-	}
-	return productFromRow(row), nil
-}
-
-// FindOrCreateProductByName returns the product named p.Name, creating it
-// from p if none exists yet. Like Rails's find_or_create_by, this is a plain
-// find then create, not atomic: a race between two callers can still create
-// two products with the same name.
-func (s *Store) FindOrCreateProductByName(ctx context.Context, p domain.Product) (domain.Product, error) {
-	existing, err := s.GetProductByName(ctx, p.Name)
-	switch {
-	case err == nil:
-		return existing, nil
-	case errors.Is(err, domain.ErrNotFound):
-		return s.CreateProduct(ctx, p)
-	default:
-		return domain.Product{}, err
-	}
 }
 
 // ListProducts returns the newest products first, at most limit of them.
@@ -90,27 +62,24 @@ func (s *Store) UpdateProduct(ctx context.Context, p domain.Product) (domain.Pro
 	if err := p.Validate(); err != nil {
 		return domain.Product{}, err
 	}
-	uid, err := parseUUID(p.ID)
-	if err != nil {
-		return domain.Product{}, domain.ErrNotFound
-	}
-	row, err := s.q.UpdateProduct(ctx, UpdateProductParams{ID: uid, Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl})
+	pk := p.ID
+	row, err := s.q.UpdateProduct(ctx, UpdateProductParams{ID: pk, Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.Product{}, domain.ErrNotFound
 	case err != nil:
-		return domain.Product{}, fmt.Errorf("models: update product %s: %w", p.ID, err)
+		return domain.Product{}, fmt.Errorf("models: update product %v: %w", p.ID, err)
 	}
 	return productFromRow(row), nil
 }
 
 // DeleteProduct removes a product, and says so if there was none.
 func (s *Store) DeleteProduct(ctx context.Context, id string) error {
-	uid, err := parseUUID(id)
+	pk, err := parseID(id)
 	if err != nil {
 		return domain.ErrNotFound
 	}
-	n, err := s.q.DeleteProduct(ctx, uid)
+	n, err := s.q.DeleteProduct(ctx, pk)
 	if err != nil {
 		return fmt.Errorf("models: delete product %s: %w", id, err)
 	}
@@ -122,7 +91,7 @@ func (s *Store) DeleteProduct(ctx context.Context, id string) error {
 
 func productFromRow(r Product) domain.Product {
 	return domain.Product{
-		ID:          uuidString(r.ID),
+		ID:          r.ID,
 		Name:        r.Name,
 		Description: r.Description,
 		PriceCents:  r.PriceCents,
