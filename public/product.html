@@ -19,9 +19,12 @@
              font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
 
       header { border-bottom: 1px solid var(--line); }
-      header .wrap { max-width: 72rem; margin: 0 auto; padding: 1.1rem 1.5rem; display: flex; align-items: baseline; gap: .6rem; }
+      header .wrap { max-width: 72rem; margin: 0 auto; padding: 1.1rem 1.5rem; display: flex; align-items: center; gap: .6rem; }
       header .brand { font-weight: 700; font-size: 1.15rem; letter-spacing: -.01em; text-decoration: none; color: inherit; }
-      header .tag { color: var(--muted); font-size: .85rem; }
+      header .tag { color: var(--muted); font-size: .85rem; flex: 1; }
+      header .cart-link { color: inherit; text-decoration: none; font-size: .9rem; padding: .4rem .75rem;
+                           border-radius: .5rem; background: var(--panel); border: 1px solid var(--line); }
+      header .cart-link:hover { border-color: var(--accent); }
 
       main { max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
       .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: .9rem; margin-bottom: 1.5rem; }
@@ -40,17 +43,26 @@
                background: var(--accent-soft); color: var(--accent); }
       .stock.out { background: var(--line); color: var(--muted); }
 
+      .add { margin-top: 1.5rem; display: flex; align-items: center; gap: .75rem; }
+      .add button { padding: .7rem 1.4rem; border-radius: .6rem; border: none; background: var(--accent);
+                     color: #fff; font-weight: 600; font-size: .95rem; cursor: pointer; }
+      .add button:hover { opacity: .9; }
+      .add button:disabled { opacity: .5; cursor: not-allowed; }
+      .add .note { font-size: .88rem; color: var(--muted); }
+      .add .note.ok { color: var(--accent); }
+
       footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
       footer .wrap { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
       footer code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel);
                     border: 1px solid var(--line); border-radius: .3rem; padding: .05rem .35rem; }
     </style>
   </head>
-  <body x-data="productPage()" x-init="load()">
+  <body x-data="productPage()" x-init="load(); loadCartCount()">
     <header>
       <div class="wrap">
         <a class="brand" href="/">Ecommerce</a>
         <span class="tag">built with Bogie</span>
+        <a class="cart-link" href="/cart.html" x-text="'Cart (' + cartCount + ')'"></a>
       </div>
     </header>
 
@@ -70,6 +82,13 @@
           <p class="price" x-text="product && formatPrice(product.price_cents)"></p>
           <span class="stock" :class="{ out: product && product.stock === 0 }"
                 x-text="product && (product.stock > 0 ? product.stock + ' in stock' : 'Out of stock')"></span>
+
+          <div class="add">
+            <button :disabled="adding || !product || product.stock === 0" @click="addToCart()">
+              <span x-text="adding ? 'Adding…' : 'Add to cart'"></span>
+            </button>
+            <span class="note" :class="{ ok: addedOk }" x-show="addNote" x-text="addNote"></span>
+          </div>
         </div>
       </div>
     </main>
@@ -85,6 +104,10 @@
           product: null,
           loading: true,
           error: null,
+          cartCount: 0,
+          adding: false,
+          addNote: '',
+          addedOk: false,
           async load() {
             const id = new URLSearchParams(location.search).get('id');
             if (!id) {
@@ -101,6 +124,38 @@
               this.error = 'Could not load product: ' + e.message;
             } finally {
               this.loading = false;
+            }
+          },
+          async loadCartCount() {
+            try {
+              const res = await fetch('/cart');
+              const data = await res.json();
+              this.cartCount = (data.items || []).reduce((n, i) => n + i.quantity, 0);
+            } catch (e) {
+              // The cart badge is a nicety; a failure here is not worth a
+              // page-level error state.
+            }
+          },
+          async addToCart() {
+            if (!this.product) return;
+            this.adding = true;
+            this.addNote = '';
+            try {
+              const res = await fetch('/cart_items', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_id: this.product.id, quantity: 1 }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'status ' + res.status);
+              this.cartCount = data.items.reduce((n, i) => n + i.quantity, 0);
+              this.addedOk = true;
+              this.addNote = 'Added to cart.';
+            } catch (e) {
+              this.addedOk = false;
+              this.addNote = e.message;
+            } finally {
+              this.adding = false;
             }
           },
           formatPrice(cents) {

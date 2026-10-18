@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cart</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #1c1b19; --muted: #6a675f; --line: #e4e1d8; --bg: #f8f6f1; --panel: #fffdf9;
+        --accent: #c0392b; --accent-soft: #fbe9e6; --glow: #bfe8f2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --fg: #ecebe7; --muted: #9c9a93; --line: #2e2d2a; --bg: #151514; --panel: #1d1d1b;
+                --accent: #ea6e5f; --accent-soft: #3a2320; --glow: #1f3a42; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+             font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+      header { border-bottom: 1px solid var(--line); }
+      header .wrap { max-width: 72rem; margin: 0 auto; padding: 1.1rem 1.5rem; display: flex; align-items: center; gap: .6rem; }
+      header .brand { font-weight: 700; font-size: 1.15rem; letter-spacing: -.01em; text-decoration: none; color: inherit; }
+      header .tag { color: var(--muted); font-size: .85rem; flex: 1; }
+      header .cart-link { color: inherit; text-decoration: none; font-size: .9rem; padding: .4rem .75rem;
+                           border-radius: .5rem; background: var(--panel); border: 1px solid var(--line); }
+      header .cart-link:hover { border-color: var(--accent); }
+
+      main { max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+      .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: .9rem; margin-bottom: 1.5rem; }
+      .back:hover { color: var(--accent); }
+      h1 { font-size: clamp(1.5rem, 3vw, 1.9rem); margin: 0 0 1.5rem; letter-spacing: -.01em; }
+
+      .state { padding: 3rem 1rem; text-align: center; color: var(--muted); }
+
+      .line { display: grid; grid-template-columns: 5rem 1fr auto; gap: 1rem; align-items: center;
+              padding: 1rem 0; border-bottom: 1px solid var(--line); }
+      .line .thumb { width: 5rem; height: 5rem; border-radius: .6rem; overflow: hidden; background: var(--accent-soft); }
+      .line .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .line .name { font-weight: 600; margin: 0 0 .25rem; }
+      .line .unit { color: var(--muted); font-size: .88rem; margin: 0; }
+      .line .error { color: var(--accent); font-size: .85rem; margin: .3rem 0 0; }
+      .line .controls { display: flex; flex-direction: column; align-items: flex-end; gap: .5rem; }
+      .line .qty { display: flex; align-items: center; gap: .5rem; }
+      .line .qty button { width: 1.8rem; height: 1.8rem; border-radius: .4rem; border: 1px solid var(--line);
+                           background: var(--panel); color: inherit; font-size: 1rem; cursor: pointer; line-height: 1; }
+      .line .qty button:hover { border-color: var(--accent); }
+      .line .qty button:disabled { opacity: .4; cursor: not-allowed; }
+      .line .subtotal { font-weight: 700; }
+      .line .remove { background: none; border: none; color: var(--muted); font-size: .82rem;
+                       cursor: pointer; text-decoration: underline; padding: 0; }
+      .line .remove:hover { color: var(--accent); }
+
+      .summary { display: flex; justify-content: space-between; align-items: baseline; padding-top: 1.25rem; }
+      .summary .label { color: var(--muted); }
+      .summary .total { font-size: 1.4rem; font-weight: 700; }
+
+      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
+      footer .wrap { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
+      footer code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel);
+                    border: 1px solid var(--line); border-radius: .3rem; padding: .05rem .35rem; }
+    </style>
+  </head>
+  <body x-data="cartPage()" x-init="load()">
+    <header>
+      <div class="wrap">
+        <a class="brand" href="/">Ecommerce</a>
+        <span class="tag">built with Bogie</span>
+        <a class="cart-link" href="/cart.html" x-text="'Cart (' + cartCount + ')'"></a>
+      </div>
+    </header>
+
+    <main>
+      <a class="back" href="/">&larr; Continue shopping</a>
+      <h1>Your cart</h1>
+
+      <p class="state" x-show="loading">Loading cart&hellip;</p>
+      <p class="state" x-show="!loading && error" x-text="error"></p>
+      <p class="state" x-show="!loading && !error && items.length === 0">Your cart is empty.</p>
+
+      <div x-show="!loading && !error && items.length > 0">
+        <template x-for="line in items" :key="line.id">
+          <div class="line">
+            <div class="thumb">
+              <img :src="line.image_url" :alt="line.name" loading="lazy">
+            </div>
+            <div>
+              <p class="name" x-text="line.name"></p>
+              <p class="unit" x-text="formatPrice(line.unit_price_cents) + ' each'"></p>
+              <p class="error" x-show="line.error" x-text="line.error"></p>
+            </div>
+            <div class="controls">
+              <span class="subtotal" x-text="formatPrice(line.subtotal_cents)"></span>
+              <div class="qty">
+                <button :disabled="line.busy || line.quantity <= 1" @click="setQuantity(line, line.quantity - 1)">&minus;</button>
+                <span x-text="line.quantity"></span>
+                <button :disabled="line.busy" @click="setQuantity(line, line.quantity + 1)">+</button>
+              </div>
+              <button class="remove" :disabled="line.busy" @click="remove(line)">Remove</button>
+            </div>
+          </div>
+        </template>
+
+        <div class="summary">
+          <span class="label">Total</span>
+          <span class="total" x-text="formatPrice(totalCents)"></span>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="wrap">This page fetches and updates <code>/cart</code> and <code>/cart_items</code> with Alpine.js, no build step. See <code>public/cart.html</code>.</div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+    <script>
+      function cartPage() {
+        return {
+          items: [],
+          totalCents: 0,
+          loading: true,
+          error: null,
+          get cartCount() {
+            return this.items.reduce((n, i) => n + i.quantity, 0);
+          },
+          async load() {
+            try {
+              const res = await fetch('/cart');
+              if (!res.ok) throw new Error('status ' + res.status);
+              this.applyCart(await res.json());
+            } catch (e) {
+              this.error = 'Could not load cart: ' + e.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+          applyCart(data) {
+            this.items = (data.items || []).map((line) => ({ ...line, busy: false, error: '' }));
+            this.totalCents = data.total_cents || 0;
+          },
+          async setQuantity(line, quantity) {
+            if (quantity < 1) return;
+            line.busy = true;
+            line.error = '';
+            try {
+              const res = await fetch('/cart_items/' + line.id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quantity }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'status ' + res.status);
+              this.applyCart(data);
+            } catch (e) {
+              line.busy = false;
+              line.error = e.message;
+            }
+          },
+          async remove(line) {
+            line.busy = true;
+            try {
+              const res = await fetch('/cart_items/' + line.id, { method: 'DELETE' });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'status ' + res.status);
+              this.applyCart(data);
+            } catch (e) {
+              line.busy = false;
+              line.error = e.message;
+            }
+          },
+          formatPrice(cents) {
+            return '$' + (cents / 100).toFixed(2);
+          },
+        };
+      }
+    </script>
+  </body>
+</html>
