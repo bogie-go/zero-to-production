@@ -28,3 +28,4 @@ func uuidString(id pgtype.UUID) string {
 	s, _ := v.(string)
 	return s
 }
+
