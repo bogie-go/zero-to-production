@@ -56,9 +56,12 @@ func (q *Queries) DeleteProduct(ctx context.Context, id int64) (int64, error) {
 }
 
 const getProduct = `-- name: GetProduct :one
+
 SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products WHERE id = $1
 `
 
+// Written by `bogie g model`: overwritten whole on the next run. A
+// hand-written query goes in products_extra.sql, not here.
 func (q *Queries) GetProduct(ctx context.Context, id int64) (Product, error) {
 	row := q.db.QueryRow(ctx, getProduct, id)
 	var i Product

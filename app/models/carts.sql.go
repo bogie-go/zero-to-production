@@ -38,9 +38,12 @@ func (q *Queries) DeleteCart(ctx context.Context, id int64) (int64, error) {
 }
 
 const getCart = `-- name: GetCart :one
+
 SELECT id, token, created_at, updated_at FROM carts WHERE id = $1
 `
 
+// Written by `bogie g model`: overwritten whole on the next run. A
+// hand-written query goes in carts_extra.sql, not here.
 func (q *Queries) GetCart(ctx context.Context, id int64) (Cart, error) {
 	row := q.db.QueryRow(ctx, getCart, id)
 	var i Cart

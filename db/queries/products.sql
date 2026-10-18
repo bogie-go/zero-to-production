@@ -1,3 +1,6 @@
+-- Written by `bogie g model`: overwritten whole on the next run. A
+-- hand-written query goes in products_extra.sql, not here.
+
 -- name: GetProduct :one
 SELECT * FROM products WHERE id = $1;
 

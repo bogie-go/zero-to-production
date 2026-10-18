@@ -13,6 +13,9 @@ import (
 // CartItems, as the domain sees them. Each method converts domain.CartItem to and from
 // the row type sqlc generated, and maps pgx's "no rows" to domain.ErrNotFound
 // so callers never import pgx to ask a question.
+//
+// Written by `bogie g model`: overwritten whole on the next run. A
+// hand-written addition goes in cart_items_extra.go, not here.
 
 // CreateCartItem validates a cart_item, inserts it, and returns it with its id and
 // timestamps. Validation runs on save, as Rails's does, so every caller
