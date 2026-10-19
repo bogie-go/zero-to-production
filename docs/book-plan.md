@@ -31,7 +31,7 @@ By the end of this book, you can build a Go backend with Bogie, design it well e
 | H | Let's go live | Deployment, config, secrets |
 | I | Is it healthy? | Logging, monitoring, safe updates |
 
-Testing runs through every task. Out of scope (sketched in "Where to go next"): real payments, shipping, tax, reviews, image uploads, multiple vendors.
+Testing runs through every task. Out of scope (sketched in "Where to go next"): real payments, shipping, tax, reviews, image uploads, multiple vendors, product variants (size/color, per-variant price and stock — considered for Task B, deferred: it would mean reworking the cart and seeds already built around a bare `product_id`, not just adding something new).
 
 ## Supporting pieces
 - UI: ready-made, acts as the API contract. Features unlock as endpoints appear; shows clear errors when a response doesn't match the contract; one setting for the base URL. Served by Bogie from the same origin (no CORS).
