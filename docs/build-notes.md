@@ -2,7 +2,7 @@
 
 Raw material for the book "Bogie, How to Go from zero to production": what was actually done while building the e-commerce API, which Bogie commands were run, what was generated and what was written by hand, and where Bogie fell short. These are notes, not chapters.
 
-Last updated: 2026-10-17. Times are Bangkok time (UTC+7). "(inferred)" marks things read from files, timestamps or the Bogie repo, not confirmed by Mac.
+Last updated: 2026-10-19 (covers commits through `0c7693c`, tag `task-c2`). Times are Bangkok time (UTC+7). "(inferred)" marks things read from files, timestamps or the Bogie repo, not confirmed by Mac.
 
 ---
 
@@ -19,17 +19,23 @@ Last updated: 2026-10-17. Times are Bangkok time (UTC+7). "(inferred)" marks thi
 7. **2026-10-17 ~11:18 (work), committed 19:36 in `42dca45` seeding product: upgrade to Bogie v0.2.6.** `bogie.toml` now says v0.2.6. Seeds changed from goose SQL files with their own `seed_db_version` table to plain Go functions. Changed files: `migrate.go` (seed source, `Seed`, `SeedDown` removed), `db/db.go` (`Seeds` embed removed), `cli.go` (`db seed` and `db prepare` call `seeds.Run` on a store; `db seed-down` removed), Makefile (`db-seed-down` and `g_seed_%` removed), `store_test.go` (no longer skips `seed_db_version`), and AGENTS.md (new "Add a seed" recipe). All these files share the mtime 11:18:10, so they were changed in one run (inferred).
 8. **2026-10-17 ~11:18–11:31 (work), committed 19:36 in `42dca45`: product seeds.** `db/seeds/seeds.go` (the runner, with `SeedProduct` registered above `// bogie:seeds`) and `db/seeds/product.go`, filled by hand with 10 tech products (mouse, keyboard, monitor and so on, priced in cents, picsum.photos images). To keep the seed safe to re-run, a hand-written query `GetProductByName` was added to `products.sql` and recompiled with sqlc, plus two hand-written store methods in `app/models/products.go`: `GetProductByName` and `FindOrCreateProductByName` (Rails' `find_or_create_by`).
 9. **2026-10-17 19:10 (work), committed 19:36 in `42dca45`: CLAUDE.md.** The UI plan changed from Svelte in `ui/` to plain HTML/CSS/JS with Alpine.js in `public/`, served by Bogie via `embed`, with no build step.
-10. **2026-10-17 19:36, in progress (uncommitted): upgrade to Bogie v0.2.7 (static files).** Run 8 seconds after `42dca45` (inferred: `bogie app:update`). New: `public/404.html`, `public/500.html`, `public/public.go` (embeds `*.html` only), and `app/controllers/public.go`. In `routes.go`, `s.mountWelcome()` becomes `r.NoRoute(s.staticFile, s.welcome, s.notFound)`. Also changed: `welcome.go`, `routes_test.go`, `middlewares.go` (Recover serves `500.html`), AGENTS.md, and `bogie.toml` (v0.2.7). No products UI page yet.
+10. **2026-10-17 19:36 (work), committed 19:38 in `19c18a7` update bogie to v0.2.7 (static files).** Run 8 seconds after `42dca45` (inferred: `bogie app:update`). New: `public/404.html`, `public/500.html`, `public/public.go` (embeds `*.html` only), and `app/controllers/public.go`. In `routes.go`, `s.mountWelcome()` becomes `r.NoRoute(s.staticFile, s.welcome, s.notFound)`. Also changed: `welcome.go`, `routes_test.go`, `middlewares.go` (Recover serves `500.html`), AGENTS.md, and `bogie.toml` (v0.2.7). `public/public.go` still embedded only `*.html`.
+11. **2026-10-17 19:59, `f6cd452` serve public/index.html at / and restyle the 404/500 pages.** Fixed a bug in the generated `staticFile`: it gave up on `GET /` before checking for `index.html`, so `/` always fell through to the welcome page. Added `public/index.html`, mascot art (`public/images/bogie-404.webp`, `bogie-500.webp`), and widened `go:embed` to `*.html images`. Bogie shipped the same fix upstream 38 seconds later (`a9d6cbf`, 20:00), so the app and Bogie were fixed side by side (inferred).
+12. **2026-10-17 20:19, `4e4281f` product catalog front page.** `index.html` is an Alpine.js component: it fetches `GET /products` and renders a card grid with loading, error and empty states. Seeds now point at 10 locally generated WebP photos in `public/images/products/` instead of random picsum.photos images ("a wireless charger showed ocean waves").
+13. **2026-10-17 20:26, `8067900` update bogie to v0.2.8.** `app:update` merged cleanly except `routes_test.go`, where the app's own image test already covered the case the template added. Kept the app's version.
+14. **2026-10-17 20:44, `7fbdd93` product detail page.** `public/product.html` reads `?id=`, fetches `GET /products/:id`, and handles 404. Cards on the front page link to it. Static page only, no HTML views in the API.
+15. **2026-10-17 20:52, `f7979a4` update build-note.** Mac recorded the "scaffold first, then explain" decision (below).
 
 ### Bogie commands used
 
 - `bogie new ecommerce`, with `jobs = false`. Options are inferred from `bogie.toml`.
 - `bogie g model product name:string description:text price_cents:integer stock:integer image_url:string` (inferred from the migration). Bogie v0.2.4, tagged 20:01 that evening, allows bare `name` to default to string, so the exact spelling may differ. `g model` runs sqlc itself.
 - `bogie g controller products index show` (inferred: only those two routes exist, and the stubs match the generator's 501 text).
-- `bogie app:update` to v0.2.5, then v0.2.6, then v0.2.7 (inferred). The commit touched exactly the files the templates own, and `bogie.toml` says "Do not edit by hand".
+- `bogie app:update` to v0.2.5, then v0.2.6, then v0.2.7 (inferred), then v0.2.8 (the `8067900` message says so). The commit touched exactly the files the templates own, and `bogie.toml` says "Do not edit by hand".
 - `bogie g seed product` (inferred). The doc comment "SeedProduct seeds product. db seed can run this any number of times" comes straight from Bogie's `internal/generate/seed.go` template.
 - `make sqlc` (or `go tool sqlc generate`) after adding `GetProductByName`. `products.sql.go` was rewritten 3 seconds after `products.sql` was saved (inferred).
 - Probably `bogie routes`, `bogie server`, `bogie db:prepare` / `db:seed` and `bogie test` to check the work. No direct evidence for these.
+- No Bogie command for the UI pages: `public/index.html` and `product.html` are hand-written (with Claude Code, per the commit trailers).
 - Not used: `bogie g scaffold product ...`. It would have written the model, views and the full five-action controller in one step. Model plus controller was chosen on purpose, it seems, so the reader sees each piece.
 
 ### Generated vs hand-written
@@ -47,19 +53,20 @@ Hand-written, or hand-edited after generation:
 - The product list and loop in `db/seeds/product.go`. The stub came from the generator.
 - `GetProductByName` in `db/queries/products.sql`, and `GetProductByName` / `FindOrCreateProductByName` added inside the generated `app/models/products.go`.
 - `CLAUDE.md` and `docs/book-plan.md`.
+- Everything in `public/` except the generated `404.html`, `500.html` and `public.go`: `index.html`, `product.html`, the mascot and product images. The 404/500 pages were restyled by hand, and the one-line fix in `app/controllers/public.go` (serve `index.html` at `/`) was made in the app at the same time as Bogie's own fix (inferred).
 
 ### Bogie gaps/bugs found
 
 - **Seeds were redesigned during the build.** The v0.2.3 seeds were goose SQL files with a version table and `seed-down`. Rails has neither, and SQL seeds can't call app code such as `FindOrCreate`. Bogie commit `e27c65d` (2026-10-17 09:33, released as v0.2.6 at 10:28) made seeds plain Go, run every time. Going from v0.2.5 to v0.2.6 means `app:update` rewrites `migrate.go`, `cli.go`, `db/db.go`, the Makefile and the test helper. That is a big upgrade for a few-days-old app.
 - **v0.2.5's `main.go` change is a feature, not a hand fix.** Bogie added `bogie routes` (`3f1c39e`, 21:10 on 10-16), a thin proxy to `go run . routes`. That needs a `runRoutes` function in the app's own `main.go`, so `app:update` merged one in. The upgrade was committed 4 minutes after that Bogie release, which suggests the gap was found and fixed while building Task A (inferred).
 - **`string` used to become `text`.** Bogie v0.2.4 (`946f810`, 20:01 on 10-16, an hour before `g model`) fixed this: `string` now becomes `varchar` and a bare field name defaults to string. That is why `name` and `image_url` are varchar and `description` is text (inferred: found while preparing this model).
-- **Hand-written store methods went into a generated file.** `GetProductByName` and `FindOrCreateProductByName` were committed in `42dca45` inside `app/models/products.go`, which `g model` rewrites whole. Running `g model` again would report a conflict. Bogie v0.2.7 (`ec8b3ea`, tagged today at 19:34) makes the convention a sibling file, `app/models/products_extra.go`. `app:update` doesn't move them, so this is still to do.
+- **Hand-written store methods went into a generated file.** `GetProductByName` and `FindOrCreateProductByName` were committed in `42dca45` inside `app/models/products.go`, which `g model` rewrites whole. Running `g model` again would report a conflict. Bogie v0.2.7 (`ec8b3ea`, tagged today at 19:34) makes the convention a sibling file, `app/models/products_extra.go`. `app:update` doesn't move them. Done by hand in `4ad24f6` (2026-10-18): `products_extra.go` plus `db/queries/products_extra.sql`.
 - **The model test's TODO points to a file that doesn't exist.** `products_test.go` says "see posts_test.go for the shape". That text is hard-coded in Bogie's model template (see `model_comment.golden`), but a real app has no `posts_test.go`. The comment in `app/application.go` also uses `posts.New(store)`, a service-based example, while AGENTS.md says scaffolds have no service layer. Both are small template bugs.
 - **Leftover generated comments after hand-editing.** `Index` and `Show` still say "calls one service function", but they call the store directly.
 - **`ImageUrl`, not `ImageURL`.** sqlc's default naming breaks Go's initialism convention, and the name spreads into the domain and view structs. The JSON tag (`image_url`) is fine. An sqlc `rename` setting or a Bogie default could fix it.
 - **`GetProductByName` is `:one` on a column that isn't unique.** With duplicate names it returns whichever row Postgres finds first. The code comment admits that find-then-create can race. A `name:uniq` index, or `ON CONFLICT`, would make this sound.
 - **No pagination yet.** The list stops at 100 (`productsListLimit`) and the response gives no count or cursor. `ListProducts` takes only a `limit`.
-- **No static file support until v0.2.7.** v0.2.7 (`7e45718`, today; being applied, uncommitted) adds a `public/` folder embedded in the binary, served by a three-handler NoRoute chain, plus 404 and 500 pages. That commit also found a Gin bug pattern: a NoRoute handler must call `c.Abort()`, or the next handler appends its output too. This app needs v0.2.7 for the Alpine.js UI. Still a gap: `public/public.go` embeds only `*.html`, so the planned CSS, JS and Alpine.js files won't be served until the `go:embed` pattern is widened (by hand, or by a later Bogie). Small note: `mustRead` panics at package init, which bends rule 4 ("Only main exits").
+- **No static file support until v0.2.7.** v0.2.7 (`7e45718`, committed in the app as `19c18a7`) adds a `public/` folder embedded in the binary, served by a three-handler NoRoute chain, plus 404 and 500 pages. That commit also found a Gin bug pattern: a NoRoute handler must call `c.Abort()`, or the next handler appends its output too. This app needs v0.2.7 for the Alpine.js UI. v0.2.7's `staticFile` also skipped `public/index.html` for `GET /`; fixed in `f6cd452` and in Bogie `a9d6cbf` (v0.2.8), which also widened `go:embed` to `*.html images`. CSS and JS files are still not embedded. The pages dodge this with inline `<style>`/`<script>` and Alpine.js from the jsdelivr CDN, so the "no build step" promise holds, but the UI now needs the internet to load (inferred: a deliberate shortcut, not discussed). Small note: `mustRead` panics at package init, which bends rule 4 ("Only main exits").
 - **Possible doc nit.** `make test` says "then ECOMMERCE_ENV=test bogie db:prepare once", but test databases are migrated by `testStore` anyway. Worth checking whether that step is still needed.
 
 ### Rails comparisons
@@ -73,7 +80,7 @@ Hand-written, or hand-edited after generation:
 - `bogie routes` is `rails routes`. `make db-prepare`, `db-migrate` and `db-rollback` use the Rails names. The app migrates at boot, unlike Rails.
 - `db/seeds/*.go` plus `seeds.Run` is `db/seeds.rb`, and `FindOrCreateProductByName` is `find_or_create_by`. As in Rails, seeds run every time, so making them safe to repeat is the author's job.
 - `bogie app:update` is `rails app:update`, but it does a real three-way merge against the version in `bogie.toml`.
-- Coming in v0.2.7: `public/`, `404.html` and `500.html` like Rails' `public/` and `PublicExceptions`, but embedded in the binary.
+- Since v0.2.7: `public/`, `404.html` and `500.html` like Rails' `public/` and `PublicExceptions`, but embedded in the binary.
 
 ### Chapter-worthy observations
 
@@ -89,12 +96,159 @@ Hand-written, or hand-edited after generation:
 ### Still to do
 
 - [x] Commit the v0.2.6 upgrade and the product seeds (`42dca45`).
-- [ ] Move `GetProductByName` / `FindOrCreateProductByName` from `app/models/products.go` into `app/models/products_extra.go` (the v0.2.7 convention).
-- [ ] Commit the v0.2.7 upgrade (in progress).
+- [x] Move `GetProductByName` / `FindOrCreateProductByName` into `app/models/products_extra.go` (done in `4ad24f6`, with the query in `db/queries/products_extra.sql`).
+- [x] Commit the v0.2.7 upgrade (`19c18a7`).
+- [x] A basic HTML page listing products: `public/index.html` with Alpine.js (`4e4281f`), plus a detail page (`7fbdd93`).
+- [x] Decide where `index.html` lives versus the welcome page: `public/index.html` wins at `/`, welcome is the fallback (`f6cd452`).
+- [x] Start `docs/bogie-gaps.md` (`a21c9da`). The Task A gaps above are not in it yet.
 - [ ] Create, update and delete actions (POST, PATCH, DELETE `/products`) with `Validate` rules (name required, price ≥ 0, stock ≥ 0) and 422 responses.
-- [ ] Fill in the model round-trip test (the TODO in `products_test.go`).
+- [ ] Fill in the model round-trip test. The TODO is still in `products_test.go`, and now in `carts_test.go` and `cart_items_test.go` too.
 - [ ] Pagination for `GET /products`: decide offset or cursor, and the response shape (count, next).
-- [ ] A basic HTML page listing products: `public/` plus Alpine.js, served from the same origin.
-- [ ] Static file support in Bogie. v0.2.7 brings the basics (in progress). Still needed: serving CSS, JS and images (widen `go:embed`) and deciding where `index.html` lives versus the welcome page at `/`.
-- [ ] Start `docs/bogie-gaps.md`, which CLAUDE.md asks for, and move the gap list above into it.
-- [ ] Tag checkpoints (`task-a1`, ...) as CLAUDE.md describes. There are no tags yet.
+- [ ] Serving CSS and JS from `public/` (widen `go:embed`), or decide the CDN plus inline approach is fine for the book.
+- [ ] Decide whether the Task A gaps above (seeds redesign, `posts_test.go` TODO, `ImageUrl`, non-unique `GetProductByName`) move into `docs/bogie-gaps.md`.
+- [ ] Tag Task A checkpoints (`task-a1`, ...). Only `task-c1` and `task-c2` exist so far.
+
+---
+
+## Pass 1 › Task B: Group products into categories
+
+Not started. The build went from Task A straight to Task C on 2026-10-18 (inferred: no category model, migration or commit exists, and the tags jump to `task-c1`).
+
+---
+
+## Pass 1 › Before Task C: v0.2.9, bigint ids, v0.2.10
+
+### What was done
+
+1. **2026-10-18 19:24, `f59ac32` update bogie to v0.2.9.** Clean merge. AGENTS.md gained a paragraph on the app's id scheme (this app: uuid). `app/models/uuid.go` gained a trailing blank line.
+2. **2026-10-18 19:26, `4ad24f6` switch to bigint ids, and generate carts/cart_items.** `bogie.toml` gained `id = "bigint"`. The products migration was edited in place (`uuid ... DEFAULT gen_random_uuid()` became `bigserial`), and the products domain, store, view and tests were regenerated: ids are `int64` now. `uuid.go` was replaced by `id.go` (`parseID`). The products extras moved to `products_extra.go` / `products_extra.sql`. Also generated the cart models (see Task C1). Checked with a full schema reset and `bin/ci`. The UI needed no change: the JSON just carries a number.
+3. **2026-10-18 19:44, `c26e861` update bogie to v0.2.10.** Regenerated products, carts and cart_items with `--force` to pick up the new "Written by `bogie g model`: overwritten whole on the next run" header on `db/queries/<table>.sql` and `app/models/<table>.go`. AGENTS.md now says hand-written queries go in `<table>_extra.sql` too.
+
+### Bogie commands used
+
+- `bogie app:update` to v0.2.9, then v0.2.10.
+- `bogie g model product name:string description:text price_cents:integer stock:integer image_url:string --force` after setting `id = "bigint"` (inferred from "regenerated under it"). Again with `--force` for all three models in `c26e861`.
+- `make sqlc` for the moved `products_extra.sql` (inferred).
+
+### Generated vs hand-written
+
+- Generated: the regenerated products files, `id.go`, the v0.2.10 header comments.
+- Hand-written: the `id = "bigint"` line in `bogie.toml` (inferred: the file says "Do not edit by hand", and Bogie has no command to switch an existing app's scheme), the in-place edit of the products migration, and moving the extras into sibling files.
+
+### Bogie gaps/bugs found
+
+- **Bigint became the default in Bogie v0.2.9** (`22c0682`, 19:21 on 10-18, five minutes before `4ad24f6`). Before that every id was uuid, hard-coded, with no stated reason. Building it also exposed a scaffold bug: `Update` built `domain.Post{ID: c.Param("id")}` from the URL string, which only compiled because ID was a string.
+- **No way to switch an existing app's id scheme.** An app without an `id` line reads as uuid. Switching meant hand-editing `bogie.toml`, editing an applied migration, regenerating with `--force` and resetting the database. Fine before production, but not a path the book should teach.
+- **A fresh v0.2.9 app fails `bin/ci`.** `id.go`/`uuid.go` end in a blank line (gofmt) and `parseID` is unused until the first model (lint). This app shows the blank line in `f59ac32`. Fixed in Bogie `4d10633` (2026-10-19 09:13), after v0.2.10, so not released yet.
+- **The v0.2.10 header comment leaks into sqlc output (inferred bug, not in `docs/bogie-gaps.md`).** sqlc attaches the file-header comment in `db/queries/<table>.sql` to the first query, so the Go doc comment on `GetProduct`, `GetCart` and `GetCartItem` in `*.sql.go` now reads "Written by `bogie g model`: overwritten whole... A hand-written query goes in ..._extra.sql". That is wrong on a sqlc function, and the query string also gains a blank line. Bogie's template should separate the header from the first `-- name:` (or put it somewhere sqlc ignores). Not fixed upstream as of `6be3be1`.
+
+### Rails comparisons
+
+- Bigint `id` is Rails' default. `--id=uuid` is like `config.generators { |g| g.orm :active_record, primary_key_type: :uuid }`, and like Rails it is one choice for the whole app.
+- Editing an old migration and resetting is what Rails developers do before a first deploy too (`db:migrate:reset`). After that, a new migration is the only way.
+- `_extra.go` siblings play the role Rails gets for free from reopening a class or a concern. Go has no reopening, so the convention is a separate file in the same package.
+
+### Chapter-worthy observations
+
+- **Bigint vs uuid is a real design note for later.** Integers read better in a teaching book, but sequential ids are guessable over a public API. Task C2 shows why that matters (see below).
+- **`--force` plus `_extra` files is the "generated code you own" story.** Generated files can be regenerated whole only because hand-written code lives beside them.
+
+### Still to do
+
+- [ ] Report the sqlc doc-comment leak to Bogie (or add it to `docs/bogie-gaps.md`).
+- [ ] Pick up Bogie's `4d10633` fix in the next release.
+
+---
+
+## Pass 1 › Task C1: Cart mechanics
+
+### What was done
+
+1. **2026-10-18 19:26, in `4ad24f6`: cart models.** Migrations `20261018122446_create_carts.sql` (id, token varchar) and `20261018122447_create_cart_items.sql` (cart_id and product_id as `bigint REFERENCES`, quantity integer, an index on each foreign key). Domain types, store methods, sqlc output and model tests for both. No logic yet.
+2. **2026-10-18 19:53, `a21c9da` start docs/bogie-gaps.md.** First entry: no singular resource (see the gaps file).
+3. **2026-10-18 20:11, `fe30a7f` cart mechanics.** `GET /cart`, `POST /cart_items`, `PATCH /cart_items/:id`, `DELETE /cart_items/:id`. Every cart_items action answers with the whole cart, so the UI just replaces its state. Hand-written: `FindOrCreateCartByToken` (`carts_extra.go`, `carts_extra.sql`), `AddCartItem` (adds to an existing line for the same product, checks quantity > 0 and stock), `UpdateCartItemQuantity`, `CartContents` (a JOIN with products, in `cart_items_extra.go` / `.sql`), `domain.CartLine` (read-only, no table), `app/views/cart.go`, and tests with fake stores. All visitors shared one cart (empty token).
+4. **2026-10-18 20:14, `109d62b` cart UI.** A "Cart (N)" badge on both pages, an "Add to cart" button on `product.html` (disabled at stock 0, shows the server's error inline), and `public/cart.html` with a quantity stepper, remove link and server-computed total. Tagged `task-c1`.
+
+### Bogie commands used
+
+- `bogie g model cart token:string` and `bogie g model cart_item cart:references product:references quantity:integer` (inferred from the migrations, generated one second apart).
+- `bogie g controller cart index` (the gaps file says so) and `bogie g controller cart_items create update destroy` (inferred: the `SetupRoutes` comment is the generator's, and only those three routes exist). The 501 stubs were never committed separately.
+- `make sqlc` for the `_extra.sql` queries (inferred).
+
+### Generated vs hand-written
+
+- Generated: both models in full, the two controller skeletons and their marker registrations in `application.go` and `routes.go`.
+- Hand-written: all cart logic, as CLAUDE.md requires ("cart logic is teaching material, never generated"): everything in `carts_extra*`, `cart_items_extra*`, `cart_line.go`, `views/cart.go`, the action bodies, `cartView` (line subtotals and the total, computed not stored), both controller tests, and `public/cart.html`.
+
+### Bogie gaps/bugs found
+
+- **No singular resource.** See [`docs/bogie-gaps.md`](bogie-gaps.md#no-singular-resource-rails-resource-x): `GET /cart` is an `Index` action.
+- **Snake-case Go variable from the controller generator.** `cart_items := router.Group("/cart_items")` uses the table name as a variable name. It compiles, but Go style (and linters like revive) wants `cartItems` (inferred template bug).
+- **Validation lives outside `Validate`.** `domain.CartItem.Validate` is still empty. Quantity and stock checks are in the store extras, so the generated `CreateCartItem`/`UpdateCartItem` still accept quantity 0 or negative if called directly. Stock needs the database, which is why it can't sit in `Validate`, but `quantity > 0` could (inferred design question).
+- **`carts.token` has no unique index**, and `GetCartByToken` is `:one`. The find-then-create race noted in the code comment can create two carts with one token.
+- **Comment mismatch.** `CartContents` says "newest first", but the query orders by `created_at` ascending (oldest first).
+- **`ImageUrl` again.** The sqlc naming spreads into `CartLine` and `CartLineResponse`.
+
+### Rails comparisons
+
+- `cart:references` gives the foreign key and index, like `t.references`, but no `belongs_to` / `has_many`. The JOIN that Rails writes as `cart.cart_items.includes(:product)` is a hand-written sqlc query here.
+- `FindOrCreateCartByToken` is `Cart.find_or_create_by(token:)`.
+- Adding the same product twice increments the line. That is exactly the Depot app's `add_product` in *Agile Web Development with Rails*, which this book is modelled on.
+- `422` for validation errors, as in Rails.
+
+### Chapter-worthy observations
+
+- **Depot parallels.** The cart task maps almost one to one onto the classic Rails Depot cart, which gives Rails readers a familiar anchor for "Coming from Rails?" boxes.
+- **"Answer with the whole cart"** is a good small API design lesson: the client never merges state.
+- **Derived values are computed, not stored** (`cartView`). The total depends on current prices, which sets up "price at the time of order" in Task E.
+- **Stock is checked when adding, not reserved.** Two shoppers can both add the last item. Good setup for Task E's conditional stock `UPDATE`.
+
+### Still to do
+
+- [ ] Scope cart_items changes to the visitor's cart (see C2, this became a real bug there).
+- [ ] Unique index on `carts.token`, or `ON CONFLICT`.
+- [ ] Move `quantity > 0` into `CartItem.Validate`, or decide to keep it in the store and say why.
+- [ ] Fix the `CartContents` comment.
+
+---
+
+## Pass 1 › Task C2: Each visitor their own cart
+
+### What was done
+
+1. **2026-10-18 20:46, `0c7693c` give each visitor their own cart.** `currentToken` reads an `X-Cart-Token` request header. If there is none it mints 32 random bytes (`crypto/rand`, hex), and either way echoes the token back in the response. No cookie, on purpose: this is an API, and Task D auth will be token-based too. The UI got a small `cartFetch()` wrapper per page that sends the token from `localStorage` and saves whatever comes back. Checked live: first visit mints a token, a reload reuses it (one cart row), another token sees an empty cart. Added the second entry to `docs/bogie-gaps.md`. Tagged `task-c2`.
+
+### Bogie commands used
+
+- None. All hand-written.
+
+### Generated vs hand-written
+
+- Hand-written: `cartTokenHeader`, `currentToken`, `randomToken`, the two new tests, `cartFetch()` in all three pages, and the gaps entry.
+
+### Bogie gaps/bugs found
+
+- **No "anonymous but trackable" identity shape in `g authentication`.** See [`docs/bogie-gaps.md`](bogie-gaps.md#no-anonymous-but-trackable-identity-shape).
+- **App bug: `PATCH` and `DELETE /cart_items/:id` don't check the line belongs to the caller's cart.** `UpdateCartItemQuantity` and `DeleteCartItem` look up the line by id only. With per-visitor carts and sequential bigint ids, any visitor can change or delete anyone's cart line by guessing ids. `Update` then answers with the *other* cart's full contents (`respondWithCart(item.CartID)`), so it also leaks a stranger's cart. Not a Bogie bug, but generated store methods only take an id, and bigint ids make it easy to hit. Fix: resolve the cart first and query `WHERE id = $1 AND cart_id = $2`, answering 404 otherwise. Not in `docs/bogie-gaps.md`; a possible Bogie idea is scoped finders for `:references` (Rails' `current_cart.cart_items.find(id)`).
+- **The server accepts any token the client sends.** A client can choose its own token (for example `visitor-123`, which the test uses). Low risk for a cart, but the token is not proof the server issued it.
+- **Every tokenless request creates a cart row**, including the badge's `GET /cart` on every page for a new browser or a crawler. `GET` has a write side effect, and nothing cleans up old carts.
+- **`randomToken` panics if `crypto/rand` fails**, caught by `middlewares.Recover`. Fine, and explained in the code comment.
+
+### Rails comparisons
+
+- `X-Cart-Token` plays the role of Rails' `session[:cart_id]`, and `currentToken` the role of Depot's `CurrentCart` concern with `set_cart`. Rails hides the session in a signed cookie. Here the client holds the token and sends it back.
+- Rails would write `current_cart.line_items.find(params[:id])`, which scopes the lookup to the visitor's cart for free. The Go version has to say it in SQL, and forgetting it is the bug above. A good "Coming from Rails?" box.
+
+### Chapter-worthy observations
+
+- **The ownership bug is the best security lesson so far.** It appears exactly when carts stop being shared, and it ties back to the bigint-vs-uuid choice. Pass 2 can make it a deliberate "spot the bug" moment, then fix it with a scoped query and a test.
+- **One pattern, two uses.** Using a header token now and token auth in Task D means the reader learns "send what you have, save what comes back" once. The commit's note that a leaked cart token only exposes a cart, not an account, is a good sidebar.
+- **Guest cart to user cart.** Task D will need to merge a guest cart into a logged-in user's cart. Rails apps do this by hand too.
+
+### Still to do
+
+- [ ] Fix the cart_items ownership bug (scoped queries for update and delete, plus tests with two carts).
+- [ ] Decide whether to only accept server-issued tokens.
+- [ ] Clean up abandoned carts, or create a cart only on the first add, not on `GET /cart`.
+- [ ] Plan the guest-cart merge for Task D.
+- [ ] Task B (categories) and the price rules task are still ahead.
