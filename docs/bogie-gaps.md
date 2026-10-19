@@ -31,26 +31,26 @@ action, for the current cart (task C, cart mechanics).
 `g controller cart --singular`), dropping `/:id` from `show`/`update`/
 `destroy` and skipping `index`/`create` entirely for that controller.
 
-## No anonymous-but-trackable identity shape
+## ~~No anonymous-but-trackable identity shape~~ — not a gap after all
 
-`bogie g authentication` has three shapes — `secret`, `token`, `api_key` —
-and all three are for identity that has already been established: a shared
-secret, a user's bearer token, a machine client's key. None of them cover
-the far more common case of a visitor nobody has identified yet, who still
-needs to be the same visitor across requests — a guest cart, a shopping
-session, an anonymous rate-limit bucket.
+Task C2 first assumed `bogie g authentication`'s three shapes — `secret`,
+`token`, `api_key` — only cover identity that's already been established,
+and hand-rolled a fourth mechanism for a guest cart: an opaque token the
+client sends if it has one, minted with `crypto/rand` and echoed back as a
+response header (`X-Cart-Token`) if not.
 
-**Workaround in use:** `cartTokenHeader`, `currentToken` and `randomToken`
-in `app/controllers/cart_controller.go` (task C2). The shape: the client
-sends an opaque token if it has one; the server mints one with
-`crypto/rand` if not; either way the token is echoed back as a response
-header (`X-Cart-Token`), so the client's only job is "send what you have,
-save what comes back." No cookie, deliberately — this is an API, and task
-D's real auth will be token-based too, so this is a smaller version of the
-same pattern rather than a second one.
+That turned out to be unnecessary. `g authentication token` already
+generates exactly what a guest identity needs: `Maker.Mint(subject, ttl)`
+to hand out a signed bearer token, and `RequireUser`/`Subject(c)` to guard
+a route and read back whoever it was minted for. The only thing specific
+to "guest" is that the subject is a fresh `uuid.NewString()` with no user
+row behind it, minted from its own unguarded endpoint (`POST
+/guest_sessions`) instead of a login form — everything after that is the
+same `Authorization: Bearer` flow a real signed-in user would get.
 
-**Real fix:** a fourth `g authentication` shape, maybe `anonymous`, that
-writes the mint-or-reuse-and-echo middleware and the header name as a
-config constant, the way `token`/`api_key` already write their own
-middleware. Worth doing once a second app needs the same pattern — this is
-the first time it has come up.
+**Current implementation:** `app/controllers/guest_sessions_controller.go`
+mints; `app/middlewares/require_user.go` (generated) guards `/cart` and
+`/cart_items` via `s.WithUser(...)` in `routes.go`.
+
+No real fix needed here — a guest and a signed-in user are "same shape,
+different stakes," not two mechanisms.

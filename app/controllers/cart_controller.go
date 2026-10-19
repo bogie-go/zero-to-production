@@ -2,8 +2,6 @@ package controllers
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/middlewares"
 	"ecommerce/app/views"
 )
 
@@ -22,9 +21,12 @@ type cartStore interface {
 }
 
 // CartController is the HTTP surface of the current cart: one cart per
-// visitor, resolved by currentToken rather than an id in the URL (there is
-// no Rails-style singular resource in Bogie yet — docs/bogie-gaps.md — so
-// Index stands in for what would be a singular show).
+// visitor, resolved by the bearer token's subject (middlewares.Subject)
+// rather than an id in the URL (there is no Rails-style singular resource
+// in Bogie yet — docs/bogie-gaps.md — so Index stands in for what would be
+// a singular show). The token itself, guest or (later) a real login, is
+// POST /guest_sessions's job to mint, not this controller's: by the time a
+// request reaches here it is required already, via s.WithUser in routes.go.
 type CartController struct {
 	Store cartStore
 	Log   *slog.Logger
@@ -43,47 +45,12 @@ func (ctl *CartController) SetupRoutes(router *gin.RouterGroup) {
 	cart.GET("", ctl.Index)
 }
 
-// cartTokenHeader names the visitor's cart, like Rails's session[:cart_id]
-// but as a plain header instead of a cookie: this is an API, and Task D's
-// own auth will be token-based too, so one mental model carries through
-// instead of two. It is never cryptographically meaningful on its own — it
-// just has to be hard to guess — unlike a Task D auth token, which proves
-// who you are and would need real care (expiry, a digest in storage, the
-// way Bogie's own api_key shape already does it) if the two were ever
-// confused. They are not: a leaked cart token lets someone see a stranger's
-// cart, nothing more.
-const cartTokenHeader = "X-Cart-Token"
-
-// currentToken resolves the visitor's cart token: whatever the client sent
-// back, or a freshly minted one on a first visit. Either way it is echoed
-// as a response header, so the client's only job is "always send what you
-// have, always save what comes back" — no token generation of its own.
-func currentToken(c *gin.Context) string {
-	token := c.GetHeader(cartTokenHeader)
-	if token == "" {
-		token = randomToken()
-	}
-	c.Header(cartTokenHeader, token)
-	return token
-}
-
-// randomToken is 32 bytes from the OS's CSPRNG, hex-encoded: unguessable,
-// nothing to verify or decode. crypto/rand failing means the OS's entropy
-// source is broken, not something a request can recover from; the panic is
-// caught by middlewares.Recover like any other, and answered with
-// public/500.html rather than crashing the process.
-func randomToken() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(b)
-}
-
-// Index handles GET /cart: the current cart's contents, creating it empty
-// on first visit.
+// Index handles GET /cart: the current cart's contents. The cart always
+// already exists by the time a token reaches here — POST /guest_sessions
+// creates it at mint time — so FindOrCreateCartByToken's "create" branch is
+// a defensive fallback, not the normal path.
 func (ctl *CartController) Index(c *gin.Context) {
-	cart, err := ctl.Store.FindOrCreateCartByToken(c.Request.Context(), currentToken(c))
+	cart, err := ctl.Store.FindOrCreateCartByToken(c.Request.Context(), middlewares.Subject(c))
 	if err != nil {
 		ctl.fail(c, err)
 		return

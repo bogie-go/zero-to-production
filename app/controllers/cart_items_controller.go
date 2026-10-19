@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/middlewares"
 	"ecommerce/app/views"
 )
 
@@ -55,7 +56,7 @@ func (ctl *CartItemsController) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
 	}
-	cart, err := ctl.Store.FindOrCreateCartByToken(c.Request.Context(), currentToken(c))
+	cart, err := ctl.Store.FindOrCreateCartByToken(c.Request.Context(), middlewares.Subject(c))
 	if err != nil {
 		ctl.fail(c, err)
 		return
@@ -86,7 +87,7 @@ func (ctl *CartItemsController) Update(c *gin.Context) {
 // belonged to has to be resolved before the delete, not after — there is
 // nothing left to ask once the line is gone.
 func (ctl *CartItemsController) Destroy(c *gin.Context) {
-	cart, err := ctl.Store.FindOrCreateCartByToken(c.Request.Context(), currentToken(c))
+	cart, err := ctl.Store.FindOrCreateCartByToken(c.Request.Context(), middlewares.Subject(c))
 	if err != nil {
 		ctl.fail(c, err)
 		return

@@ -9,11 +9,29 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/middlewares"
+	"ecommerce/app/services/token"
 )
+
+// testTokens mints and verifies bearer tokens for every controller test in
+// this package that sits behind s.WithUser, the same Maker
+// middlewares.RequireUser checks against in production.
+var testTokens = token.Maker{Secret: []byte("a-test-secret-of-at-least-thirty-two-bytes"), Issuer: "ecommerce-test"}
+
+// bearerFor mints a short-lived token for subject, for a test to present.
+func bearerFor(t *testing.T, subject string) string {
+	t.Helper()
+	signed, err := testTokens.Mint(subject, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return "Bearer " + signed
+}
 
 // fakeCartStore is a fake of the store interface declared beside the
 // controller: it records what the controller asked for and answers with
@@ -35,20 +53,23 @@ func (f *fakeCartStore) CartContents(_ context.Context, cartID int64) ([]domain.
 	return f.lines, f.err
 }
 
-// cartRequest mounts the controller alone on a bare router, so these tests
-// see the controller and nothing else: no middleware, no other routes.
-// token, if not "", is sent as the request's X-Cart-Token header.
-func cartRequest(t *testing.T, store *fakeCartStore, method, path, body, token string) *httptest.ResponseRecorder {
+// cartRequest mounts the controller behind the same RequireUser middleware
+// s.WithUser wraps it with in production, so these tests see exactly what a
+// real request would: no token, no access. authorization, if not "", is
+// sent as the request's Authorization header verbatim — use bearerFor for a
+// valid one.
+func cartRequest(t *testing.T, store *fakeCartStore, method, path, body, authorization string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewCartController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
+	guarded := router.Group("", middlewares.RequireUser(testTokens))
+	NewCartController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(guarded)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set(cartTokenHeader, token)
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
 	}
 	router.ServeHTTP(rec, req)
 	return rec
@@ -56,14 +77,14 @@ func cartRequest(t *testing.T, store *fakeCartStore, method, path, body, token s
 
 // Every action is mounted: a route that answers 404 was never registered.
 func TestCartRoutesAreMounted(t *testing.T) {
-	rec := cartRequest(t, &fakeCartStore{}, http.MethodGet, "/cart", "", "")
+	rec := cartRequest(t, &fakeCartStore{}, http.MethodGet, "/cart", "", bearerFor(t, "visitor-1"))
 	if rec.Code == http.StatusNotFound {
 		t.Errorf("GET /cart is not mounted")
 	}
 }
 
-// Index creates the cart on first visit and returns its contents, with
-// each line's subtotal and the cart's total computed, not stored.
+// Index returns the current cart's contents, with each line's subtotal and
+// the cart's total computed, not stored.
 func TestCartIndexReturnsContentsWithComputedTotals(t *testing.T) {
 	store := &fakeCartStore{
 		cart: domain.Cart{ID: 1},
@@ -71,7 +92,7 @@ func TestCartIndexReturnsContentsWithComputedTotals(t *testing.T) {
 			{ID: 1, ProductID: 10, ProductName: "Widget", UnitPriceCents: 500, Quantity: 2},
 		},
 	}
-	rec := cartRequest(t, store, http.MethodGet, "/cart", "", "")
+	rec := cartRequest(t, store, http.MethodGet, "/cart", "", bearerFor(t, "visitor-1"))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
@@ -84,37 +105,30 @@ func TestCartIndexReturnsContentsWithComputedTotals(t *testing.T) {
 	}
 }
 
-// A first-time visitor, sending no token, gets one minted for them, used to
-// resolve the cart and echoed back so they can send it next time.
-func TestCartIndexMintsATokenOnFirstVisit(t *testing.T) {
+// The cart is resolved by the token's subject: whichever visitor the
+// bearer token names is whose cart comes back.
+func TestCartIndexResolvesByTokenSubject(t *testing.T) {
 	store := &fakeCartStore{}
-	rec := cartRequest(t, store, http.MethodGet, "/cart", "", "")
-
-	got := rec.Header().Get(cartTokenHeader)
-	if got == "" {
-		t.Fatalf("response did not carry an %s header", cartTokenHeader)
-	}
-	if store.gotToken != got {
-		t.Errorf("store got token %q, want the minted %q", store.gotToken, got)
+	cartRequest(t, store, http.MethodGet, "/cart", "", bearerFor(t, "visitor-42"))
+	if store.gotToken != "visitor-42" {
+		t.Errorf("store got token %q, want %q", store.gotToken, "visitor-42")
 	}
 }
 
-// A returning visitor's token is reused as is, not replaced.
-func TestCartIndexReusesAPresentedToken(t *testing.T) {
-	store := &fakeCartStore{}
-	rec := cartRequest(t, store, http.MethodGet, "/cart", "", "visitor-123")
-
-	if rec.Header().Get(cartTokenHeader) != "visitor-123" {
-		t.Errorf("response token = %q, want it echoed back unchanged", rec.Header().Get(cartTokenHeader))
-	}
-	if store.gotToken != "visitor-123" {
-		t.Errorf("store got token %q, want %q", store.gotToken, "visitor-123")
+// No bearer token at all is 401 — the detailed cases (expired, garbage,
+// wrong scheme) are already covered by
+// app/middlewares/require_user_test.go; this just proves /cart is actually
+// mounted behind that guard, not bypassing it.
+func TestCartRequiresABearerToken(t *testing.T) {
+	rec := cartRequest(t, &fakeCartStore{}, http.MethodGet, "/cart", "", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
 	}
 }
 
 // An unexpected error is a 500 that says nothing about its cause.
 func TestCartUnexpectedErrorIs500WithoutDetail(t *testing.T) {
-	rec := cartRequest(t, &fakeCartStore{err: errors.New("connection refused to db-1")}, http.MethodGet, "/cart", "", "")
+	rec := cartRequest(t, &fakeCartStore{err: errors.New("connection refused to db-1")}, http.MethodGet, "/cart", "", bearerFor(t, "visitor-1"))
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", rec.Code)
 	}

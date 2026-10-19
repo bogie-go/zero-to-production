@@ -114,21 +114,26 @@
 
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
     <script>
+      // ensureGuestSession mints a guest cart's bearer token on first need,
+      // via POST /guest_sessions, and saves it for next time. Called lazily,
+      // from inside cartFetch, never on page load.
+      async function ensureGuestSession() {
+        const res = await fetch('/guest_sessions', { method: 'POST' });
+        const body = await res.json();
+        try { localStorage.setItem('cartToken', body.token); } catch (e) {}
+        return body.token;
+      }
+
       // cartFetch wraps fetch for /cart and /cart_items: always sends the
-      // saved cart token, if any, and always saves back whatever token the
-      // response carries (minted on a first visit, echoed back otherwise).
-      // Callers never think about the token at all.
+      // saved cart token as a normal bearer token, minting one first if
+      // there isn't one yet. Callers never think about the token at all.
       async function cartFetch(url, options = {}) {
         let token = '';
         try { token = localStorage.getItem('cartToken') || ''; } catch (e) {}
+        if (!token) token = await ensureGuestSession();
         const headers = new Headers(options.headers || {});
-        if (token) headers.set('X-Cart-Token', token);
-        const res = await fetch(url, { ...options, headers });
-        const newToken = res.headers.get('X-Cart-Token');
-        if (newToken) {
-          try { localStorage.setItem('cartToken', newToken); } catch (e) {}
-        }
-        return res;
+        headers.set('Authorization', 'Bearer ' + token);
+        return fetch(url, { ...options, headers });
       }
 
       function cartPage() {

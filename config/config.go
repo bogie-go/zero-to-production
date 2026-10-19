@@ -105,6 +105,7 @@ type AppConfig struct {
 	// Settings a generator added (bogie g authentication) go above the
 	// marker, one field each, read from the same section and overridden by
 	// the same ECOMMERCE_<KEY> rule.
+	TokenSecret string `mapstructure:"token_secret"`
 	// bogie:config
 }
 
@@ -225,6 +226,7 @@ func applyEnv(a *AppConfig) error {
 		}
 		a.MigrateAtBoot = b
 	}
+	a.TokenSecret = envOr("ECOMMERCE_TOKEN_SECRET", a.TokenSecret)
 	// bogie:env
 	return nil
 }
@@ -252,6 +254,7 @@ func (c Config) validate() error {
 	// One check per generated setting; a missing secret refuses to boot
 	// rather than serving open.
 	for _, err := range []error{
+		requireSecret(c.Env, "ECOMMERCE_TOKEN_SECRET", a.TokenSecret, 32),
 		// bogie:validate
 	} {
 		if err != nil {

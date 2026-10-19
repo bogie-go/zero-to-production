@@ -26,9 +26,10 @@ type Server struct {
 	Router *gin.Engine
 	Log    *slog.Logger
 
-	Products  *ProductsController
-	Cart      *CartController
-	CartItems *CartItemsController
+	Products      *ProductsController
+	Cart          *CartController
+	CartItems     *CartItemsController
+	GuestSessions *GuestSessionsController
 	// bogie:controllers
 }
 
