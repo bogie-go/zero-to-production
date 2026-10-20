@@ -247,11 +247,34 @@ Not started. The build went from Task A straight to Task C on 2026-10-18 (inferr
 
 ### Still to do
 
-- [ ] Fix the cart_items ownership bug (scoped queries for update and delete, plus tests with two carts).
+- [x] Fix the cart_items ownership bug (scoped queries for update and delete, plus tests with two carts) — done 2026-10-20, see below.
 - [ ] Decide whether to only accept server-issued tokens.
 - [ ] Clean up abandoned carts, or create a cart only on the first add, not on `GET /cart`.
 - [ ] Plan the guest-cart merge for Task D.
 - [ ] Task B (categories) and the price rules task are still ahead.
+
+### Addendum, 2026-10-20: fixing the ownership bug
+
+Revisited once Task D (accounts) came up as next: the same gap matters more
+once a cart belongs to a real customer, not just a guest token. `Update` and
+`Destroy` in `CartItemsController` now resolve the caller's cart from their
+own bearer token first (`FindOrCreateCartByToken`), the same thing `Create`
+already did, and pass that cart's id into the store. New store methods,
+hand-written in `cart_items_extra.go`: `UpdateCartItemQuantity` gained a
+`cartID` parameter and now looks the line up with a new query,
+`GetCartItemForCart` (`WHERE id = $1 AND cart_id = $2`); `DeleteCartItemForCart`
+replaces the generated, unscoped `DeleteCartItem` as what the controller
+calls. Either one on a line that exists but belongs to someone else's cart
+is `ErrNotFound`, same as a line that doesn't exist at all — a caller can't
+tell the two apart, the property the bug was missing.
+
+Verified at both layers: `app/controllers/cart_items_controller_test.go`
+checks the controller resolves and forwards the caller's own cart id
+(`TestCartItemsUpdateScopesToTheCallersCart`), and a new
+`app/models/cart_items_extra_test.go`, run against real Postgres, creates
+two carts and proves cart B can neither update nor delete cart A's line,
+and that cart A still can. `bin/ci` green throughout, model package
+coverage 31% → 47%.
 
 ---
 

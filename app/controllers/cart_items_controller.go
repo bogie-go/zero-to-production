@@ -18,8 +18,8 @@ import (
 type cartItemsStore interface {
 	FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error)
 	AddCartItem(ctx context.Context, cartID, productID int64, quantity int32) (domain.CartItem, error)
-	UpdateCartItemQuantity(ctx context.Context, id string, quantity int32) (domain.CartItem, error)
-	DeleteCartItem(ctx context.Context, id string) error
+	UpdateCartItemQuantity(ctx context.Context, cartID int64, id string, quantity int32) (domain.CartItem, error)
+	DeleteCartItemForCart(ctx context.Context, cartID int64, id string) error
 	CartContents(ctx context.Context, cartID int64) ([]domain.CartLine, error)
 	ListActivePriceRules(ctx context.Context) ([]domain.PriceRule, error)
 }
@@ -69,31 +69,40 @@ func (ctl *CartItemsController) Create(c *gin.Context) {
 	ctl.respondWithCart(c, http.StatusCreated, cart.ID)
 }
 
-// Update handles PATCH /cart_items/:id: set a line's quantity.
+// Update handles PATCH /cart_items/:id: set a line's quantity. The line
+// must belong to the caller's own cart — resolved from the bearer token's
+// subject, never trusted from the URL or body — or this 404s exactly as a
+// nonexistent line would (UpdateCartItemQuantity doesn't distinguish the
+// two), same as Rails' current_cart.cart_items.find(id).
 func (ctl *CartItemsController) Update(c *gin.Context) {
 	var req views.UpdateCartItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
 	}
-	item, err := ctl.Store.UpdateCartItemQuantity(c.Request.Context(), c.Param("id"), req.Quantity)
+	cart, err := ctl.Store.FindOrCreateCartByToken(c.Request.Context(), middlewares.Subject(c))
 	if err != nil {
 		ctl.fail(c, err)
 		return
 	}
-	ctl.respondWithCart(c, http.StatusOK, item.CartID)
+	if _, err := ctl.Store.UpdateCartItemQuantity(c.Request.Context(), cart.ID, c.Param("id"), req.Quantity); err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	ctl.respondWithCart(c, http.StatusOK, cart.ID)
 }
 
-// Destroy handles DELETE /cart_items/:id: remove a line. The cart it
-// belonged to has to be resolved before the delete, not after — there is
-// nothing left to ask once the line is gone.
+// Destroy handles DELETE /cart_items/:id: remove a line, scoped to the
+// caller's own cart for the same reason Update is. The cart it belonged to
+// has to be resolved before the delete, not after — there is nothing left
+// to ask once the line is gone.
 func (ctl *CartItemsController) Destroy(c *gin.Context) {
 	cart, err := ctl.Store.FindOrCreateCartByToken(c.Request.Context(), middlewares.Subject(c))
 	if err != nil {
 		ctl.fail(c, err)
 		return
 	}
-	if err := ctl.Store.DeleteCartItem(c.Request.Context(), c.Param("id")); err != nil {
+	if err := ctl.Store.DeleteCartItemForCart(c.Request.Context(), cart.ID, c.Param("id")); err != nil {
 		ctl.fail(c, err)
 		return
 	}

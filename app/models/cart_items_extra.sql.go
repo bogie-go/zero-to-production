@@ -9,6 +9,23 @@ import (
 	"context"
 )
 
+const deleteCartItemForCart = `-- name: DeleteCartItemForCart :execrows
+DELETE FROM cart_items WHERE id = $1 AND cart_id = $2
+`
+
+type DeleteCartItemForCartParams struct {
+	ID     int64
+	CartID int64
+}
+
+func (q *Queries) DeleteCartItemForCart(ctx context.Context, arg DeleteCartItemForCartParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCartItemForCart, arg.ID, arg.CartID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getCartItemByCartAndProduct = `-- name: GetCartItemByCartAndProduct :one
 SELECT id, cart_id, product_id, quantity, created_at, updated_at FROM cart_items WHERE cart_id = $1 AND product_id = $2
 `
@@ -20,6 +37,29 @@ type GetCartItemByCartAndProductParams struct {
 
 func (q *Queries) GetCartItemByCartAndProduct(ctx context.Context, arg GetCartItemByCartAndProductParams) (CartItem, error) {
 	row := q.db.QueryRow(ctx, getCartItemByCartAndProduct, arg.CartID, arg.ProductID)
+	var i CartItem
+	err := row.Scan(
+		&i.ID,
+		&i.CartID,
+		&i.ProductID,
+		&i.Quantity,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getCartItemForCart = `-- name: GetCartItemForCart :one
+SELECT id, cart_id, product_id, quantity, created_at, updated_at FROM cart_items WHERE id = $1 AND cart_id = $2
+`
+
+type GetCartItemForCartParams struct {
+	ID     int64
+	CartID int64
+}
+
+func (q *Queries) GetCartItemForCart(ctx context.Context, arg GetCartItemForCartParams) (CartItem, error) {
+	row := q.db.QueryRow(ctx, getCartItemForCart, arg.ID, arg.CartID)
 	var i CartItem
 	err := row.Scan(
 		&i.ID,

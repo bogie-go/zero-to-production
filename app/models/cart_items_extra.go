@@ -46,17 +46,29 @@ func (s *Store) AddCartItem(ctx context.Context, cartID, productID int64, quanti
 }
 
 // UpdateCartItemQuantity sets a line's quantity directly, validating it
-// against the product's current stock the same way AddCartItem does. id is
-// a URL-sourced string, like every other store method that takes one; an
-// id that is not a valid id is simply not found.
-func (s *Store) UpdateCartItemQuantity(ctx context.Context, id string, quantity int32) (domain.CartItem, error) {
+// against the product's current stock the same way AddCartItem does. The
+// line must belong to cartID — the cart the caller's own token resolved to,
+// never a cart id the caller names — or this is ErrNotFound, the same as a
+// line that simply doesn't exist: a caller cannot tell "not yours" from
+// "doesn't exist" apart, the same way Rails' current_cart.cart_items.find
+// would 404 either way. id is a URL-sourced string, like every other store
+// method that takes one; an id that is not a valid id is simply not found.
+func (s *Store) UpdateCartItemQuantity(ctx context.Context, cartID int64, id string, quantity int32) (domain.CartItem, error) {
 	if quantity <= 0 {
 		return domain.CartItem{}, fmt.Errorf("%w: quantity must be positive", domain.ErrInvalid)
 	}
-	item, err := s.GetCartItem(ctx, id)
+	pk, err := parseID(id)
 	if err != nil {
-		return domain.CartItem{}, err
+		return domain.CartItem{}, domain.ErrNotFound
 	}
+	row, err := s.q.GetCartItemForCart(ctx, GetCartItemForCartParams{ID: pk, CartID: cartID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return domain.CartItem{}, domain.ErrNotFound
+	case err != nil:
+		return domain.CartItem{}, fmt.Errorf("models: get cart item %s for cart %d: %w", id, cartID, err)
+	}
+	item := cart_itemFromRow(row)
 	product, err := s.q.GetProduct(ctx, item.ProductID)
 	if err != nil {
 		return domain.CartItem{}, fmt.Errorf("models: get product %d: %w", item.ProductID, err)
@@ -66,6 +78,25 @@ func (s *Store) UpdateCartItemQuantity(ctx context.Context, id string, quantity 
 	}
 	item.Quantity = quantity
 	return s.UpdateCartItem(ctx, item)
+}
+
+// DeleteCartItemForCart removes a line, but only if it belongs to cartID —
+// the same ownership check UpdateCartItemQuantity makes, and for the same
+// reason: a caller names an id, never a cart, so the cart it actually
+// belongs to is the only one that line can ever be deleted from.
+func (s *Store) DeleteCartItemForCart(ctx context.Context, cartID int64, id string) error {
+	pk, err := parseID(id)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+	n, err := s.q.DeleteCartItemForCart(ctx, DeleteCartItemForCartParams{ID: pk, CartID: cartID})
+	if err != nil {
+		return fmt.Errorf("models: delete cart item %s for cart %d: %w", id, cartID, err)
+	}
+	if n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 // CartContents is the cart's line items, each joined with the product it

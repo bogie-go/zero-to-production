@@ -29,6 +29,7 @@ type fakeCartItemsStore struct {
 	gotProductID int64
 	gotQuantity  int32
 	gotID        string
+	gotCartID    int64
 }
 
 func (f *fakeCartItemsStore) FindOrCreateCartByToken(_ context.Context, token string) (domain.Cart, error) {
@@ -40,13 +41,13 @@ func (f *fakeCartItemsStore) AddCartItem(_ context.Context, cartID, productID in
 	return f.item, f.err
 }
 
-func (f *fakeCartItemsStore) UpdateCartItemQuantity(_ context.Context, id string, quantity int32) (domain.CartItem, error) {
-	f.gotID, f.gotQuantity = id, quantity
+func (f *fakeCartItemsStore) UpdateCartItemQuantity(_ context.Context, cartID int64, id string, quantity int32) (domain.CartItem, error) {
+	f.gotCartID, f.gotID, f.gotQuantity = cartID, id, quantity
 	return f.item, f.err
 }
 
-func (f *fakeCartItemsStore) DeleteCartItem(_ context.Context, id string) error {
-	f.gotID = id
+func (f *fakeCartItemsStore) DeleteCartItemForCart(_ context.Context, cartID int64, id string) error {
+	f.gotCartID, f.gotID = cartID, id
 	return f.err
 }
 
@@ -145,7 +146,7 @@ func TestCartItemsCreateMalformedJSONIs400(t *testing.T) {
 }
 
 func TestCartItemsUpdateChangesQuantityAndReturnsTheCart(t *testing.T) {
-	store := &fakeCartItemsStore{item: domain.CartItem{ID: 5, CartID: 1}}
+	store := &fakeCartItemsStore{cart: domain.Cart{ID: 1}, item: domain.CartItem{ID: 5, CartID: 1}}
 	rec := cartItemsRequest(t, store, http.MethodPatch, "/cart_items/5", `{"quantity":3}`, bearerFor(t, "visitor-1"))
 
 	if rec.Code != http.StatusOK {
@@ -153,6 +154,18 @@ func TestCartItemsUpdateChangesQuantityAndReturnsTheCart(t *testing.T) {
 	}
 	if store.gotID != "5" || store.gotQuantity != 3 {
 		t.Errorf("store got id=%q quantity=%d", store.gotID, store.gotQuantity)
+	}
+}
+
+// Update resolves the cart from the caller's own token before touching the
+// line, so the store is always asked "is this line in cart X", never
+// "update this line" with no cart attached — the fix for the cross-cart
+// ownership bug found in task C2.
+func TestCartItemsUpdateScopesToTheCallersCart(t *testing.T) {
+	store := &fakeCartItemsStore{cart: domain.Cart{ID: 42}}
+	cartItemsRequest(t, store, http.MethodPatch, "/cart_items/5", `{"quantity":3}`, bearerFor(t, "visitor-1"))
+	if store.gotCartID != 42 {
+		t.Errorf("store got cart id = %d, want 42", store.gotCartID)
 	}
 }
 
@@ -169,6 +182,9 @@ func TestCartItemsDestroyRemovesTheLineAndReturnsTheCart(t *testing.T) {
 
 	if rec.Code != http.StatusOK || store.gotID != "5" {
 		t.Errorf("status = %d, id = %q", rec.Code, store.gotID)
+	}
+	if store.gotCartID != 1 {
+		t.Errorf("store got cart id = %d, want 1", store.gotCartID)
 	}
 }
 
