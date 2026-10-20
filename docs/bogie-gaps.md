@@ -54,3 +54,14 @@ mints; `app/middlewares/require_user.go` (generated) guards `/cart` and
 
 No real fix needed here — a guest and a signed-in user are "same shape,
 different stakes," not two mechanisms.
+
+## AGENTS.md's id scheme line doesn't update with `bogie.toml`
+
+`AGENTS.md` says "This app's id scheme is `uuid`," but `bogie.toml` has said
+`id = "bigint"` since the switch before Task C (`4ad24f6`). `bogie app:update`
+ran twice since (v0.2.9, v0.2.10) and touched `AGENTS.md` both times, but
+never updated that line. Low stakes — a reader just sees a stale sentence,
+and `bogie.toml` is the actual source of truth — but it means `AGENTS.md`'s
+id-scheme paragraph isn't really regenerated from current settings on
+`app:update`, only on `bogie new`. Found while checking which column types
+`g model` supports before generating `price_rule`, not investigated further.

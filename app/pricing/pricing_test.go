@@ -1,0 +1,162 @@
+package pricing
+
+import (
+	"encoding/json"
+	"errors"
+	"testing"
+
+	"ecommerce/app/domain"
+)
+
+func rule(id int64, name, kind string, properties any) domain.PriceRule {
+	b, err := json.Marshal(properties)
+	if err != nil {
+		panic(err)
+	}
+	return domain.PriceRule{ID: id, Name: name, Kind: kind, Properties: b, Active: true}
+}
+
+func TestCalculate(t *testing.T) {
+	tests := []struct {
+		name       string
+		startCents int64
+		rules      []domain.PriceRule
+		metadata   map[string]any
+		wantFinal  int64
+		wantRules  int
+	}{
+		{
+			name:       "no rules leaves the price alone",
+			startCents: 1000,
+			wantFinal:  1000,
+		},
+		{
+			name:       "percentage discount",
+			startCents: 1000,
+			rules:      []domain.PriceRule{rule(1, "Flash Sale", "percentage_discount", PercentageDiscountRule{Percentage: 20})},
+			wantFinal:  800,
+			wantRules:  1,
+		},
+		{
+			name:       "fixed discount",
+			startCents: 1000,
+			rules:      []domain.PriceRule{rule(1, "Early Bird", "fixed_discount", FixedDiscountRule{AmountCents: 50})},
+			wantFinal:  950,
+			wantRules:  1,
+		},
+		{
+			name:       "fixed discount never goes below zero",
+			startCents: 30,
+			rules:      []domain.PriceRule{rule(1, "Early Bird", "fixed_discount", FixedDiscountRule{AmountCents: 50})},
+			wantFinal:  0,
+			wantRules:  1,
+		},
+		{
+			name:       "minimum purchase below threshold does not apply",
+			startCents: 1000,
+			rules:      []domain.PriceRule{rule(1, "Big Spender", "minimum_purchase", MinimumPurchaseRule{MinimumCents: 50000, DiscountCents: 7500})},
+			wantFinal:  1000,
+			wantRules:  0,
+		},
+		{
+			name:       "minimum purchase at threshold applies",
+			startCents: 50000,
+			rules:      []domain.PriceRule{rule(1, "Big Spender", "minimum_purchase", MinimumPurchaseRule{MinimumCents: 50000, DiscountCents: 7500})},
+			wantFinal:  42500,
+			wantRules:  1,
+		},
+		{
+			name:       "buy x get y below required quantity does not apply",
+			startCents: 1000,
+			rules:      []domain.PriceRule{rule(1, "BOGO", "buy_x_get_y", BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1})},
+			metadata:   map[string]any{"quantity": 1},
+			wantFinal:  1000,
+			wantRules:  0,
+		},
+		{
+			name:       "buy x get y at required quantity applies",
+			startCents: 1000,
+			rules:      []domain.PriceRule{rule(1, "BOGO", "buy_x_get_y", BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1})},
+			metadata:   map[string]any{"quantity": 5},
+			wantFinal:  1000,
+			wantRules:  1,
+		},
+		{
+			name:       "stacking two rules in order",
+			startCents: 1000,
+			rules: []domain.PriceRule{
+				rule(1, "Flash Sale", "percentage_discount", PercentageDiscountRule{Percentage: 20}),
+				rule(2, "Big Spender", "minimum_purchase", MinimumPurchaseRule{MinimumCents: 500, DiscountCents: 75}),
+			},
+			wantFinal: 725, // 1000 -> 800 (20% off) -> 725 (meets the $5 minimum, -$0.75)
+			wantRules: 2,
+		},
+		{
+			name:       "order changes the result: fixed then percentage",
+			startCents: 1000,
+			rules: []domain.PriceRule{
+				rule(1, "Early Bird", "fixed_discount", FixedDiscountRule{AmountCents: 50}),
+				rule(2, "Flash Sale", "percentage_discount", PercentageDiscountRule{Percentage: 20}),
+			},
+			wantFinal: 760, // 1000 -> 950 -> 760
+			wantRules: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Calculate(tt.startCents, tt.rules, tt.metadata)
+			if err != nil {
+				t.Fatalf("Calculate: %v", err)
+			}
+			if result.FinalCents != tt.wantFinal {
+				t.Errorf("FinalCents = %d, want %d", result.FinalCents, tt.wantFinal)
+			}
+			if len(result.AppliedRules) != tt.wantRules {
+				t.Errorf("len(AppliedRules) = %d, want %d", len(result.AppliedRules), tt.wantRules)
+			}
+		})
+	}
+}
+
+func TestCalculateUnknownKindIsInvalid(t *testing.T) {
+	_, err := Calculate(1000, []domain.PriceRule{rule(1, "Mystery", "no_such_kind", map[string]any{})}, nil)
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestResultSavings(t *testing.T) {
+	result, err := Calculate(1000, []domain.PriceRule{rule(1, "Flash Sale", "percentage_discount", PercentageDiscountRule{Percentage: 25})}, nil)
+	if err != nil {
+		t.Fatalf("Calculate: %v", err)
+	}
+	if got := result.TotalSavingsCents(); got != 250 {
+		t.Errorf("TotalSavingsCents() = %d, want 250", got)
+	}
+	if got := result.SavingsPercentage(); got != 25 {
+		t.Errorf("SavingsPercentage() = %v, want 25", got)
+	}
+}
+
+func TestRuleValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		kind       string
+		properties any
+	}{
+		{"negative fixed amount", "fixed_discount", FixedDiscountRule{AmountCents: -1}},
+		{"zero percentage", "percentage_discount", PercentageDiscountRule{Percentage: 0}},
+		{"percentage over 100", "percentage_discount", PercentageDiscountRule{Percentage: 101}},
+		{"zero required quantity", "buy_x_get_y", BuyXGetYRule{RequiredQuantity: 0, FreeQuantity: 1}},
+		{"negative minimum", "minimum_purchase", MinimumPurchaseRule{MinimumCents: -1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, _ := json.Marshal(tt.properties)
+			if _, err := Load(tt.kind, b); !errors.Is(err, domain.ErrInvalid) {
+				t.Errorf("Load(%q, %s): err = %v, want ErrInvalid", tt.kind, b, err)
+			}
+		})
+	}
+}

@@ -252,3 +252,48 @@ Not started. The build went from Task A straight to Task C on 2026-10-18 (inferr
 - [ ] Clean up abandoned carts, or create a cart only on the first add, not on `GET /cart`.
 - [ ] Plan the guest-cart merge for Task D.
 - [ ] Task B (categories) and the price rules task are still ahead.
+
+---
+
+## Pass 1 › Price rules: a pricing engine, STI the Go way
+
+### What was done
+
+1. **2026-10-20, `price_rule` model.** `bogie g model price_rule name:string kind:string properties:jsonb active:boolean priority:integer starts_at:datetime ends_at:datetime`, then hand-edited the migration before it was ever applied: `starts_at`/`ends_at` made nullable (an unscheduled rule has neither), `active` defaulted to `true` (matching the source article). The generated store and domain code had to be hand-corrected to match — `StartsAt`/`EndsAt` are `*time.Time` in `domain.PriceRule`, converted to/from `pgtype.Timestamptz` by two small helpers in the generated `price_rules.go`. First nullable column in this app.
+2. **2026-10-20, the engine itself: `app/pricing`.** A new package, hand-written in full per CLAUDE.md ("price rule engine... hand-written, never generated"): `Rule` interface (`Apply(ctx) (detail, err)`), a `kind string → Decoder` registry, `PriceContext` (original/current cents, applied rules, metadata), `Calculate` (runs rules in order, Rack-middleware style), `Result` (final cents, total savings, savings percentage). Four rule kinds, one file each: `FixedDiscountRule`, `PercentageDiscountRule`, `BuyXGetYRule`, `MinimumPurchaseRule`, ported from "Building an E-commerce Pricing Rules Engine with Single Table Inheritance in Ruby on Rails" (the same author's article). Table-driven tests in `pricing_test.go` cover every rule, unknown-kind errors, validation failures, and that rule order changes the result. No DB needed for any of it — pure functions over a context.
+3. **2026-10-20, store and seeds.** `price_rules_extra.sql`/`.go`: `GetPriceRuleByName`/`FindOrCreatePriceRuleByName` (same idiom as products) and `ListActivePriceRules` (active, and within `starts_at`/`ends_at` if set, ordered by priority). `db/seeds/price_rules.go` seeds the article's four example promotions, adapted to cents: 20% off, $50 off, buy-2-get-1, spend-$500-get-$75-off. Each seed's `properties` is built by marshaling one of `app/pricing`'s own structs, not a hand-written map, so a seed can never drift out of sync with what the engine actually decodes.
+
+### Bogie commands used
+
+- `bogie g model price_rule name:string kind:string properties:jsonb active:boolean priority:integer starts_at:datetime ends_at:datetime`.
+- `bogie g seed price_rules`.
+- `make sqlc` after editing the migration and after adding `price_rules_extra.sql`.
+
+### Generated vs hand-written
+
+- Generated: the migration (then hand-edited for nullability/default before ever being applied), `domain/price_rule.go` (then hand-edited for the `*time.Time` fields), `app/models/price_rules.go` (then hand-edited for the two timestamp-conversion helpers), the sqlc output, the seed stub.
+- Hand-written, start to finish: all of `app/pricing` (interface, registry, four rule kinds, context, calculator, result, tests), `price_rules_extra.go`/`.sql`, and the seed data and its `priceRule` helper.
+
+### Bogie gaps/bugs found
+
+- **`AGENTS.md`'s id-scheme line is stale.** See [`docs/bogie-gaps.md`](bogie-gaps.md#agentsmds-id-scheme-line-doesnt-update-with-bogietoml) — found while checking supported column types for `g model`, unrelated to price rules themselves.
+- **First nullable column in the app exposed that `emit_pointers_for_null_types: true` (in `db/sqlc.yaml`) doesn't apply to `pgx/v5`'s own wrapper types.** A nullable `timestamptz` still comes back as `pgtype.Timestamptz`, not `*time.Time`, regardless of that setting. Not a bug — the setting only affects types with no native pgx wrapper — but worth knowing before the next nullable column surprises someone.
+
+### Rails comparisons
+
+- STI (`type` column + Ruby subclassing) becomes `kind` column + a `map[string]Decoder` registry. Go has no open class table, so where Rails resolves the right class automatically on load, this app resolves the right struct explicitly in `pricing.Load`. Adding a new rule kind is still "add one file," the same promise the article makes for STI.
+- `properties` JSONB + ActiveRecord's dynamic `attribute :properties, :json` accessors becomes a plain Go struct with `json` tags — `json.Unmarshal` instead of hand-written `properties['amount']` getters/setters.
+- The Rails article's `Calculator`/`Result`/`PriceContext` POROs map almost one to one onto Go structs and a plain function; no class needed for either, since Go has no DSL to replace.
+- `Rule.where(active: true).order(:priority, :created_at)` becomes `ListActivePriceRules`, one hand-written SQL query with the date window folded in, rather than an AR scope built at call time.
+
+### Chapter-worthy observations
+
+- **A deliberate simplification carried over, and flagged in code:** `BuyXGetYRule` records free items in metadata but, exactly like the source article, does not itself discount the price — doing that correctly needs a specific item's unit price, which a single cart-wide price doesn't carry. The real fix is applying pricing per cart line, not here. Worth turning into an explicit "spot the limitation" moment rather than quietly fixing it, since the source material has the same gap.
+- **No admin endpoint, and that's fine for now.** Per the sequencing decision in project memory, rules are seeded, not created through the API — admin management waits for the Task F namespace chapter, same as product CRUD.
+- **Still open: wiring this into the cart.** `app/pricing.Calculate` exists and is tested, but nothing calls it yet from `CartController`. The natural integration point — the cart's total, or each line separately (so `BuyXGetYRule` could eventually know a unit price) — is a real design decision, not yet made.
+
+### Still to do
+
+- [ ] Decide and wire cart integration: call `ListActivePriceRules` + `pricing.Calculate` from somewhere, likely `CartController`, and add applied discounts/total savings to the cart response and UI.
+- [ ] Table-driven coverage for `starts_at`/`ends_at` scheduling and `priority` ordering against a live database (`ListActivePriceRules` itself is untested against Postgres, only unit-tested in `app/pricing`).
+- [ ] Decide whether `BuyXGetYRule`'s price-reduction gap gets fixed now or stays a documented limitation until cart-line-level pricing exists.

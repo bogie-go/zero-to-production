@@ -24,6 +24,19 @@ type CartItem struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PriceRule struct {
+	ID         int64
+	Name       string
+	Kind       string
+	Properties []byte
+	Active     bool
+	Priority   int32
+	StartsAt   pgtype.Timestamptz
+	EndsAt     pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
 type Product struct {
 	ID          int64
 	Name        string
