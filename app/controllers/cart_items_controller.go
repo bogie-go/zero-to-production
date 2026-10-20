@@ -21,6 +21,7 @@ type cartItemsStore interface {
 	UpdateCartItemQuantity(ctx context.Context, id string, quantity int32) (domain.CartItem, error)
 	DeleteCartItem(ctx context.Context, id string) error
 	CartContents(ctx context.Context, cartID int64) ([]domain.CartLine, error)
+	ListActivePriceRules(ctx context.Context) ([]domain.PriceRule, error)
 }
 
 // CartItemsController is the HTTP surface of a cart's line items: adding,
@@ -107,7 +108,17 @@ func (ctl *CartItemsController) respondWithCart(c *gin.Context, status int, cart
 		ctl.fail(c, err)
 		return
 	}
-	c.JSON(status, cartView(lines))
+	rules, err := ctl.Store.ListActivePriceRules(c.Request.Context())
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	resp, err := cartView(lines, rules)
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(status, resp)
 }
 
 // fail maps a domain error to a status, the one place that mapping lives:

@@ -101,6 +101,18 @@
           </div>
         </template>
 
+        <template x-if="appliedRules.length > 0">
+          <div class="summary">
+            <span class="label">Subtotal</span>
+            <span x-text="formatPrice(subtotalCents)"></span>
+          </div>
+        </template>
+        <template x-for="rule in appliedRules" :key="rule.name">
+          <div class="summary">
+            <span class="label" x-text="rule.name"></span>
+            <span x-text="'-' + formatPrice(rule.discount_cents)"></span>
+          </div>
+        </template>
         <div class="summary">
           <span class="label">Total</span>
           <span class="total" x-text="formatPrice(totalCents)"></span>
@@ -139,7 +151,9 @@
       function cartPage() {
         return {
           items: [],
+          subtotalCents: 0,
           totalCents: 0,
+          appliedRules: [],
           loading: true,
           error: null,
           get cartCount() {
@@ -158,7 +172,9 @@
           },
           applyCart(data) {
             this.items = (data.items || []).map((line) => ({ ...line, busy: false, error: '' }));
+            this.subtotalCents = data.subtotal_cents || 0;
             this.totalCents = data.total_cents || 0;
+            this.appliedRules = data.applied_rules || [];
           },
           async setQuantity(line, quantity) {
             if (quantity < 1) return;

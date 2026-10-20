@@ -10,6 +10,7 @@ import (
 
 	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
+	"ecommerce/app/pricing"
 	"ecommerce/app/views"
 )
 
@@ -18,6 +19,7 @@ import (
 type cartStore interface {
 	FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error)
 	CartContents(ctx context.Context, cartID int64) ([]domain.CartLine, error)
+	ListActivePriceRules(ctx context.Context) ([]domain.PriceRule, error)
 }
 
 // CartController is the HTTP surface of the current cart: one cart per
@@ -60,7 +62,17 @@ func (ctl *CartController) Index(c *gin.Context) {
 		ctl.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, cartView(lines))
+	rules, err := ctl.Store.ListActivePriceRules(c.Request.Context())
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	resp, err := cartView(lines, rules)
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // fail maps a domain error to a status, the one place that mapping lives:
@@ -79,23 +91,45 @@ func (ctl *CartController) fail(c *gin.Context, err error) {
 	}
 }
 
-// cartView converts a cart's lines to the wire shape, computing each line's
-// subtotal and the cart's total here: derived values, not stored. Shared by
-// CartController and CartItemsController, which both answer with a cart.
-func cartView(lines []domain.CartLine) views.CartResponse {
-	out := views.CartResponse{Items: make([]views.CartLineResponse, 0, len(lines))}
+// cartView converts a cart's lines to the wire shape and runs rules against
+// the lines' total, computing every derived value here rather than storing
+// any of them. Shared by CartController and CartItemsController, which both
+// answer with a cart.
+func cartView(lines []domain.CartLine, rules []domain.PriceRule) (views.CartResponse, error) {
+	items := make([]views.CartLineResponse, 0, len(lines))
+	var subtotal int32
 	for _, l := range lines {
-		subtotal := l.UnitPriceCents * l.Quantity
-		out.Items = append(out.Items, views.CartLineResponse{
+		lineSubtotal := l.UnitPriceCents * l.Quantity
+		items = append(items, views.CartLineResponse{
 			ID:             l.ID,
 			ProductID:      l.ProductID,
 			Name:           l.ProductName,
 			ImageUrl:       l.ImageUrl,
 			UnitPriceCents: l.UnitPriceCents,
 			Quantity:       l.Quantity,
-			SubtotalCents:  subtotal,
+			SubtotalCents:  lineSubtotal,
 		})
-		out.TotalCents += subtotal
+		subtotal += lineSubtotal
 	}
-	return out
+
+	result, err := pricing.Calculate(int64(subtotal), rules, nil)
+	if err != nil {
+		return views.CartResponse{}, err
+	}
+
+	applied := make([]views.AppliedRuleResponse, 0, len(result.AppliedRules))
+	for _, a := range result.AppliedRules {
+		applied = append(applied, views.AppliedRuleResponse{
+			Name:          a.Name,
+			DiscountCents: int32(a.PreviousCents - a.NewCents),
+		})
+	}
+
+	return views.CartResponse{
+		Items:         items,
+		SubtotalCents: subtotal,
+		DiscountCents: int32(result.TotalSavingsCents()),
+		TotalCents:    int32(result.FinalCents),
+		AppliedRules:  applied,
+	}, nil
 }

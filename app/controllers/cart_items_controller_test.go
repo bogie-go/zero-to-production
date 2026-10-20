@@ -23,6 +23,7 @@ type fakeCartItemsStore struct {
 	cart  domain.Cart
 	item  domain.CartItem
 	lines []domain.CartLine
+	rules []domain.PriceRule
 	err   error
 
 	gotProductID int64
@@ -51,6 +52,10 @@ func (f *fakeCartItemsStore) DeleteCartItem(_ context.Context, id string) error 
 
 func (f *fakeCartItemsStore) CartContents(_ context.Context, cartID int64) ([]domain.CartLine, error) {
 	return f.lines, nil
+}
+
+func (f *fakeCartItemsStore) ListActivePriceRules(_ context.Context) ([]domain.PriceRule, error) {
+	return f.rules, nil
 }
 
 // cartItemsRequest mounts the controller behind the same RequireUser

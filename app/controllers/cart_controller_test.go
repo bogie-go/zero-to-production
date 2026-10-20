@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 
 	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
+	"ecommerce/app/pricing"
 	"ecommerce/app/services/token"
 )
 
@@ -39,6 +41,7 @@ func bearerFor(t *testing.T, subject string) string {
 type fakeCartStore struct {
 	cart  domain.Cart
 	lines []domain.CartLine
+	rules []domain.PriceRule
 	err   error
 
 	gotToken string
@@ -51,6 +54,10 @@ func (f *fakeCartStore) FindOrCreateCartByToken(_ context.Context, token string)
 
 func (f *fakeCartStore) CartContents(_ context.Context, cartID int64) ([]domain.CartLine, error) {
 	return f.lines, f.err
+}
+
+func (f *fakeCartStore) ListActivePriceRules(_ context.Context) ([]domain.PriceRule, error) {
+	return f.rules, nil
 }
 
 // cartRequest mounts the controller behind the same RequireUser middleware
@@ -102,6 +109,38 @@ func TestCartIndexReturnsContentsWithComputedTotals(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"total_cents":1000`) {
 		t.Errorf("body = %s, want a cart total of 1000", rec.Body)
+	}
+}
+
+// An active price rule discounts the cart's total, and the response says
+// which rule did it and by how much — the pricing engine wired in, not just
+// unit-tested in isolation.
+func TestCartIndexAppliesActivePriceRules(t *testing.T) {
+	percentage, err := json.Marshal(pricing.PercentageDiscountRule{Percentage: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &fakeCartStore{
+		cart:  domain.Cart{ID: 1},
+		lines: []domain.CartLine{{ID: 1, ProductID: 10, ProductName: "Widget", UnitPriceCents: 500, Quantity: 2}},
+		rules: []domain.PriceRule{{ID: 1, Name: "Flash Sale", Kind: "percentage_discount", Properties: percentage, Active: true}},
+	}
+	rec := cartRequest(t, store, http.MethodGet, "/cart", "", bearerFor(t, "visitor-1"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"subtotal_cents":1000`) {
+		t.Errorf("body = %s, want a subtotal of 1000", rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"discount_cents":200`) {
+		t.Errorf("body = %s, want a discount of 200", rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"total_cents":800`) {
+		t.Errorf("body = %s, want a total of 800 after the discount", rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"name":"Flash Sale"`) {
+		t.Errorf("body = %s, want the applied rule's name", rec.Body)
 	}
 }
 

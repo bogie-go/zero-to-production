@@ -23,10 +23,21 @@ type CartLineResponse struct {
 	SubtotalCents  int32  `json:"subtotal_cents"`
 }
 
+// AppliedRuleResponse is one price rule that affected this cart's total,
+// in the order it ran.
+type AppliedRuleResponse struct {
+	Name          string `json:"name"`
+	DiscountCents int32  `json:"discount_cents"`
+}
+
 // CartResponse is the cart on the wire: GET /cart, and what every cart_items
 // mutation answers with too, so the UI can always just replace its cart
-// state with the response body.
+// state with the response body. SubtotalCents is the lines' total before any
+// price rule; TotalCents is what the customer actually pays.
 type CartResponse struct {
-	Items      []CartLineResponse `json:"items"`
-	TotalCents int32              `json:"total_cents"`
+	Items         []CartLineResponse    `json:"items"`
+	SubtotalCents int32                 `json:"subtotal_cents"`
+	DiscountCents int32                 `json:"discount_cents"`
+	TotalCents    int32                 `json:"total_cents"`
+	AppliedRules  []AppliedRuleResponse `json:"applied_rules"`
 }
