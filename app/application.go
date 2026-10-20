@@ -71,6 +71,8 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	server.Cart = controllers.NewCartController(store, log)
 	server.CartItems = controllers.NewCartItemsController(store, log)
 	server.GuestSessions = controllers.NewGuestSessionsController(store, server.Tokens(), log)
+	server.Users = controllers.NewUsersController(store, server.Tokens(), log)
+	server.Sessions = controllers.NewSessionsController(store, server.Tokens(), log)
 	// bogie:wire
 	server.SetupRoutes()
 

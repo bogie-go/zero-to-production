@@ -30,6 +30,8 @@ type Server struct {
 	Cart          *CartController
 	CartItems     *CartItemsController
 	GuestSessions *GuestSessionsController
+	Users         *UsersController
+	Sessions      *SessionsController
 	// bogie:controllers
 }
 

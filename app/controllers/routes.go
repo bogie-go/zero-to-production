@@ -34,6 +34,8 @@ func (s *Server) SetupRoutes() {
 	//
 	s.Products.SetupRoutes(&r.RouterGroup)
 	s.GuestSessions.SetupRoutes(&r.RouterGroup)
+	s.Users.SetupRoutes(&r.RouterGroup)
+	s.Sessions.SetupRoutes(&r.RouterGroup)
 	s.Cart.SetupRoutes(s.WithUser(&r.RouterGroup))
 	s.CartItems.SetupRoutes(s.WithUser(&r.RouterGroup))
 	// bogie:routes

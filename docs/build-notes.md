@@ -2,7 +2,7 @@
 
 Raw material for the book "Bogie, How to Go from zero to production": what was actually done while building the e-commerce API, which Bogie commands were run, what was generated and what was written by hand, and where Bogie fell short. These are notes, not chapters.
 
-Last updated: 2026-10-19 (covers commits through `0c7693c`, tag `task-c2`). Times are Bangkok time (UTC+7). "(inferred)" marks things read from files, timestamps or the Bogie repo, not confirmed by Mac.
+Last updated: 2026-10-20 (covers through Task D, accounts). Times are Bangkok time (UTC+7). "(inferred)" marks things read from files, timestamps or the Bogie repo, not confirmed by Mac.
 
 ---
 
@@ -323,3 +323,50 @@ coverage 31% → 47%.
 - [ ] Table-driven coverage for `starts_at`/`ends_at` scheduling and `priority` ordering against a live database (`ListActivePriceRules` itself is untested against Postgres, only unit-tested in `app/pricing`).
 - [ ] Decide whether `BuyXGetYRule`'s price-reduction gap gets fixed now or stays a documented limitation until cart-line-level pricing exists.
 - [ ] Coupon codes, when Task E starts: add `price_rules.code` (nullable), and a checkout-time lookup/validation.
+
+---
+
+## Pass 1 › Task D: Customers need accounts
+
+### What was done
+
+1. **2026-10-20, fixed a real Bogie gap first: `:uniq` duplicates.** Before adding `users.email:uniq`, checked what `g model` does with an existing `:uniq` column (`api_key.prefix`) on a collision: nothing — the raw Postgres `unique_violation` surfaced as an unclassified 500. Fixed in Bogie itself (`internal/generate/model.go`): `Create`/`Update` on any model with a `:uniq` column now catch error code `23505` and return `domain.ErrInvalid` with a readable message ("email is already taken"). Added a golden test (`model_user`) since no existing fixture exercised this path; `api_key`'s golden picked up the same fix. Released as Bogie v0.2.11, then `bogie app:update` here — one unrelated, pre-existing merge conflict in `routes_test.go` (kept the app's own `TestWelcomeInDevelopmentOnly`, same precedent as the v0.2.8 update).
+2. **2026-10-20, `user` model.** `bogie g model user email:string:uniq password_digest:string`. Password hashing itself (`app/services/password`) is hand-written and deliberately *not* on `domain.User`: `app/domain` imports nothing third-party (AGENTS.md rule 3), so `bcrypt` lives in its own small service package instead, the same way Bogie's own `api_key` shape keeps bcrypt out of `domain.ApiKey`. `domain.User.Validate` (hand-filled, like every model's) checks the email looks like one and that a digest is present.
+3. **2026-10-20, signup and login.** `UsersController` (`POST /users`) hashes, creates, and immediately mints a bearer token — no separate login needed right after registering. `SessionsController` (`POST /sessions`) checks the password (a wrong password and an unknown email answer identically: 401, same message, so a caller can't tell which), then mints a token for the real user id as subject — the exact same `token.Maker`/`RequireUser` machinery guest sessions already used, so nothing downstream (cart, cart_items) needed to change at all.
+4. **2026-10-20, the guest-cart merge.** `SessionsController.Create` reads whatever bearer token the login request already carried (optional — a fresh browser with no prior cart sends none), verifies it, and if it names an existing cart, folds every line into the newly-logged-in user's cart (`AddCartItem`, same increment-or-create/stock-check logic cart_items already has) before deleting the old cart (`DeleteCartAndItems`, new: `cart_items` has no `ON DELETE CASCADE` yet, so its lines go first — a real transaction is Task E's job). Best-effort throughout: a missing/expired/garbage old token, or no cart under it, is not an error, just nothing to merge; a line that can't merge (out of stock, say) is logged and skipped rather than failing the whole login.
+
+### Bogie commands used
+
+- `bogie g model user email:string:uniq password_digest:string`.
+- `bogie app:update` to v0.2.11 (self-released, see above).
+- `make sqlc` for `users_extra.sql` (`GetUserByEmail`).
+
+### Generated vs hand-written
+
+- Generated: the migration, `domain.User`'s fields, the base store CRUD, sqlc output, the model test skeleton (then hand-fixed, see gaps below).
+- Hand-written: `app/services/password` (hash/check), `domain.User.Validate`, `UsersController`, `SessionsController` including the whole merge, `users_extra.go` (`GetUserByEmail`), and new additions to `carts_extra.go` (`GetCartByToken` — find without creating, for the merge; `DeleteCartAndItems`).
+
+### Bogie gaps/bugs found
+
+- **The `:uniq` fix, above** — the main one, fixed upstream rather than worked around.
+- **A model's generated not-found test breaks the moment `Validate` stops being a no-op.** `users_test.go`'s generated `TestUnknownUsersAreNotFound` calls `UpdateUser` with a zero-value `domain.User{ID: ...}` to prove a missing row is `ErrNotFound` — works for every model so far because every `Validate` has been an empty stub, but `User.Validate` now rejects the zero-value's blank email *before* the row lookup ever runs, so the test failed with `ErrInvalid` instead. Fixed by hand (a valid-looking-but-nonexistent user), the same kind of fix the file's own "TODO: a round trip" comment already invites — not a Bogie bug, since the generator can't know what a future hand-written `Validate` will require, but worth knowing before the next model needs real validation too.
+- **The one cosmetic artifact from wiring price rules into the cart (Task before this one):** an empty cart still lists every active rule in `applied_rules` with `discount_cents: 0`, since `PercentageDiscountRule`/`FixedDiscountRule` "apply" even to a zero price. Harmless, slightly noisy; not fixed.
+
+### Rails comparisons
+
+- `password_digest:string` + `app/services/password` is `has_secure_password` + bcrypt, split into Go's two pieces: the column Rails' macro would add, and the hashing Rails' macro would generate for you.
+- `POST /users` auto-signing-in after signup is Devise's default behavior; `POST /sessions` is literally Rails' own `sessions#create` naming, chosen on purpose back in Task C2 to pair with `/guest_sessions`.
+- A wrong password and an unknown email both answering 401 with the same message is `authenticate`'s behavior in older Rails (newer Rails' `authenticate_by` also pads the timing with a dummy hash comparison; this app doesn't — noted, not fixed, a real but minor timing side-channel).
+- The guest-cart merge is hand-written here the same way Rails apps do it by hand too — there's no gem or generator for it on either side.
+
+### Chapter-worthy observations
+
+- **"Same shape, different stakes" paid off exactly as planned back in Task C2.** Reusing the identical `token.Maker`/`RequireUser`/`Subject` machinery for a real login, with zero changes to `CartController`/`CartItemsController`, is a clean demonstration of why that design choice was made before accounts even existed.
+- **The merge is best-effort on purpose**, and that's a good small lesson of its own: a login failing because of an unrelated stock conflict in a three-week-old guest cart would be a strange, hard-to-explain bug in production.
+- **Finding and fixing the `:uniq` gap in Bogie itself, before using it**, is the clearest example yet of "fixing Bogie is part of the work" — a one-line column modifier that silently did nothing useful until this task needed it to.
+
+### Still to do
+
+- [ ] Pad login's timing with a dummy bcrypt comparison when the email doesn't exist, closing the minor timing side-channel.
+- [ ] Decide whether `DeleteCartAndItems` should become a real transaction once Task E introduces them, rather than two sequential deletes.
+- [ ] Task E (checkout) is next: orders now belong to a real account.

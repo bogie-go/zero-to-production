@@ -47,3 +47,11 @@ type Product struct {
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }
+
+type User struct {
+	ID             int64
+	Email          string
+	PasswordDigest string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}

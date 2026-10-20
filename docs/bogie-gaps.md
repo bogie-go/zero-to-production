@@ -59,9 +59,25 @@ different stakes," not two mechanisms.
 
 `AGENTS.md` says "This app's id scheme is `uuid`," but `bogie.toml` has said
 `id = "bigint"` since the switch before Task C (`4ad24f6`). `bogie app:update`
-ran twice since (v0.2.9, v0.2.10) and touched `AGENTS.md` both times, but
-never updated that line. Low stakes — a reader just sees a stale sentence,
-and `bogie.toml` is the actual source of truth — but it means `AGENTS.md`'s
-id-scheme paragraph isn't really regenerated from current settings on
-`app:update`, only on `bogie new`. Found while checking which column types
-`g model` supports before generating `price_rule`, not investigated further.
+ran three times since (v0.2.9, v0.2.10, v0.2.11) and touched `AGENTS.md`
+every time, but never updated that line. Low stakes — a reader just sees a
+stale sentence, and `bogie.toml` is the actual source of truth — but it
+means `AGENTS.md`'s id-scheme paragraph isn't really regenerated from
+current settings on `app:update`, only on `bogie new`. Found while checking
+which column types `g model` supports before generating `price_rule`, not
+investigated further.
+
+## ~~`:uniq` duplicates surfaced as a raw 500~~ — fixed in Bogie v0.2.11
+
+`Create`/`Update` on a model with a `:uniq` column (`api_key.prefix` was the
+only example before this) never classified a Postgres unique-violation: it
+just wrapped the raw `pgconn.PgError` into an unclassified 500, the same as
+any other database error. Found while adding `users.email:uniq` for Task D,
+where a duplicate signup is an everyday, expected case, not a rare one like
+`api_key`'s random collision-proof prefix.
+
+**Fixed upstream**, not worked around: `internal/generate/model.go` now has
+`Create`/`Update` catch error code `23505` and return `domain.ErrInvalid`
+with a readable message ("email is already taken") for any model with at
+least one `:uniq` attr. Released as Bogie v0.2.11, with a new golden test
+(`model_user`) covering the path no existing fixture exercised.
