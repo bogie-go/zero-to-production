@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"ecommerce/config"
+	"ecommerce/public"
 )
 
 // testServer builds a root server and mounts its routes. Every controller
@@ -90,6 +92,20 @@ func TestPublicIndexAnsweredBeforeTheWelcomePage(t *testing.T) {
 		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<title>Ecommerce</title>") ||
 			strings.Contains(rec.Body.String(), "is running") {
 			t.Errorf("%s GET / = %d %q, want public/index.html, not the welcome page", env, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// public/index.html, once the app has one, answers / in every environment,
+// ahead of the welcome page and the 404.
+func TestPublicIndexAnswersRoot(t *testing.T) {
+	want, err := fs.ReadFile(public.Files, "index.html")
+	if err != nil {
+		t.Skip("no public/index.html: the welcome page answers / in development")
+	}
+	for _, env := range []string{config.EnvDevelopment, config.EnvProduction} {
+		if rec := get(testServer(env), "/"); rec.Code != http.StatusOK || rec.Body.String() != string(want) {
+			t.Errorf("%s GET / = %d %q, want 200 and public/index.html", env, rec.Code, rec.Body.String())
 		}
 	}
 }
