@@ -81,3 +81,28 @@ where a duplicate signup is an everyday, expected case, not a rare one like
 with a readable message ("email is already taken") for any model with at
 least one `:uniq` attr. Released as Bogie v0.2.11, with a new golden test
 (`model_user`) covering the path no existing fixture exercised.
+
+## No generated transaction helper
+
+`app/models/store.go` is hand-written infrastructure (one per app, not
+per model), and until Task E it only wrapped the pool: `Open`, `Close`,
+`Ping`. sqlc's own generated `Queries.WithTx(tx pgx.Tx) *Queries` has
+existed since `bogie new` — that part is free — but nothing above it ever
+began, committed, or rolled back a transaction. Checkout needed a real
+one: decrement stock, write the order and its lines, and clear the cart
+as one atomic unit, or undo all of it if any line can't be filled.
+
+**Workaround in use:** a hand-written, unexported `(s *Store) withTx(ctx,
+fn func(*Queries) error) error` added directly to `store.go` (`48133b7`'s
+era comment on `DeleteCartAndItems` — "real transactions arrive in Task
+E" — is this). `app/models/orders_extra.go`'s `CreateOrderFromCart` is
+the first caller; `DeleteCartAndItems` (Task D's guest-cart merge) was
+updated to use it too, closing a gap it had been carrying since it was
+written.
+
+**Real fix:** a `withTx`-shaped method could be part of every app's
+`store.go` from `bogie new` on, the way `Close`/`Ping` already are — every
+real backend eventually needs one. Not done yet: this is the first task
+that has actually needed it, and per the standing project rule, Bogie
+only gets a new capability once something concretely needs it, not
+speculatively.

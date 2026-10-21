@@ -32,6 +32,7 @@ type Server struct {
 	GuestSessions *GuestSessionsController
 	Users         *UsersController
 	Sessions      *SessionsController
+	Orders        *OrdersController
 	// bogie:controllers
 }
 

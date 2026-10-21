@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/jackc/pgx/v5"
 
@@ -47,17 +46,22 @@ func (s *Store) GetCartByToken(ctx context.Context, token string) (domain.Cart, 
 
 // DeleteCartAndItems removes a cart and every line in it — used once a
 // guest's cart has been merged into a signed-in user's and has nothing left
-// to keep. cart_items has no ON DELETE CASCADE yet (real transactions
-// arrive in Task E), so its lines are deleted first.
+// to keep. cart_items has no ON DELETE CASCADE, so its lines are deleted
+// first; both deletes run in one transaction (withTx, added for Task E's
+// checkout), so a failure midway never leaves a cart with no items but no
+// row deleted, or the reverse.
 func (s *Store) DeleteCartAndItems(ctx context.Context, cartID int64) error {
-	lines, err := s.CartContents(ctx, cartID)
-	if err != nil {
-		return err
-	}
-	for _, l := range lines {
-		if err := s.DeleteCartItemForCart(ctx, cartID, strconv.FormatInt(l.ID, 10)); err != nil {
-			return err
+	return s.withTx(ctx, func(q *Queries) error {
+		if _, err := q.DeleteCartItemsForCart(ctx, cartID); err != nil {
+			return fmt.Errorf("models: delete cart items for cart %d: %w", cartID, err)
 		}
-	}
-	return s.DeleteCart(ctx, strconv.FormatInt(cartID, 10))
+		n, err := q.DeleteCart(ctx, cartID)
+		if err != nil {
+			return fmt.Errorf("models: delete cart %d: %w", cartID, err)
+		}
+		if n == 0 {
+			return domain.ErrNotFound
+		}
+		return nil
+	})
 }

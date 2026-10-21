@@ -368,5 +368,49 @@ coverage 31% → 47%.
 ### Still to do
 
 - [ ] Pad login's timing with a dummy bcrypt comparison when the email doesn't exist, closing the minor timing side-channel.
-- [ ] Decide whether `DeleteCartAndItems` should become a real transaction once Task E introduces them, rather than two sequential deletes.
+- [x] Decide whether `DeleteCartAndItems` should become a real transaction once Task E introduces them — see Task E's notes below.
 - [ ] Task E (checkout) is next: orders now belong to a real account.
+
+## Pass 1 › Task E: Let customers place orders
+
+### What was done
+
+1. **2026-10-21, `order` and `order_item` models.** `bogie g model order user:references status:string subtotal_cents:integer discount_cents:integer total_cents:integer` and `bogie g model order_item order:references product:references quantity:integer unit_price_cents:integer`. `Order.Validate`/`OrderItem.Validate` hand-filled (status is one of `pending`/`paid`/`cancelled`; amounts and quantity can't be negative/zero) — same shape as every other model's.
+2. **2026-10-21, the transaction helper.** `app/models/store.go` gained an unexported `(s *Store) withTx(ctx, fn func(*Queries) error) error`: begins a pgx transaction, runs `fn` against a `*Queries` rebound to it (sqlc's own `Queries.WithTx(tx)`, which has existed since `bogie new` but nothing above it had ever called), and commits on a nil return or rolls back otherwise. Checked a prior Go project (`line-connect`) for a remembered pattern first — it had the identical idea already, as a private `execTx(ctx, fn func(*Queries) error) error` plus one named method per composite write (`CreateXWithY`); this app's `withTx` and `CreateOrderFromCart` follow that same shape.
+3. **2026-10-21, checkout itself.** `app/models/orders_extra.go`'s `CreateOrderFromCart(ctx, userID, cartID)`: reads the cart's lines, prices them through the same `pricing.Calculate` the cart view uses (so the order's total matches what the customer last saw), then — inside one `withTx` — conditionally decrements each line's stock (`UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1`, zero rows affected means not enough left), writes the order and its order_items with today's prices snapshotted in, and clears the cart. Any failure (a line out of stock, mid-way) rolls back everything: no partial stock decrement, no half-written order, cart untouched.
+4. **2026-10-21, `DeleteCartAndItems` revisited.** Task D's guest-cart merge left a note that its two sequential deletes (`cart_items` first, no cascade, then the cart) should become a real transaction once Task E had one to offer. Done: it now runs both inside `withTx` too.
+5. **2026-10-21, `OrdersController`.** `POST /orders` (checkout), `GET /orders` (history), `GET /orders/:id` (one receipt, scoped to its owner). All three sit behind `s.WithUser`, the same bearer-token gate `/cart` does — but a guest's token is a bare uuid subject with no `users` row behind it, so the controller parses the subject as a user id first and answers 403 ("create an account to place an order") if it isn't one, before ever calling the store.
+
+### Bogie commands used
+
+- `bogie g model order user:references status:string subtotal_cents:integer discount_cents:integer total_cents:integer`
+- `bogie g model order_item order:references product:references quantity:integer unit_price_cents:integer`
+- `make sqlc` for `products_extra.sql` (`DecrementProductStock`), `cart_items_extra.sql` (`DeleteCartItemsForCart`), `orders_extra.sql` (`ListOrdersForUser`, `GetOrderForUser`), `order_items_extra.sql` (`ListOrderItemsForOrder`).
+
+### Generated vs hand-written
+
+- Generated: both migrations, `domain.Order`/`domain.OrderItem`'s fields, the base store CRUD, sqlc output, the model test skeletons (then hand-fixed, see gaps below).
+- Hand-written: `store.go`'s `withTx`, `orders_extra.go` (`CreateOrderFromCart`, `ListOrdersForUser`, `GetOrderForUser`), `domain.OrderLine` (a join type, same role `CartLine` plays), `Order.Validate`/`OrderItem.Validate`, `OrdersController`, and the `DeleteCartAndItems` rewrite.
+
+### Bogie gaps/bugs found
+
+- **No generated transaction helper** — see `docs/bogie-gaps.md`. `store.go` only wrapped `Open`/`Close`/`Ping` until this task; `withTx` is hand-written directly into it rather than fixed upstream, since this is the first task that has concretely needed one (the standing project rule: Bogie gets a capability once something needs it, not speculatively).
+- **The generated not-found tests broke again, as `users_test.go`'s did in Task D**, for the identical reason: `UpdateOrder`/`UpdateOrderItem`'s generated test passes a zero-value struct to prove `ErrNotFound`, and a real `Validate` now rejects it before the lookup runs. Fixed the same way — a valid-looking-but-nonexistent row — and added the full round trips the generated files' own "TODO" comments invite.
+
+### Rails comparisons
+
+- `withTx` is Go's explicit version of `ActiveRecord::Base.transaction do ... end`: the boundary is the closure passed in, not "whichever AR calls happen between some implicit begin and end."
+- The conditional stock `UPDATE ... WHERE stock >= $1` is the same trick a careful Rails app uses instead of `product.update!(stock: product.stock - qty)` (a read-then-write with no row-level guard) — `UPDATE ... SET stock = stock - ? WHERE stock >= ?` plus checking `update_all`'s affected-row count, not an ActiveRecord validation.
+- Saving `unit_price_cents` on `order_items` rather than joining to `products.price_cents` live is the same reason a Rails invoicing app snapshots a `LineItem#unit_price` instead of delegating to `product.price` — a receipt has to stay true after the product's price changes.
+
+### Chapter-worthy observations
+
+- **The transaction boundary is the whole lesson.** Everything else in this task (the models, the controller, the routes) is routine by now; `withTx` and the one `CreateOrderFromCart` method that uses it are the only genuinely new idea, which makes this a good, tight chapter: one new concept, demonstrated once, proven by a test that actually breaks it (insufficient stock mid-checkout) and shows the rollback holding.
+- **A prior, unrelated Go project already had the answer.** Checking `line-connect` for "have I done this before" instead of designing from scratch found the exact same shape (`execTx` + one method per composite write) — a good demonstration that this pattern isn't bespoke to this app, it's just what a sqlc-based Go backend's transactions look like.
+- **Closing the `DeleteCartAndItems` note from Task D** rather than leaving it as a permanent two-step delete is a small example of a "Still to do" actually getting done once the tool to do it right exists, instead of quietly becoming permanent.
+
+### Still to do
+
+- [ ] Payment capture (`status` transitioning `pending` → `paid`/`cancelled` via a webhook) is out of scope here on purpose — `payment-simulator/` doesn't exist yet, and CLAUDE.md already calls out webhook handling as its own hand-written teaching material, later.
+- [ ] `BuyXGetYRule`'s known limitation (metadata only, no actual per-line discount) is unchanged; checkout inherits it from the cart's own pricing calculation rather than introducing a new one.
+- [ ] No git tag exists yet for price rules, Task D, or Task E — only `task-c1`/`task-c2` exist so far. Still an open offer, not yet acted on.

@@ -9,6 +9,23 @@ import (
 	"context"
 )
 
+const decrementProductStock = `-- name: DecrementProductStock :execrows
+UPDATE products SET stock = stock - $1, updated_at = now() WHERE id = $2 AND stock >= $1
+`
+
+type DecrementProductStockParams struct {
+	Stock int32
+	ID    int64
+}
+
+func (q *Queries) DecrementProductStock(ctx context.Context, arg DecrementProductStockParams) (int64, error) {
+	result, err := q.db.Exec(ctx, decrementProductStock, arg.Stock, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getProductByName = `-- name: GetProductByName :one
 SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products WHERE name = $1
 `

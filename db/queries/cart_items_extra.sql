@@ -7,6 +7,9 @@ SELECT * FROM cart_items WHERE id = $1 AND cart_id = $2;
 -- name: DeleteCartItemForCart :execrows
 DELETE FROM cart_items WHERE id = $1 AND cart_id = $2;
 
+-- name: DeleteCartItemsForCart :execrows
+DELETE FROM cart_items WHERE cart_id = $1;
+
 -- name: ListCartItemsForCart :many
 SELECT cart_items.id, cart_items.product_id, cart_items.quantity,
        products.name, products.image_url, products.price_cents

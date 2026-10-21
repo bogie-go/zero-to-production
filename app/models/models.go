@@ -24,6 +24,27 @@ type CartItem struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type Order struct {
+	ID            int64
+	UserID        int64
+	Status        string
+	SubtotalCents int32
+	DiscountCents int32
+	TotalCents    int32
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type OrderItem struct {
+	ID             int64
+	OrderID        int64
+	ProductID      int64
+	Quantity       int32
+	UnitPriceCents int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type PriceRule struct {
 	ID         int64
 	Name       string
