@@ -1,0 +1,28 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_size = 2
+
+# gofmt requires tabs, not spaces, and that isn't configurable — tab_width
+# here only tells an editor how wide to render one, it never changes what's
+# on disk.
+[*.go]
+indent_style = tab
+tab_width = 2
+
+# make requires a literal tab to start a recipe line; indent_style = space
+# here would break every target.
+[Makefile]
+indent_style = tab
+tab_width = 2
+
+[*.{sql,yaml,yml,toml,md,html,css,js,sh}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
