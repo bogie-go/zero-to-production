@@ -1,7 +1,7 @@
 # Written by `bogie new`. `bogie` is the exact Bogie version that generated
 # this app: what `bogie app:update` merges from, and what `bogie doctor` reads to
 # know which markers to expect. Do not edit by hand.
-bogie = "v0.2.11"
+bogie = "v0.2.12"
 name = "ecommerce"
 module = "ecommerce"
 jobs = false

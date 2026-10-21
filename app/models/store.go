@@ -48,10 +48,12 @@ func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 // `ActiveRecord::Base.transaction do ... end` — explicit about the
 // boundary (the closure) rather than implicit about which calls join it.
 //
-// Unexported: every hand-written *Store method that needs a real
-// transaction (checkout, in orders_extra.go, is the first) lives in this
-// package and can call it directly. Nothing above app/models ever sees a
-// pgx.Tx.
+// Unexported: a hand-written *Store method that needs a real transaction —
+// a checkout, a transfer, anything that writes to more than one table and
+// must not half-succeed — calls it from its own sibling file in
+// app/models/, such as orders_extra.go, not from above this package.
+// CreateOrderFromCart (orders_extra.go) and DeleteCartAndItems
+// (carts_extra.go) both already do.
 func (s *Store) withTx(ctx context.Context, fn func(q *Queries) error) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
