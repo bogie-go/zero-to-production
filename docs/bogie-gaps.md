@@ -82,7 +82,7 @@ with a readable message ("email is already taken") for any model with at
 least one `:uniq` attr. Released as Bogie v0.2.11, with a new golden test
 (`model_user`) covering the path no existing fixture exercised.
 
-## No generated transaction helper
+## ~~No generated transaction helper~~ — fixed upstream in Bogie v0.2.12
 
 `app/models/store.go` is hand-written infrastructure (one per app, not
 per model), and until Task E it only wrapped the pool: `Open`, `Close`,
@@ -92,17 +92,20 @@ began, committed, or rolled back a transaction. Checkout needed a real
 one: decrement stock, write the order and its lines, and clear the cart
 as one atomic unit, or undo all of it if any line can't be filled.
 
-**Workaround in use:** a hand-written, unexported `(s *Store) withTx(ctx,
-fn func(*Queries) error) error` added directly to `store.go` (`48133b7`'s
-era comment on `DeleteCartAndItems` — "real transactions arrive in Task
-E" — is this). `app/models/orders_extra.go`'s `CreateOrderFromCart` is
-the first caller; `DeleteCartAndItems` (Task D's guest-cart merge) was
-updated to use it too, closing a gap it had been carrying since it was
-written.
+A hand-written, unexported `(s *Store) withTx(ctx, fn func(*Queries)
+error) error` was added directly to `store.go` first, as a workaround
+(`48133b7`'s era comment on `DeleteCartAndItems` — "real transactions
+arrive in Task E" — is this).
 
-**Real fix:** a `withTx`-shaped method could be part of every app's
-`store.go` from `bogie new` on, the way `Close`/`Ping` already are — every
-real backend eventually needs one. Not done yet: this is the first task
-that has actually needed it, and per the standing project rule, Bogie
-only gets a new capability once something concretely needs it, not
-speculatively.
+**Fixed upstream**, not left as a permanent workaround: by the time the
+transaction had a second caller (`DeleteCartAndItems`, Task D's
+guest-cart merge, rewritten to use it too), the need was no longer
+speculative, so `templates/app/app/models/store.go.tmpl` gained the same
+`withTx` — unused on a fresh app the same way `parseID` is (the identical
+`var _ = (*Store).withTx` quieting trick id.go already used), until a
+hand-written composite-write method calls it. Released as Bogie v0.2.12,
+documented in `AGENTS.md`'s new "Run a transaction" section, verified by
+scaffolding a fresh app (plain and `--jobs`) and running its own
+`bin/ci` clean with zero models. `bogie app:update` here merged it in,
+one conflict (the hand-written version's comment vs. the template's;
+kept the template's, since it's slightly more general).
