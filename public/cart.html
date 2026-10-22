@@ -25,6 +25,12 @@
       header .cart-link { color: inherit; text-decoration: none; font-size: .9rem; padding: .4rem .75rem;
                            border-radius: .5rem; background: var(--panel); border: 1px solid var(--line); }
       header .cart-link:hover { border-color: var(--accent); }
+      header .account { font-size: .88rem; color: var(--muted); }
+      header .account a { color: inherit; }
+      header .account a:hover { color: var(--accent); }
+      header .account .who { margin: 0 .4rem; }
+      header .account button { background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; padding: 0; }
+      header .account button:hover { color: var(--accent); }
 
       main { max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
       .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: .9rem; margin-bottom: 1.5rem; }
@@ -69,6 +75,12 @@
       <div class="wrap">
         <a class="brand" href="/">Ecommerce</a>
         <span class="tag">built with Bogie</span>
+        <nav class="account" x-data="account()" x-init="load()" x-show="ready">
+          <template x-if="email">
+            <span><a href="/orders.html">Orders</a> <span class="who" x-text="email"></span> <button @click="logout()">Log out</button></span>
+          </template>
+          <a x-show="!email" :href="loginUrl">Log in</a>
+        </nav>
         <a class="cart-link" href="/cart.html" x-text="'Cart (' + cartCount + ')'"></a>
       </div>
     </header>
@@ -128,6 +140,7 @@
       <div class="wrap">This page fetches and updates <code>/cart</code> and <code>/cart_items</code> with Alpine.js, no build step. See <code>public/cart.html</code>.</div>
     </footer>
 
+    <script src="/auth.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
     <script>
       // ensureGuestSession mints a guest cart's bearer token on first need,

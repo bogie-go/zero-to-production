@@ -84,7 +84,7 @@ func (ctl *OrdersController) Index(c *gin.Context) {
 	}
 	out := make([]views.OrderSummaryResponse, 0, len(orders))
 	for _, o := range orders {
-		out = append(out, views.OrderSummaryResponse{ID: o.ID, Status: o.Status, TotalCents: o.TotalCents})
+		out = append(out, views.OrderSummaryResponse{ID: o.ID, Status: o.Status, TotalCents: o.TotalCents, CreatedAt: o.CreatedAt})
 	}
 	c.JSON(http.StatusOK, out)
 }

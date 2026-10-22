@@ -483,5 +483,10 @@ Verified in real Chrome (puppeteer-core, scratch script, not committed): guest c
 ### Still to do
 
 - [ ] `POST /users` could merge the guest cart itself instead of the UI chaining a login after signup.
-- [ ] No "Log in" link in the headers, no order-history page (`GET /orders` exists).
 - [ ] The headless-browser check is not part of `bin/ci`.
+
+### Addendum, 2026-10-22: header account menu and order history
+
+- `public/auth.js` (new; `go:embed` widened to `*.html *.js images`) holds `account()`, an Alpine component every page's header uses: asks `GET /me` who the saved token is for, shows "Log in" (with `next` set to the current page) or "Orders / email / Log out". Log out just forgets the saved token; the next visit mints a guest. A plain global function rather than `Alpine.data(...)`; same effect.
+- `orders.html`: the history, from `GET /orders`, each row linking to `order.html?id=N`; a guest is sent to login first. `GET /orders` rows gained `created_at` (additive).
+- Checked in real Chrome again: guest header, orders-as-guest redirect, sign up from there, history empty then one row, row opens the receipt, log out.

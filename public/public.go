@@ -13,7 +13,7 @@ import "embed"
 // filesystem beside it. Adding a new kind of file (an .ico, a .txt) means
 // widening the go:embed pattern below to match.
 //
-//go:embed *.html images
+//go:embed *.html *.js images
 var Files embed.FS
 
 // NotFound and InternalServerError are read once, not per request, for the

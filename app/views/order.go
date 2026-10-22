@@ -1,5 +1,7 @@
 package views
 
+import "time"
+
 // OrderLineResponse is one line in an order, the same shape CartLineResponse
 // plays for a cart.
 type OrderLineResponse struct {
@@ -26,7 +28,8 @@ type OrderResponse struct {
 // OrderSummaryResponse is one row of GET /orders: enough to list and link
 // into, without every line item.
 type OrderSummaryResponse struct {
-	ID         int64  `json:"id"`
-	Status     string `json:"status"`
-	TotalCents int32  `json:"total_cents"`
+	ID         int64     `json:"id"`
+	Status     string    `json:"status"`
+	TotalCents int32     `json:"total_cents"`
+	CreatedAt  time.Time `json:"created_at"`
 }
