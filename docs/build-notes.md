@@ -465,3 +465,23 @@ are still ahead.
 - [ ] No way to promote a second staff account, or change the seeded password, short of editing the database by hand. Likely answer: an admin "manage users" endpoint, itself staff-only — not built yet.
 - [ ] Categories (folded in from Task B) and price-rule admin CRUD are still ahead — this note is step 1 of 3.
 - [ ] The public `GET /products`/`GET /products/:id` are unchanged; only `/admin/products` gained write actions.
+
+## Pass 1 › Checkout UI (between Task F steps)
+
+Added 2026-10-22, before Task F's categories step, because Tasks D and E had been built backend-only and the UI never caught up.
+
+### What was done
+
+1. **`GET /me`** (`MeController`, behind `s.WithUser`; `bogie g controller me index`, the same singular-resource stand-in the cart uses). Returns `{id, email, role}` for an account, 403 for a guest token. Needed because a guest's bearer token and a real login's are both valid and opaque to the UI; the payment page asks the server instead of decoding the JWT itself.
+2. **Checkout button** on `cart.html`, linking to `payment.html`.
+3. **`payment.html`**: asks `/me`; 401/403 sends the visitor to `login.html?next=/payment.html`. Signed in, it shows the cart (lines, applied rules, total) and a "Place order" button that calls `POST /orders`, then goes to the receipt. No card is charged: payments are a later chapter, and the page says so.
+4. **`login.html`**: one form with a log in / sign up toggle, then back to `next` (a same-site path only; `//host` and absolute URLs fall back to `/`). Signing up always continues into `POST /sessions` carrying the guest token in `Authorization`, because only `SessionsController` merges the guest cart; `POST /users` does not.
+5. **`order.html?id=N`**: the receipt, from `GET /orders/:id`.
+
+Verified in real Chrome (puppeteer-core, scratch script, not committed): guest cart → Checkout → login → sign up → payment shows the merged cart → Place order → receipt.
+
+### Still to do
+
+- [ ] `POST /users` could merge the guest cart itself instead of the UI chaining a login after signup.
+- [ ] No "Log in" link in the headers, no order-history page (`GET /orders` exists).
+- [ ] The headless-browser check is not part of `bin/ci`.

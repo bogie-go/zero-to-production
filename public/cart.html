@@ -54,6 +54,9 @@
       .summary { display: flex; justify-content: space-between; align-items: baseline; padding-top: 1.25rem; }
       .summary .label { color: var(--muted); }
       .summary .total { font-size: 1.4rem; font-weight: 700; }
+      a.checkout { display: inline-block; margin-top: 1.25rem; padding: .7rem 1.3rem; border-radius: .6rem;
+                   background: var(--accent); color: #fff; font-weight: 600; text-decoration: none; }
+      a.checkout:hover { opacity: .9; }
 
       footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
       footer .wrap { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
@@ -117,6 +120,7 @@
           <span class="label">Total</span>
           <span class="total" x-text="formatPrice(totalCents)"></span>
         </div>
+        <a class="checkout" href="/payment.html">Checkout</a>
       </div>
     </main>
 

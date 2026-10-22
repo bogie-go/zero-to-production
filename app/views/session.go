@@ -19,3 +19,10 @@ type LoginRequest struct {
 type SessionResponse struct {
 	Token string `json:"token"`
 }
+
+// MeResponse is who a bearer token is for, when it is for an account.
+type MeResponse struct {
+	ID    int64  `json:"id"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
