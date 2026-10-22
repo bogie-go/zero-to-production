@@ -17,6 +17,7 @@ import (
 	"ecommerce/app/domain"
 	"ecommerce/app/jobs"
 	"ecommerce/app/models"
+	"ecommerce/app/services/cartmerge"
 	"ecommerce/app/services/database"
 	"ecommerce/app/services/mailer"
 	"ecommerce/app/services/migrate"
@@ -121,8 +122,9 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	server.Cart = controllers.NewCartController(store, log)
 	server.CartItems = controllers.NewCartItemsController(store, log)
 	server.GuestSessions = controllers.NewGuestSessionsController(store, server.Tokens(), log)
-	server.Users = controllers.NewUsersController(store, server.Tokens(), log)
-	server.Sessions = controllers.NewSessionsController(store, server.Tokens(), log)
+	merger := cartmerge.Merger{Store: store, Tokens: server.Tokens(), Log: log}
+	server.Users = controllers.NewUsersController(store, server.Tokens(), merger, log)
+	server.Sessions = controllers.NewSessionsController(store, server.Tokens(), merger, jobs.SignInAlerts{Queue: queue}, log)
 	server.Orders = controllers.NewOrdersController(store, log)
 	server.Admin = admin_controller.NewServer(store, server.Tokens(), log)
 	server.Admin.Products = admin_controller.NewProductsController(store, log)

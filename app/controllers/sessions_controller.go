@@ -6,13 +6,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"ecommerce/app/domain"
 	"ecommerce/app/services/password"
-	"ecommerce/app/services/token"
 	"ecommerce/app/views"
 )
 
@@ -21,31 +20,33 @@ import (
 // call.
 type sessionsStore interface {
 	GetUserByEmail(ctx context.Context, email string) (domain.User, error)
-	GetCartByToken(ctx context.Context, token string) (domain.Cart, error)
-	FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error)
-	CartContents(ctx context.Context, cartID int64) ([]domain.CartLine, error)
-	AddCartItem(ctx context.Context, cartID, productID int64, quantity int32) (domain.CartItem, error)
-	DeleteCartAndItems(ctx context.Context, cartID int64) error
 }
 
-// sessionTokens is the slice of the token service this controller uses: it
-// both mints a new token (a successful login) and verifies one presented
-// with the request (an existing guest cart to merge in, if any).
-type sessionTokens interface {
-	userTokenMaker
-	Verify(raw string) (token.Claims, error)
+// cartMerger folds the guest cart a request carries into an account's cart;
+// services/cartmerge.Merger is the real one, shared with signing up.
+type cartMerger interface {
+	FromAuthorization(ctx context.Context, authorization, newSubject string) error
+}
+
+// signInAlerter tells the account's owner someone signed in. The real one
+// enqueues an email job (app/application.go); it is declared here so this
+// controller knows nothing about jobs.
+type signInAlerter interface {
+	SignedIn(ctx context.Context, signIn domain.SignIn) error
 }
 
 // SessionsController is the HTTP surface of logging in.
 type SessionsController struct {
 	Store  sessionsStore
-	Tokens sessionTokens
+	Tokens userTokenMaker
+	Merger cartMerger
+	Alerts signInAlerter
 	Log    *slog.Logger
 }
 
 // NewSessionsController builds the controller.
-func NewSessionsController(store sessionsStore, tokens sessionTokens, log *slog.Logger) *SessionsController {
-	return &SessionsController{Store: store, Tokens: tokens, Log: log}
+func NewSessionsController(store sessionsStore, tokens userTokenMaker, merger cartMerger, alerts signInAlerter, log *slog.Logger) *SessionsController {
+	return &SessionsController{Store: store, Tokens: tokens, Merger: merger, Alerts: alerts, Log: log}
 }
 
 // SetupRoutes mounts the controller. Unauthenticated, like guest_sessions
@@ -57,8 +58,8 @@ func (ctl *SessionsController) SetupRoutes(router *gin.RouterGroup) {
 }
 
 // Create handles POST /sessions: check a password, mint a token for the
-// account it belongs to, and fold whatever was in the caller's guest cart
-// into that account's cart before answering.
+// account it belongs to, fold whatever was in the caller's guest cart into
+// that account's cart, and queue the "new sign-in" email.
 //
 // A wrong email and a wrong password answer identically — a caller can't
 // tell "no such account" from "wrong password" apart, the same way Rails'
@@ -80,7 +81,7 @@ func (ctl *SessionsController) Create(c *gin.Context) {
 	}
 
 	subject := strconv.FormatInt(user.ID, 10)
-	if err := ctl.mergeGuestCart(c, subject); err != nil {
+	if err := ctl.Merger.FromAuthorization(c.Request.Context(), c.GetHeader("Authorization"), subject); err != nil {
 		ctl.fail(c, err)
 		return
 	}
@@ -90,52 +91,16 @@ func (ctl *SessionsController) Create(c *gin.Context) {
 		ctl.fail(c, err)
 		return
 	}
+
+	// Tell the owner, after the login has succeeded. Best effort: an alert
+	// that cannot be queued is logged, never a reason to refuse a correct
+	// password.
+	if err := ctl.Alerts.SignedIn(c.Request.Context(), domain.SignIn{
+		UserID: user.ID, At: time.Now().UTC(), IP: c.ClientIP(), UserAgent: c.Request.UserAgent(),
+	}); err != nil {
+		ctl.Log.WarnContext(c.Request.Context(), "sessions: could not queue the sign-in alert", "user_id", user.ID, "err", err)
+	}
 	c.JSON(http.StatusOK, views.SessionResponse{Token: signed})
-}
-
-// mergeGuestCart folds the cart named by whatever bearer token the request
-// already carried into newSubject's cart, then removes the old one — best
-// effort: a missing or invalid existing token, or no cart under it, is not
-// an error, just nothing to merge. A line that can't be added (out of
-// stock, say) is logged and skipped rather than failing the whole login;
-// the customer is signing in regardless of what became of one guest cart
-// line.
-func (ctl *SessionsController) mergeGuestCart(c *gin.Context, newSubject string) error {
-	ctx := c.Request.Context()
-	raw, ok := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer ")
-	if !ok || raw == "" {
-		return nil
-	}
-	claims, err := ctl.Tokens.Verify(raw)
-	if err != nil || claims.Subject == newSubject {
-		return nil
-	}
-
-	oldCart, err := ctl.Store.GetCartByToken(ctx, claims.Subject)
-	switch {
-	case errors.Is(err, domain.ErrNotFound):
-		return nil
-	case err != nil:
-		return err
-	}
-
-	lines, err := ctl.Store.CartContents(ctx, oldCart.ID)
-	if err != nil {
-		return err
-	}
-	if len(lines) > 0 {
-		newCart, err := ctl.Store.FindOrCreateCartByToken(ctx, newSubject)
-		if err != nil {
-			return err
-		}
-		for _, l := range lines {
-			if _, err := ctl.Store.AddCartItem(ctx, newCart.ID, l.ProductID, l.Quantity); err != nil {
-				ctl.Log.WarnContext(ctx, "sessions: could not merge a guest cart line",
-					"product_id", l.ProductID, "quantity", l.Quantity, "err", err)
-			}
-		}
-	}
-	return ctl.Store.DeleteCartAndItems(ctx, oldCart.ID)
 }
 
 // fail maps a domain error to a status, the one place that mapping lives:

@@ -37,12 +37,13 @@ const userTokenTTL = 30 * 24 * time.Hour
 type UsersController struct {
 	Store  usersStore
 	Tokens userTokenMaker
+	Merger cartMerger
 	Log    *slog.Logger
 }
 
 // NewUsersController builds the controller.
-func NewUsersController(store usersStore, tokens userTokenMaker, log *slog.Logger) *UsersController {
-	return &UsersController{Store: store, Tokens: tokens, Log: log}
+func NewUsersController(store usersStore, tokens userTokenMaker, merger cartMerger, log *slog.Logger) *UsersController {
+	return &UsersController{Store: store, Tokens: tokens, Merger: merger, Log: log}
 }
 
 // SetupRoutes mounts the controller. Unauthenticated, like guest_sessions:
@@ -76,7 +77,15 @@ func (ctl *UsersController) Create(c *gin.Context) {
 		ctl.fail(c, err)
 		return
 	}
-	signed, err := ctl.Tokens.Mint(strconv.FormatInt(user.ID, 10), userTokenTTL)
+	// A guest who signs up keeps their cart, as one who logs in does. The
+	// account already exists by now, so a merge that fails is logged, not a
+	// reason to answer an error for a signup that worked.
+	subject := strconv.FormatInt(user.ID, 10)
+	if err := ctl.Merger.FromAuthorization(c.Request.Context(), c.GetHeader("Authorization"), subject); err != nil {
+		ctl.Log.WarnContext(c.Request.Context(), "users: could not merge the guest cart", "user_id", user.ID, "err", err)
+	}
+
+	signed, err := ctl.Tokens.Mint(subject, userTokenTTL)
 	if err != nil {
 		ctl.fail(c, err)
 		return

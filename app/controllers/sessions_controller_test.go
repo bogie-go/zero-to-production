@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/services/cartmerge"
 	"ecommerce/app/services/password"
 )
 
@@ -80,15 +81,37 @@ func userWithPassword(t *testing.T, id int64, plain string) domain.User {
 	return domain.User{ID: id, Email: "a@example.com", PasswordDigest: digest}
 }
 
+// fakeAlerts records the sign-in alerts a login asked for.
+type fakeAlerts struct {
+	err  error
+	sent []domain.SignIn
+}
+
+func (f *fakeAlerts) SignedIn(_ context.Context, s domain.SignIn) error {
+	f.sent = append(f.sent, s)
+	return f.err
+}
+
 func sessionsRequest(t *testing.T, store *fakeSessionsStore, body, authorization string) *httptest.ResponseRecorder {
+	t.Helper()
+	return sessionsRequestWithAlerts(t, store, &fakeAlerts{}, body, authorization)
+}
+
+// sessionsRequestWithAlerts runs the real cart merge over the fake store, so
+// the merge behaviors below are tested through the controller as before.
+func sessionsRequestWithAlerts(t *testing.T, store *fakeSessionsStore, alerts *fakeAlerts, body, authorization string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewSessionsController(store, testTokens, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	merger := cartmerge.Merger{Store: store, Tokens: testTokens, Log: log}
+	NewSessionsController(store, testTokens, merger, alerts, log).SetupRoutes(&router.RouterGroup)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/sessions", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "TestBrowser/1.0")
+	req.RemoteAddr = "203.0.113.9:4321"
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
 	}
@@ -254,5 +277,43 @@ func TestSessionsCreateUnexpectedMergeErrorIs500WithoutDetail(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "db-1") {
 		t.Errorf("body leaks the internal error: %s", rec.Body)
+	}
+}
+
+// A correct login queues one alert, with who, when and from where, taken from
+// the request itself.
+func TestSessionsCreateQueuesASignInAlert(t *testing.T) {
+	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}
+	alerts := &fakeAlerts{}
+	rec := sessionsRequestWithAlerts(t, store, alerts, `{"email":"a@example.com","password":"correct-password"}`, "")
+
+	if rec.Code != http.StatusOK || len(alerts.sent) != 1 {
+		t.Fatalf("status %d, %d alerts; want 200 and one alert", rec.Code, len(alerts.sent))
+	}
+	got := alerts.sent[0]
+	if got.UserID != 7 || got.IP != "203.0.113.9" || got.UserAgent != "TestBrowser/1.0" || got.At.IsZero() {
+		t.Errorf("alert = %+v, want user 7 from 203.0.113.9 with the request's browser and a time", got)
+	}
+}
+
+// Only a login that worked is announced: a wrong password, an unknown email
+// and a bad body say nothing to anyone.
+func TestSessionsCreateAlertsOnlyOnSuccess(t *testing.T) {
+	alerts := &fakeAlerts{}
+	sessionsRequestWithAlerts(t, &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}, alerts, `{"email":"a@example.com","password":"wrong"}`, "")
+	sessionsRequestWithAlerts(t, &fakeSessionsStore{userErr: domain.ErrNotFound}, alerts, `{"email":"x@example.com","password":"whatever1"}`, "")
+	sessionsRequestWithAlerts(t, &fakeSessionsStore{}, alerts, `{"nope":`, "")
+	if len(alerts.sent) != 0 {
+		t.Errorf("alerts = %+v, want none", alerts.sent)
+	}
+}
+
+// A correct password is never refused because the queue is down.
+func TestSessionsCreateStillLogsInWhenTheAlertCannotBeQueued(t *testing.T) {
+	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}
+	alerts := &fakeAlerts{err: errors.New("queue is down")}
+	rec := sessionsRequestWithAlerts(t, store, alerts, `{"email":"a@example.com","password":"correct-password"}`, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"token"`) {
+		t.Errorf("status %d: %s; want a login despite the failed alert", rec.Code, rec.Body)
 	}
 }

@@ -20,6 +20,7 @@ type Deps struct {
 	Store interface {
 		confirmationStore
 		welcomeStore
+		alertStore
 	}
 	Mail    sender
 	SiteURL string
@@ -36,6 +37,7 @@ func Workers(log *slog.Logger, d Deps) (*river.Workers, bool) {
 	registered := 0
 	registered += add(workers, &SendOrderConfirmationWorker{Log: log, Store: d.Store, Mail: d.Mail})
 	registered += add(workers, &SendWelcomeEmailWorker{Log: log, Store: d.Store, Mail: d.Mail, SiteURL: d.SiteURL})
+	registered += add(workers, &SendSignInAlertWorker{Log: log, Store: d.Store, Mail: d.Mail})
 	// bogie:jobs
 	return workers, registered > 0
 }

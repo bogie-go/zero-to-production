@@ -482,7 +482,7 @@ Verified in real Chrome (puppeteer-core, scratch script, not committed): guest c
 
 ### Still to do
 
-- [ ] `POST /users` could merge the guest cart itself instead of the UI chaining a login after signup.
+- [x] `POST /users` merges the guest cart itself (done with the sign-in alert; the signup page no longer chains a login).
 - [ ] The headless-browser check is not part of `bin/ci`.
 
 ### Addendum, 2026-10-22: header account menu and order history
@@ -576,7 +576,7 @@ Decided with the user while setting up mail: the credentials file should be grou
 ### Still to do
 
 - [x] A welcome email on signup (see the addendum below).
-- [ ] A sign-in alert on login (the user raised it), as another job.
+- [x] A sign-in alert on login (see the addendum below).
 - [ ] Retries and failures are only visible in `river_job`; a view in the admin, later.
 - [ ] Idempotent delivery (at-least-once means an occasional duplicate).
 
@@ -593,3 +593,12 @@ Decided with the user while setting up mail: the credentials file should be grou
 - **Same transactional pattern as the order email, second use:** `Store.RegisterUser` (hand-written; `CreateUser` stays as the plain version seeds use) creates the user and calls `OnUserRegistered` inside its transaction; `application.go` wires that to River's `InsertTx`. A signup that commits has a welcome email coming, one that rolls back has none, and a queue that is down refuses the signup instead of leaving an account that will never be welcomed. Duplicate email and invalid user answer exactly as `CreateUser` does and run no hook. `UsersController` now calls `RegisterUser`.
 - **`jobs.Deps`:** with a second job the hand-widened `Workers(log, store, mail)` became `Workers(log, Deps{Store, Mail, SiteURL})`, so a new job's dependency is a field, not another parameter. Still a Bogie gap: `g job` registers `&XWorker{Log: log}` and the reader widens it.
 - Checked live: signup over the API leaves a `completed` job and one email in Mailpit, a duplicate signup is a 422 with no second email, and signing up through the real browser page (which signs up and then logs in) sends exactly one.
+
+### Addendum, 2026-10-22: the sign-in alert, and signup merging the cart
+
+- **`bogie g job send_sign_in_alert`**, an email to the owner for every successful `POST /sessions`: when (UTC), from where (`c.ClientIP()`), and with what (the User-Agent, truncated to 200 characters). `app/mailers.SignInAlert` composes it; the address and browser come from the request, so the HTML part escapes them.
+- **Args carry more than an id this time:** when and from where are facts about a request that is gone by the time the worker runs, and are stored nowhere else, so they travel in the job's JSON.
+- **Not transactional, on purpose.** A login writes no row, so there is no transaction for the job to ride, and the alert is best effort: `SessionsController` calls a `signInAlerter` (declared beside it, rule 2) and logs a warning if the job cannot be queued; a correct password is never refused because the queue is down. `jobs.SignInAlerts{Queue}` is the adapter, over a one-method `inserter` so the package needs no pgx. Only a login that succeeded is announced (a wrong password or unknown email tells nobody anything).
+- **The design wart this exposed:** the signup page signed up and *then* logged in, to merge the guest cart, so a new user would have got a welcome email and a "new sign-in" alert seconds apart. Fix: the cart merge moved out of `SessionsController` into `app/services/cartmerge` (`Merger.FromAuthorization`), and `UsersController` calls it too (best effort: the account exists by then, so a failed merge is logged, not an error). `login.html` now sends the guest token with either request and signs a new account in by the signup itself.
+- Checked in real Chrome: a guest with 2 items signs up (the welcome email only, cart still 2), logs out and back in (the alert, with time, `::1` and the browser).
+- Known limits: an alert for **every** login is noisy for someone who logs in often, and `ClientIP()` trusts `X-Forwarded-For` from any proxy until `SetTrustedProxies` is configured for the deployment (Task H). The fix for noise is remembering known devices or addresses, which needs a table.

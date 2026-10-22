@@ -149,14 +149,14 @@
             this.error = '';
             try {
               const creds = { email: this.email, password: this.password };
-              if (this.mode === 'signup') await this.post('/users', creds);
-              // Always log in, even right after signing up: POST /sessions
-              // is what folds the guest cart (named by the token sent in
-              // Authorization) into the account. POST /users does not.
+              // The guest's own token rides along on either request, so
+              // the server can fold their cart into the account (signing up
+              // and logging in both do). A new account is signed in by the
+              // signup itself; no second login, no second "new sign-in" email.
               let guest = '';
               try { guest = localStorage.getItem('cartToken') || ''; } catch (e) {}
               const headers = guest ? { Authorization: 'Bearer ' + guest } : {};
-              const session = await this.post('/sessions', creds, headers);
+              const session = await this.post(this.mode === 'signup' ? '/users' : '/sessions', creds, headers);
               try { localStorage.setItem('cartToken', session.token); } catch (e) {}
               location.href = this.next;
             } catch (e) {

@@ -33,15 +33,37 @@ func (f *fakeUsersStore) RegisterUser(_ context.Context, u domain.User) (domain.
 	return f.user, nil
 }
 
+// fakeMerger records the cart merge a signup asked for; the merge itself is
+// tested in cartmerge's own behaviors, through the sessions controller.
+type fakeMerger struct {
+	err           error
+	called        bool
+	gotAuthHeader string
+	gotNewSubject string
+}
+
+func (f *fakeMerger) FromAuthorization(_ context.Context, authorization, newSubject string) error {
+	f.called, f.gotAuthHeader, f.gotNewSubject = true, authorization, newSubject
+	return f.err
+}
+
 func usersRequest(t *testing.T, store *fakeUsersStore, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	return usersRequestWithMerger(t, store, &fakeMerger{}, body, "")
+}
+
+func usersRequestWithMerger(t *testing.T, store *fakeUsersStore, merger *fakeMerger, body, authorization string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewUsersController(store, testTokens, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
+	NewUsersController(store, testTokens, merger, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
 	router.ServeHTTP(rec, req)
 	return rec
 }
@@ -112,5 +134,30 @@ func TestUsersCreateUnexpectedErrorIs500WithoutDetail(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "db-1") {
 		t.Errorf("body leaks the internal error: %s", rec.Body)
+	}
+}
+
+// Signing up as a guest with a cart keeps the cart: the request's own
+// Authorization header goes to the merge, for the new account.
+func TestUsersCreateMergesTheGuestCart(t *testing.T) {
+	store := &fakeUsersStore{user: domain.User{ID: 7, Email: "a@example.com"}}
+	merger := &fakeMerger{}
+	rec := usersRequestWithMerger(t, store, merger, `{"email":"a@example.com","password":"at-least-8"}`, "Bearer guest-token")
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	if !merger.called || merger.gotAuthHeader != "Bearer guest-token" || merger.gotNewSubject != "7" {
+		t.Errorf("merge: called=%v header=%q subject=%q; want the guest's header and the new account's id", merger.called, merger.gotAuthHeader, merger.gotNewSubject)
+	}
+}
+
+// The account exists by then, so a merge that fails does not turn a signup
+// that worked into an error.
+func TestUsersCreateStillSucceedsWhenTheMergeFails(t *testing.T) {
+	store := &fakeUsersStore{user: domain.User{ID: 7, Email: "a@example.com"}}
+	rec := usersRequestWithMerger(t, store, &fakeMerger{err: errors.New("db hiccup")}, `{"email":"a@example.com","password":"at-least-8"}`, "")
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"token"`) {
+		t.Errorf("status %d: %s; want 201 with a token", rec.Code, rec.Body)
 	}
 }
