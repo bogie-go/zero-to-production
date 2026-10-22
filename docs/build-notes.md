@@ -631,3 +631,14 @@ The plan's Task B, "Group products into categories: relationships, filtering, JO
 ### Addendum, 2026-10-22: the category select opened on "No category"
 
 Reported by the user: editing a product always showed "No category". The select's value was applied (by `x-model`) before its options existed, because they are rendered by an `x-for` after the select is bound, and a value with no matching option is dropped. It was a **display** bug only: the form's data still held the real category, so a plain save kept it (checked: `category_id` stayed the same). Fixed by marking the selected option explicitly (`:selected` on each `<option>`). Checked in Chrome: a categorized product opens on its category, "No category" clears it, and choosing one again restores it. Note for the next dynamic select: `public/` is embedded, so the server must be restarted to see an edit to it.
+
+### Addendum, 2026-10-22: New and Edit are their own pages
+
+The user's design call: with CRUD in the admin, New and Edit should be pages of their own, not a form shown and hidden above the list. Done for products and categories, the Rails shape (index / new / edit) with static pages:
+
+- `products.html` and `categories.html` are the lists only (New and Edit are links; Archive, Restore and Delete stay on the list, where the row is).
+- `product.html` and `category.html` are the forms. No `id` means a new record, `?id=5` edits record 5 (loaded from `GET /admin/products/5`); an unknown id says so and links back. Save goes back to the list; Cancel and the browser's Back button do too.
+- What it buys: every action has a URL (bookmarkable, shareable, Back works), each page's script is half the size, and a form page can later grow without touching the list.
+- The form and table styles moved out of the pages into `admin.css`; `adminShell()` gained `queryId()` and a link's `also` list, so a form page highlights its list's sidebar item.
+- A route-per-resource URL (`/admin/products/5/edit`) would need server routes for the pages; the query string keeps them static files.
+- Checked in Chrome: new and edit with validation errors staying on the form, Cancel, the Back button, an unknown id, and delete from the list, for both resources.

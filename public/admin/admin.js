@@ -14,13 +14,19 @@ function adminShell() {
     error: null,
     links: [
       { label: 'Dashboard', href: '/admin/' },
-      { label: 'Products', href: '/admin/products.html' },
-      { label: 'Categories', href: '/admin/categories.html' },
+      { label: 'Products', href: '/admin/products.html', also: ['/admin/product.html'] },
+      { label: 'Categories', href: '/admin/categories.html', also: ['/admin/category.html'] },
       { label: 'Price rules', href: '/admin/price_rules.html', soon: true },
     ],
+    // A section's form page (product.html) highlights its list's link.
     isActive(link) {
       const here = location.pathname.replace(/index\.html$/, '');
-      return here === link.href;
+      return here === link.href || (link.also || []).includes(here);
+    },
+    // The record a form page edits: /admin/product.html?id=5 is product 5,
+    // and no id means a new one.
+    queryId() {
+      return new URLSearchParams(location.search).get('id');
     },
     token() {
       try { return localStorage.getItem('cartToken') || ''; } catch (e) { return ''; }

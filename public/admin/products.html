@@ -5,41 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Products - Admin</title>
     <link rel="stylesheet" href="/admin/admin.css">
-    <style>
-      .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-      .bar h1 { margin: 0; }
-      button.primary, button.secondary, button.danger { padding: .5rem 1rem; border-radius: .5rem; font: inherit; font-size: .92rem; cursor: pointer; }
-      button.primary { border: none; background: var(--accent); color: #fff; font-weight: 600; }
-      button.secondary { border: 1px solid var(--line); background: var(--panel); color: inherit; }
-      button.danger { border: 1px solid var(--line); background: var(--panel); color: var(--accent); }
-      button:disabled { opacity: .5; cursor: not-allowed; }
-      .form { border: 1px solid var(--line); border-radius: .8rem; background: var(--panel); padding: 1.1rem 1.25rem 1.25rem; margin-bottom: 1.5rem; }
-      .form h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
-      .form .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
-      .form .wide { grid-column: 1 / -1; }
-      .form label { display: block; font-size: .82rem; color: var(--muted); margin: .8rem 0 .25rem; }
-      .form input, .form textarea, .form select { width: 100%; padding: .55rem .7rem; border-radius: .5rem; border: 1px solid var(--line);
-                                    background: var(--bg); color: inherit; font: inherit; }
-      .form input:focus, .form textarea:focus, .form select:focus { outline: none; border-color: var(--accent); }
-      .form .actions { display: flex; gap: .6rem; margin-top: 1.1rem; }
-      .err { color: var(--accent); font-size: .9rem; margin: .8rem 0 0; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
-      th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
-      td.num, th.num { text-align: right; }
-      td .thumb { width: 2.6rem; height: 2.6rem; border-radius: .4rem; overflow: hidden; background: var(--accent-soft); }
-      td .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      td.actions { white-space: nowrap; text-align: right; }
-      td.actions button { margin-left: .35rem; padding: .3rem .7rem; font-size: .85rem; }
-      .tools { display: flex; align-items: center; gap: 1rem; }
-      .toggle { font-size: .88rem; color: var(--muted); cursor: pointer; }
-      tr.archived td { opacity: .55; }
-      tr.archived td.actions { opacity: 1; }
-      .badge { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
-               border: 1px solid var(--line); border-radius: 1rem; padding: .05rem .5rem; margin-left: .3rem; }
-      .low { color: var(--accent); font-weight: 600; }
-      @media (max-width: 48rem) { .form .grid { grid-template-columns: 1fr; } }
-    </style>
   </head>
   <body x-data="productsPage()" x-init="load()">
     <div class="shell" x-show="!loading && !error">
@@ -64,34 +29,10 @@
           <h1>Products</h1>
           <div class="tools">
             <label class="toggle"><input type="checkbox" x-model="showArchived"> Show archived</label>
-            <button class="primary" @click="startNew()" x-show="!form">New product</button>
+            <a class="btn primary" href="/admin/product.html">New product</a>
           </div>
         </div>
         <p class="err" x-show="notice" x-text="notice"></p>
-
-        <template x-if="form"><form class="form" @submit.prevent="save()">
-          <h2 x-text="form.id ? 'Edit product' : 'New product'"></h2>
-          <div class="grid">
-            <div class="wide"><label for="name">Name</label><input id="name" x-model="form.name" required></div>
-            <div class="wide"><label for="description">Description</label><textarea id="description" rows="3" x-model="form.description"></textarea></div>
-            <div><label for="price">Price (USD)</label><input id="price" x-model="form.price" inputmode="decimal" required></div>
-            <div><label for="stock">Stock</label><input id="stock" type="number" min="0" step="1" x-model="form.stock" required></div>
-            <div class="wide"><label for="category">Category</label>
-              <!-- :selected on each option, not just x-model on the select: the
-                   options are rendered after the select is bound, and a value
-                   set before its option exists is silently dropped. -->
-              <select id="category" x-model="form.category_id">
-                <option value="" :selected="!form.category_id">No category</option>
-                <template x-for="c in categories" :key="c.id"><option :value="String(c.id)" :selected="String(c.id) === form.category_id" x-text="c.name"></option></template>
-              </select></div>
-            <div class="wide"><label for="image">Image URL</label><input id="image" x-model="form.image_url" placeholder="/images/products/example.webp"></div>
-          </div>
-          <p class="err" x-show="formError" x-text="formError"></p>
-          <div class="actions">
-            <button class="primary" type="submit" :disabled="saving" x-text="saving ? 'Saving…' : 'Save'"></button>
-            <button class="secondary" type="button" @click="cancel()">Cancel</button>
-          </div>
-        </form></template>
 
         <p class="state" x-show="products === null">Loading&hellip;</p>
         <p class="state" x-show="products !== null && visible.length === 0">No products to show.</p>
@@ -106,7 +47,7 @@
                 <td class="num" x-text="formatPrice(p.price_cents)"></td>
                 <td class="num" :class="{ low: p.stock <= 5 }" x-text="p.stock"></td>
                 <td class="actions">
-                  <button class="secondary" @click="startEdit(p)">Edit</button>
+                  <a class="btn secondary" :href="'/admin/product.html?id=' + p.id">Edit</a>
                   <button class="secondary" x-show="!p.archived_at" @click="setArchived(p, true)">Archive</button>
                   <button class="secondary" x-show="p.archived_at" @click="setArchived(p, false)">Restore</button>
                   <button class="danger" @click="destroy(p)">Delete</button>
@@ -124,20 +65,13 @@
     <script src="/admin/admin.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
     <script>
-      // The server's validation messages arrive as "invalid: name is
-      // required"; the prefix is for code, not for people.
-      const friendly = (msg) => (msg || '').replace(/^invalid: /, '');
-
       function productsPage() {
         return {
           ...adminShell(),
           products: null,
           categories: [],
           showArchived: false,
-          form: null,
-          formError: '',
           notice: '',
-          saving: false,
           get visible() {
             return (this.products || []).filter((p) => this.showArchived || !p.archived_at);
           },
@@ -146,7 +80,7 @@
             this.loading = false;
             await this.refresh();
           },
-          // The categories fill the form's select and name each row's.
+          // The categories name each row's.
           categoryName(id) {
             const c = this.categories.find((c) => c.id === id);
             return c ? c.name : '';
@@ -160,42 +94,6 @@
               this.products = (await res.json()).products || [];
             } catch (e) {
               this.error = 'Could not load products: ' + e.message;
-            }
-          },
-          blank() { return { id: null, name: '', description: '', price: '', stock: '0', image_url: '', category_id: '' }; },
-          startNew() { this.notice = ''; this.formError = ''; this.form = this.blank(); },
-          startEdit(p) {
-            this.notice = ''; this.formError = '';
-            this.form = { id: p.id, name: p.name, description: p.description, price: (p.price_cents / 100).toFixed(2),
-                          stock: String(p.stock), image_url: p.image_url,
-                          category_id: p.category_id ? String(p.category_id) : '' };
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          },
-          cancel() { this.form = null; this.formError = ''; },
-          async save() {
-            const cents = Math.round(parseFloat(this.form.price) * 100);
-            if (!Number.isFinite(cents)) { this.formError = 'Price must be a number, like 19.99'; return; }
-            this.saving = true;
-            this.formError = '';
-            try {
-              const editing = this.form.id !== null;
-              const res = await this.api('/admin/products' + (editing ? '/' + this.form.id : ''), {
-                method: editing ? 'PATCH' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  name: this.form.name, description: this.form.description, price_cents: cents,
-                  stock: parseInt(this.form.stock, 10), image_url: this.form.image_url,
-                  category_id: this.form.category_id ? parseInt(this.form.category_id, 10) : null,
-                }),
-              });
-              const data = await res.json();
-              if (!res.ok) throw new Error(friendly(data.error) || 'status ' + res.status);
-              this.form = null;
-              await this.refresh();
-            } catch (e) {
-              this.formError = e.message;
-            } finally {
-              this.saving = false;
             }
           },
           // Archive is the soft delete: off the shop, kept in every old order.

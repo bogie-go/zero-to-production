@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Category - Admin</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+  </head>
+  <body x-data="categoryPage()" x-init="load()">
+    <div class="shell" x-show="!loading && !error">
+      <aside class="sidebar">
+        <a class="brand" href="/admin/">Ecommerce<small>admin</small></a>
+        <nav>
+          <template x-for="link in links" :key="link.href">
+            <a :href="link.soon ? null : link.href" :class="{ active: isActive(link), soon: link.soon }">
+              <span x-text="link.label"></span><em x-show="link.soon">soon</em>
+            </a>
+          </template>
+          <a href="/">&larr; Back to the shop</a>
+        </nav>
+        <div class="who">
+          <span x-text="email"></span>
+          <div><button @click="logout()">Log out</button></div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <a class="back" href="/admin/categories.html">&larr; Categories</a>
+        <h1 x-text="id ? 'Edit category' : 'New category'"></h1>
+        <p class="state" x-show="notFound">No such category. <a href="/admin/categories.html">Back to the list</a></p>
+
+        <form class="form" x-show="!notFound" @submit.prevent="save()">
+          <div class="grid">
+            <div class="wide"><label for="name">Name</label><input id="name" x-model="form.name" required></div>
+          </div>
+          <p class="err" x-show="formError" x-text="formError"></p>
+          <div class="actions">
+            <button class="primary" type="submit" :disabled="saving" x-text="saving ? 'Saving…' : 'Save'"></button>
+            <a class="btn secondary" href="/admin/categories.html">Cancel</a>
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <p class="state" x-show="loading">Checking access&hellip;</p>
+    <p class="state" x-show="!loading && error" x-text="error"></p>
+
+    <script src="/admin/admin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+    <script>
+      // The server's validation messages arrive as "invalid: name is
+      // required"; the prefix is for code, not for people.
+      const friendly = (msg) => (msg || '').replace(/^invalid: /, '');
+
+      function categoryPage() {
+        return {
+          ...adminShell(),
+          id: null,
+          notFound: false,
+          form: { name: '' },
+          formError: '',
+          saving: false,
+          async load() {
+            if (!(await this.guard())) return;
+            this.id = this.queryId();
+            try {
+              if (this.id) {
+                const res = await this.api('/admin/categories/' + encodeURIComponent(this.id));
+                if (res.status === 404) { this.notFound = true; return; }
+                if (!res.ok) throw new Error('status ' + res.status);
+                this.form = { name: (await res.json()).name };
+              }
+            } catch (e) {
+              this.error = 'Could not load the category: ' + e.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+          async save() {
+            this.saving = true;
+            this.formError = '';
+            try {
+              const res = await this.api('/admin/categories' + (this.id ? '/' + encodeURIComponent(this.id) : ''), {
+                method: this.id ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: this.form.name }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(friendly(data.error) || 'status ' + res.status);
+              location.href = '/admin/categories.html';
+            } catch (e) {
+              this.formError = e.message;
+              this.saving = false;
+            }
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

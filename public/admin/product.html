@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Product - Admin</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+  </head>
+  <body x-data="productPage()" x-init="load()">
+    <div class="shell" x-show="!loading && !error">
+      <aside class="sidebar">
+        <a class="brand" href="/admin/">Ecommerce<small>admin</small></a>
+        <nav>
+          <template x-for="link in links" :key="link.href">
+            <a :href="link.soon ? null : link.href" :class="{ active: isActive(link), soon: link.soon }">
+              <span x-text="link.label"></span><em x-show="link.soon">soon</em>
+            </a>
+          </template>
+          <a href="/">&larr; Back to the shop</a>
+        </nav>
+        <div class="who">
+          <span x-text="email"></span>
+          <div><button @click="logout()">Log out</button></div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <a class="back" href="/admin/products.html">&larr; Products</a>
+        <h1 x-text="id ? 'Edit product' : 'New product'"></h1>
+        <p class="state" x-show="notFound">No such product. <a href="/admin/products.html">Back to the list</a></p>
+
+        <form class="form" x-show="!notFound" @submit.prevent="save()">
+          <div class="grid">
+            <div class="wide"><label for="name">Name</label><input id="name" x-model="form.name" required></div>
+            <div class="wide"><label for="description">Description</label><textarea id="description" rows="3" x-model="form.description"></textarea></div>
+            <div><label for="price">Price (USD)</label><input id="price" x-model="form.price" inputmode="decimal" required></div>
+            <div><label for="stock">Stock</label><input id="stock" type="number" min="0" step="1" x-model="form.stock" required></div>
+            <div class="wide"><label for="category">Category</label>
+              <!-- :selected on each option, not just x-model on the select: the
+                   options are rendered after the select is bound, and a value
+                   set before its option exists is silently dropped. -->
+              <select id="category" x-model="form.category_id">
+                <option value="" :selected="!form.category_id">No category</option>
+                <template x-for="c in categories" :key="c.id"><option :value="String(c.id)" :selected="String(c.id) === form.category_id" x-text="c.name"></option></template>
+              </select></div>
+            <div class="wide"><label for="image">Image URL</label><input id="image" x-model="form.image_url" placeholder="/images/products/example.webp"></div>
+          </div>
+          <p class="err" x-show="formError" x-text="formError"></p>
+          <div class="actions">
+            <button class="primary" type="submit" :disabled="saving" x-text="saving ? 'Saving…' : 'Save'"></button>
+            <a class="btn secondary" href="/admin/products.html">Cancel</a>
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <p class="state" x-show="loading">Checking access&hellip;</p>
+    <p class="state" x-show="!loading && error" x-text="error"></p>
+
+    <script src="/admin/admin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+    <script>
+      // The server's validation messages arrive as "invalid: name is
+      // required"; the prefix is for code, not for people.
+      const friendly = (msg) => (msg || '').replace(/^invalid: /, '');
+
+      function productPage() {
+        return {
+          ...adminShell(),
+          id: null,
+          notFound: false,
+          categories: [],
+          form: { name: '', description: '', price: '', stock: '0', image_url: '', category_id: '' },
+          formError: '',
+          saving: false,
+          async load() {
+            if (!(await this.guard())) return;
+            this.id = this.queryId();
+            try {
+              const cats = await this.api('/admin/categories');
+              if (cats.ok) this.categories = (await cats.json()).categories || [];
+              if (this.id) {
+                const res = await this.api('/admin/products/' + encodeURIComponent(this.id));
+                if (res.status === 404) { this.notFound = true; return; }
+                if (!res.ok) throw new Error('status ' + res.status);
+                const p = await res.json();
+                this.form = { name: p.name, description: p.description, price: (p.price_cents / 100).toFixed(2), stock: String(p.stock),
+                              image_url: p.image_url, category_id: p.category_id ? String(p.category_id) : '' };
+              }
+            } catch (e) {
+              this.error = 'Could not load the product: ' + e.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+          async save() {
+            const cents = Math.round(parseFloat(this.form.price) * 100);
+            if (!Number.isFinite(cents)) { this.formError = 'Price must be a number, like 19.99'; return; }
+            this.saving = true;
+            this.formError = '';
+            try {
+              const res = await this.api('/admin/products' + (this.id ? '/' + encodeURIComponent(this.id) : ''), {
+                method: this.id ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  name: this.form.name, description: this.form.description, price_cents: cents,
+                  stock: parseInt(this.form.stock, 10), image_url: this.form.image_url,
+                  category_id: this.form.category_id ? parseInt(this.form.category_id, 10) : null,
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(friendly(data.error) || 'status ' + res.status);
+              location.href = '/admin/products.html';
+            } catch (e) {
+              this.formError = e.message;
+              this.saving = false;
+            }
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

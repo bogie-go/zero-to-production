@@ -5,41 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Categories - Admin</title>
     <link rel="stylesheet" href="/admin/admin.css">
-    <style>
-      .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-      .bar h1 { margin: 0; }
-      button.primary, button.secondary, button.danger { padding: .5rem 1rem; border-radius: .5rem; font: inherit; font-size: .92rem; cursor: pointer; }
-      button.primary { border: none; background: var(--accent); color: #fff; font-weight: 600; }
-      button.secondary { border: 1px solid var(--line); background: var(--panel); color: inherit; }
-      button.danger { border: 1px solid var(--line); background: var(--panel); color: var(--accent); }
-      button:disabled { opacity: .5; cursor: not-allowed; }
-      .form { border: 1px solid var(--line); border-radius: .8rem; background: var(--panel); padding: 1.1rem 1.25rem 1.25rem; margin-bottom: 1.5rem; }
-      .form h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
-      .form .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
-      .form .wide { grid-column: 1 / -1; }
-      .form label { display: block; font-size: .82rem; color: var(--muted); margin: .8rem 0 .25rem; }
-      .form input, .form textarea { width: 100%; padding: .55rem .7rem; border-radius: .5rem; border: 1px solid var(--line);
-                                    background: var(--bg); color: inherit; font: inherit; }
-      .form input:focus, .form textarea:focus { outline: none; border-color: var(--accent); }
-      .form .actions { display: flex; gap: .6rem; margin-top: 1.1rem; }
-      .err { color: var(--accent); font-size: .9rem; margin: .8rem 0 0; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
-      th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
-      td.num, th.num { text-align: right; }
-      td .thumb { width: 2.6rem; height: 2.6rem; border-radius: .4rem; overflow: hidden; background: var(--accent-soft); }
-      td .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      td.actions { white-space: nowrap; text-align: right; }
-      td.actions button { margin-left: .35rem; padding: .3rem .7rem; font-size: .85rem; }
-      .tools { display: flex; align-items: center; gap: 1rem; }
-      .toggle { font-size: .88rem; color: var(--muted); cursor: pointer; }
-      tr.archived td { opacity: .55; }
-      tr.archived td.actions { opacity: 1; }
-      .badge { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
-               border: 1px solid var(--line); border-radius: 1rem; padding: .05rem .5rem; margin-left: .3rem; }
-      .low { color: var(--accent); font-weight: 600; }
-      @media (max-width: 48rem) { .form .grid { grid-template-columns: 1fr; } }
-    </style>
   </head>
   <body x-data="categoriesPage()" x-init="load()">
     <div class="shell" x-show="!loading && !error">
@@ -62,21 +27,9 @@
       <main class="content">
         <div class="bar">
           <h1>Categories</h1>
-          <button class="primary" @click="startNew()" x-show="!form">New category</button>
+          <a class="btn primary" href="/admin/category.html">New category</a>
         </div>
         <p class="err" x-show="notice" x-text="notice"></p>
-
-        <template x-if="form"><form class="form" @submit.prevent="save()">
-          <h2 x-text="form.id ? 'Edit category' : 'New category'"></h2>
-          <div class="grid">
-            <div class="wide"><label for="name">Name</label><input id="name" x-model="form.name" required></div>
-          </div>
-          <p class="err" x-show="formError" x-text="formError"></p>
-          <div class="actions">
-            <button class="primary" type="submit" :disabled="saving" x-text="saving ? 'Saving…' : 'Save'"></button>
-            <button class="secondary" type="button" @click="cancel()">Cancel</button>
-          </div>
-        </form></template>
 
         <p class="state" x-show="categories === null">Loading&hellip;</p>
         <p class="state" x-show="categories !== null && categories.length === 0">No categories yet.</p>
@@ -88,7 +41,7 @@
                 <td x-text="c.name"></td>
                 <td class="num" x-text="c.product_count"></td>
                 <td class="actions">
-                  <button class="secondary" @click="startEdit(c)">Edit</button>
+                  <a class="btn secondary" :href="'/admin/category.html?id=' + c.id">Edit</a>
                   <button class="danger" @click="destroy(c)">Delete</button>
                 </td>
               </tr>
@@ -104,18 +57,11 @@
     <script src="/admin/admin.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
     <script>
-      // The server's validation messages arrive as "invalid: name is
-      // required"; the prefix is for code, not for people.
-      const friendly = (msg) => (msg || '').replace(/^invalid: /, '');
-
       function categoriesPage() {
         return {
           ...adminShell(),
           categories: null,
-          form: null,
-          formError: '',
           notice: '',
-          saving: false,
           async load() {
             if (!(await this.guard())) return;
             this.loading = false;
@@ -128,29 +74,6 @@
               this.categories = (await res.json()).categories || [];
             } catch (e) {
               this.error = 'Could not load categories: ' + e.message;
-            }
-          },
-          startNew() { this.notice = ''; this.formError = ''; this.form = { id: null, name: '' }; },
-          startEdit(c) { this.notice = ''; this.formError = ''; this.form = { id: c.id, name: c.name }; },
-          cancel() { this.form = null; this.formError = ''; },
-          async save() {
-            this.saving = true;
-            this.formError = '';
-            try {
-              const editing = this.form.id !== null;
-              const res = await this.api('/admin/categories' + (editing ? '/' + this.form.id : ''), {
-                method: editing ? 'PATCH' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: this.form.name }),
-              });
-              const data = await res.json();
-              if (!res.ok) throw new Error(friendly(data.error) || 'status ' + res.status);
-              this.form = null;
-              await this.refresh();
-            } catch (e) {
-              this.formError = e.message;
-            } finally {
-              this.saving = false;
             }
           },
           // Deleting a category keeps its products: they simply have no
