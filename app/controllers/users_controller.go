@@ -18,7 +18,7 @@ import (
 // usersStore is the slice of the store this controller uses, declared next
 // to its caller (rule 2) and holding only the methods the actions call.
 type usersStore interface {
-	CreateUser(ctx context.Context, u domain.User) (domain.User, error)
+	RegisterUser(ctx context.Context, u domain.User) (domain.User, error)
 }
 
 // userTokenMaker is the slice of the token service this controller uses.
@@ -67,8 +67,9 @@ func (ctl *UsersController) Create(c *gin.Context) {
 	}
 	// Role is always customer here, never read from the request: the only
 	// way into the staff role is the seed (db/seeds/users.go) or a direct
-	// UpdateUser, never anything a signup request can reach.
-	user, err := ctl.Store.CreateUser(c.Request.Context(), domain.User{
+	// UpdateUser, never anything a signup request can reach. RegisterUser, not
+	// CreateUser: it enqueues the welcome email in the same transaction.
+	user, err := ctl.Store.RegisterUser(c.Request.Context(), domain.User{
 		Email: req.Email, PasswordDigest: digest, Role: domain.RoleCustomer,
 	})
 	if err != nil {

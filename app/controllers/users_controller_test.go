@@ -25,7 +25,7 @@ type fakeUsersStore struct {
 	gotUser domain.User
 }
 
-func (f *fakeUsersStore) CreateUser(_ context.Context, u domain.User) (domain.User, error) {
+func (f *fakeUsersStore) RegisterUser(_ context.Context, u domain.User) (domain.User, error) {
 	f.gotUser = u
 	if f.err != nil {
 		return domain.User{}, f.err

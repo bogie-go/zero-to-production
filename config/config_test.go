@@ -214,6 +214,7 @@ func TestMailDefaultsAndProductionRequirements(t *testing.T) {
 	t.Setenv(ConfigDirVar, t.TempDir())
 	t.Setenv("DATABASE_URL", "postgres://u:p@db:5432/ecommerce")
 	t.Setenv("TOKEN_SECRET", strings.Repeat("s", 32))
+	t.Setenv("SITE_URL", "https://shop.example.com")
 	t.Setenv("SMTP_ADDRESS", "")
 	t.Setenv("MAIL_FROM", "")
 	if _, err := Load(); err == nil {
@@ -240,10 +241,30 @@ func TestProductionRefusesAShortTokenSecret(t *testing.T) {
 	t.Setenv(EnvVar, "production")
 	t.Setenv(ConfigDirVar, t.TempDir())
 	t.Setenv("DATABASE_URL", "postgres://u:p@db:5432/ecommerce")
+	t.Setenv("SITE_URL", "https://shop.example.com")
 	t.Setenv("SMTP_ADDRESS", "smtp.example.com:587")
 	t.Setenv("MAIL_FROM", "shop@example.com")
 	t.Setenv("TOKEN_SECRET", "too-short")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TOKEN_SECRET") {
 		t.Errorf("a short token secret: err = %v, want a refusal naming TOKEN_SECRET", err)
+	}
+}
+
+// Links in emails need the shop's address: production refuses to boot without
+// site.url rather than mailing localhost links.
+func TestProductionRequiresTheSiteURL(t *testing.T) {
+	t.Setenv(EnvVar, "production")
+	t.Setenv(ConfigDirVar, t.TempDir())
+	t.Setenv("DATABASE_URL", "postgres://u:p@db:5432/ecommerce")
+	t.Setenv("TOKEN_SECRET", strings.Repeat("s", 32))
+	t.Setenv("SMTP_ADDRESS", "smtp.example.com:587")
+	t.Setenv("MAIL_FROM", "shop@example.com")
+	t.Setenv("SITE_URL", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SITE_URL") {
+		t.Errorf("production without site.url: err = %v, want a refusal naming SITE_URL", err)
+	}
+	t.Setenv("SITE_URL", "https://shop.example.com")
+	if _, err := Load(); err != nil {
+		t.Errorf("production with site.url: %v", err)
 	}
 }

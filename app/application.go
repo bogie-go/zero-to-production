@@ -78,7 +78,7 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	// commits with the business row or not at all. The workers are
 	// registered in app/jobs; `bogie g job` adds one.
 	mail := mailer.New(MailerConfig(cfg))
-	workers, jobsRegistered := jobs.Workers(log, store, mail)
+	workers, jobsRegistered := jobs.Workers(log, jobs.Deps{Store: store, Mail: mail, SiteURL: cfg.Site.Url})
 	riverConfig := &river.Config{Logger: log}
 	if jobsRegistered {
 		// Queues and Workers go together: a client with either alone is
@@ -99,6 +99,12 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	// the order back with it.
 	store.OnOrderPlaced(func(ctx context.Context, tx pgx.Tx, order domain.Order) error {
 		_, err := queue.InsertTx(ctx, tx, jobs.SendOrderConfirmationArgs{UserID: order.UserID, OrderID: order.ID}, nil)
+		return err
+	})
+	// The same for signing up: the welcome email's job exists if and only if
+	// the account does.
+	store.OnUserRegistered(func(ctx context.Context, tx pgx.Tx, user domain.User) error {
+		_, err := queue.InsertTx(ctx, tx, jobs.SendWelcomeEmailArgs{UserID: user.ID}, nil)
 		return err
 	})
 

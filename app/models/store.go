@@ -25,6 +25,9 @@ type Store struct {
 	// onOrderPlaced runs inside CreateOrderFromCart's transaction; see
 	// OnOrderPlaced in orders_extra.go.
 	onOrderPlaced func(ctx context.Context, tx pgx.Tx, order domain.Order) error
+	// onUserRegistered runs inside RegisterUser's transaction; see
+	// OnUserRegistered in users_extra.go.
+	onUserRegistered func(ctx context.Context, tx pgx.Tx, user domain.User) error
 }
 
 // Open connects and verifies the database is reachable, so a bad URL fails at

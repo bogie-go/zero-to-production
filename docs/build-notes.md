@@ -575,7 +575,8 @@ Decided with the user while setting up mail: the credentials file should be grou
 
 ### Still to do
 
-- [ ] A welcome email on signup and a sign-in alert on login, as further jobs (the user raised the login one).
+- [x] A welcome email on signup (see the addendum below).
+- [ ] A sign-in alert on login (the user raised it), as another job.
 - [ ] Retries and failures are only visible in `river_job`; a view in the admin, later.
 - [ ] Idempotent delivery (at-least-once means an occasional duplicate).
 
@@ -584,3 +585,11 @@ Decided with the user while setting up mail: the credentials file should be grou
 - `bogie g config database username=xxx password=yyy` adds keys to the app's own groups (their structs in `config.go` carry a marker now); the groups themselves are never created or removed. While testing it, `d config database` turned out to be mistaken for a flat key named `database` and would have removed the app's `Database` field; it is refused now.
 - Dev credential values are written bare when safe (`username: xxx`) and quoted when YAML would misread them (`yes`, numbers, anything with a colon or space); a `bool` key takes `yes`/`no`.
 - Updated here with `bogie app:update` (clean merge: the two markers in `config/config.go`).
+
+### Addendum, 2026-10-22: the welcome email on signup
+
+- **`bogie g config site url:req=http://localhost:8080`** (a new group made with the generator): where links in emails point. Defaults for development and test are set by hand in `config/site.go`; production refuses to boot without `site.url`.
+- **`bogie g job send_welcome_email`**, args `{user_id}`. `app/mailers.Welcome(user, shopURL)` composes it (text and HTML, link to the shop, address HTML-escaped).
+- **Same transactional pattern as the order email, second use:** `Store.RegisterUser` (hand-written; `CreateUser` stays as the plain version seeds use) creates the user and calls `OnUserRegistered` inside its transaction; `application.go` wires that to River's `InsertTx`. A signup that commits has a welcome email coming, one that rolls back has none, and a queue that is down refuses the signup instead of leaving an account that will never be welcomed. Duplicate email and invalid user answer exactly as `CreateUser` does and run no hook. `UsersController` now calls `RegisterUser`.
+- **`jobs.Deps`:** with a second job the hand-widened `Workers(log, store, mail)` became `Workers(log, Deps{Store, Mail, SiteURL})`, so a new job's dependency is a field, not another parameter. Still a Bogie gap: `g job` registers `&XWorker{Log: log}` and the reader widens it.
+- Checked live: signup over the API leaves a `completed` job and one email in Mailpit, a duplicate signup is a 422 with no second email, and signing up through the real browser page (which signs up and then logs in) sends exactly one.

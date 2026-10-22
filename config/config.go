@@ -96,6 +96,7 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	Mail     MailConfig     `mapstructure:"mail"`
 	Server   ServerConfig   `mapstructure:"server"`
+	Site     SiteConfig     `mapstructure:"site"`
 	Smtp     SmtpConfig     `mapstructure:"smtp"`
 	Token    TokenConfig    `mapstructure:"token"`
 	// bogie:config
@@ -210,6 +211,7 @@ func defaults(env string) Config {
 	c.Mail.defaults(env)
 	c.Smtp.defaults(env)
 	c.Token.defaults(env)
+	c.Site.defaults(env)
 	// bogie:defaults
 	return c
 }
@@ -250,6 +252,7 @@ func (c Config) validate() error {
 		c.Mail.validate(c.Env),
 		c.Smtp.validate(c.Env),
 		c.Token.validate(c.Env),
+		c.Site.validate(c.Env),
 		// bogie:validate
 	} {
 		if err != nil {
