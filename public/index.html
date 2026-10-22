@@ -53,6 +53,14 @@
       .card .stock { font-size: .78rem; padding: .2rem .55rem; border-radius: 1rem; background: var(--accent-soft); color: var(--accent); }
       .card .stock.out { background: var(--line); color: var(--muted); }
 
+      .chips { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 1.5rem; }
+      .chip { padding: .35rem .85rem; border-radius: 1rem; border: 1px solid var(--line); background: var(--panel);
+              color: inherit; text-decoration: none; font-size: .88rem; }
+      .chip:hover { border-color: var(--accent); }
+      .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .chip .count { opacity: .7; margin-left: .25rem; }
+      .card .cat { margin: 0 0 .15rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
       footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
       footer .wrap { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
       footer code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel);
@@ -75,8 +83,17 @@
     </header>
 
     <main>
-      <h1>Products</h1>
-      <p class="lead">Everything in the catalog right now.</p>
+      <h1 x-text="selectedName || 'Products'"></h1>
+      <p class="lead" x-text="selected ? 'Showing one category.' : 'Everything in the catalog right now.'"></p>
+
+      <nav class="chips" x-show="shownCategories.length > 0" aria-label="Categories">
+        <a class="chip" :class="{ active: !selected }" href="/">All</a>
+        <template x-for="c in shownCategories" :key="c.id">
+          <a class="chip" :class="{ active: selected === c.id }" :href="'/?category_id=' + c.id">
+            <span x-text="c.name"></span><span class="count" x-text="c.product_count"></span>
+          </a>
+        </template>
+      </nav>
 
       <p class="state" x-show="loading">Loading products&hellip;</p>
       <p class="state" x-show="!loading && error" x-text="error"></p>
@@ -89,6 +106,7 @@
               <img :src="p.image_url" :alt="p.name" loading="lazy">
             </div>
             <div class="body">
+              <p class="cat" x-show="p.category_name" x-text="p.category_name"></p>
               <h2 x-text="p.name"></h2>
               <p class="desc" x-text="p.description"></p>
               <div class="meta">
@@ -102,7 +120,7 @@
     </main>
 
     <footer>
-      <div class="wrap">This page fetches <code>GET /products</code> with Alpine.js, no build step. See <code>public/index.html</code>.</div>
+      <div class="wrap">This page fetches <code>GET /products</code> and <code>GET /categories</code> with Alpine.js, no build step. See <code>public/index.html</code>.</div>
     </footer>
 
     <script src="/auth.js"></script>
@@ -133,15 +151,30 @@
       function shop() {
         return {
           products: [],
+          categories: [],
+          // The chosen category is in the address (/?category_id=3), so a
+          // filtered view can be bookmarked and the back button works.
+          selected: parseInt(new URLSearchParams(location.search).get('category_id'), 10) || null,
           loading: true,
           error: null,
           cartCount: 0,
+          // Only categories that have something in them are worth clicking.
+          get shownCategories() {
+            return this.categories.filter((c) => c.product_count > 0 || c.id === this.selected);
+          },
+          get selectedName() {
+            const c = this.categories.find((c) => c.id === this.selected);
+            return c ? c.name : '';
+          },
           async load() {
             try {
-              const res = await fetch('/products');
-              if (!res.ok) throw new Error('status ' + res.status);
-              const data = await res.json();
-              this.products = data.products || [];
+              const [cats, prods] = await Promise.all([
+                fetch('/categories'),
+                fetch('/products' + (this.selected ? '?category_id=' + this.selected : '')),
+              ]);
+              if (!prods.ok) throw new Error('status ' + prods.status);
+              if (cats.ok) this.categories = (await cats.json()).categories || [];
+              this.products = (await prods.json()).products || [];
             } catch (e) {
               this.error = 'Could not load products: ' + e.message;
             } finally {

@@ -24,7 +24,8 @@ type fakeProductsStore struct {
 	many []domain.Product
 	err  error
 
-	gotID string
+	gotID         string
+	gotCategoryID *int64
 }
 
 func (f *fakeProductsStore) GetActiveProduct(_ context.Context, id string) (domain.Product, error) {
@@ -32,7 +33,8 @@ func (f *fakeProductsStore) GetActiveProduct(_ context.Context, id string) (doma
 	return f.one, f.err
 }
 
-func (f *fakeProductsStore) ListActiveProducts(context.Context, int32) ([]domain.Product, error) {
+func (f *fakeProductsStore) ListActiveProducts(_ context.Context, categoryID *int64, _ int32) ([]domain.Product, error) {
+	f.gotCategoryID = categoryID
 	return f.many, f.err
 }
 
@@ -119,5 +121,31 @@ func TestProductsUnexpectedErrorIs500WithoutDetail(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "db-1") {
 		t.Errorf("body leaks the internal error: %s", rec.Body)
+	}
+}
+
+// ?category_id=N is handed to the store as a number; without it the store is
+// asked for every category (nil).
+func TestProductsIndexFiltersByCategory(t *testing.T) {
+	store := &fakeProductsStore{many: []domain.Product{{ID: 1, Name: "Mouse", CategoryName: "Peripherals"}}}
+	rec := productsRequest(t, store, http.MethodGet, "/products?category_id=4", "")
+	if rec.Code != http.StatusOK || store.gotCategoryID == nil || *store.gotCategoryID != 4 {
+		t.Fatalf("status %d, category %v; want 200 and 4", rec.Code, store.gotCategoryID)
+	}
+	if !strings.Contains(rec.Body.String(), `"category_name":"Peripherals"`) {
+		t.Errorf("body = %s, want the category's name in the response", rec.Body)
+	}
+
+	store = &fakeProductsStore{}
+	productsRequest(t, store, http.MethodGet, "/products", "")
+	if store.gotCategoryID != nil {
+		t.Errorf("no filter asked for category %v, want nil (all)", *store.gotCategoryID)
+	}
+}
+
+func TestProductsIndexRefusesANonNumericCategory(t *testing.T) {
+	rec := productsRequest(t, &fakeProductsStore{}, http.MethodGet, "/products?category_id=audio", "")
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422: %s", rec.Code, rec.Body)
 	}
 }

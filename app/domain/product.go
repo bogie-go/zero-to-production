@@ -20,8 +20,13 @@ type Product struct {
 	Stock       int32
 	ImageUrl    string
 	ArchivedAt  *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// CategoryID is the category it belongs to, nil for none. CategoryName is
+	// the name, filled only by the queries that join categories (the shop's
+	// listing); it is never written back.
+	CategoryID   *int64
+	CategoryName string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // Validate is the model's validations, as Rails would put them. Wrap every

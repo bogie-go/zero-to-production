@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -19,7 +20,7 @@ import (
 // test's fake is a few lines.
 type productsStore interface {
 	GetActiveProduct(ctx context.Context, id string) (domain.Product, error)
-	ListActiveProducts(ctx context.Context, limit int32) ([]domain.Product, error)
+	ListActiveProducts(ctx context.Context, categoryID *int64, limit int32) ([]domain.Product, error)
 }
 
 // productsListLimit is how many a listing returns, newest first. Paging is
@@ -47,13 +48,23 @@ func (ctl *ProductsController) SetupRoutes(router *gin.RouterGroup) {
 	products.GET("/:id", ctl.Show)
 }
 
-// Index handles GET /products.
+// Index handles GET /products, optionally ?category_id=N.
 //
 // A handler converts HTTP into domain values, calls one service function,
 // and converts the result back. Nothing below app/controllers sees
 // *gin.Context (rule 5).
 func (ctl *ProductsController) Index(c *gin.Context) {
-	products, err := ctl.Store.ListActiveProducts(c.Request.Context(), productsListLimit)
+	// ?category_id=N narrows the catalog to one category; without it, all.
+	var categoryID *int64
+	if raw := c.Query("category_id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, views.ErrorMessage("category_id must be a number"))
+			return
+		}
+		categoryID = &id
+	}
+	products, err := ctl.Store.ListActiveProducts(c.Request.Context(), categoryID, productsListLimit)
 	if err != nil {
 		ctl.fail(c, err)
 		return
@@ -94,15 +105,17 @@ func (ctl *ProductsController) fail(c *gin.Context, err error) {
 
 func productView(p domain.Product) views.ProductResponse {
 	return views.ProductResponse{
-		ID:          p.ID,
-		Name:        p.Name,
-		Description: p.Description,
-		PriceCents:  p.PriceCents,
-		Stock:       p.Stock,
-		ImageUrl:    p.ImageUrl,
-		ArchivedAt:  p.ArchivedAt,
-		CreatedAt:   p.CreatedAt,
-		UpdatedAt:   p.UpdatedAt,
+		ID:           p.ID,
+		Name:         p.Name,
+		Description:  p.Description,
+		PriceCents:   p.PriceCents,
+		Stock:        p.Stock,
+		ImageUrl:     p.ImageUrl,
+		ArchivedAt:   p.ArchivedAt,
+		CategoryID:   p.CategoryID,
+		CategoryName: p.CategoryName,
+		CreatedAt:    p.CreatedAt,
+		UpdatedAt:    p.UpdatedAt,
 	}
 }
 

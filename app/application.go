@@ -129,6 +129,8 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	server.Admin = admin_controller.NewServer(store, server.Tokens(), log)
 	server.Admin.Products = admin_controller.NewProductsController(store, log)
 	server.Me = controllers.NewMeController(store, log)
+	server.Categories = controllers.NewCategoriesController(store, log)
+	server.Admin.Categories = admin_controller.NewCategoriesController(store, log)
 	// bogie:wire
 	server.SetupRoutes()
 

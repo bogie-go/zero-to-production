@@ -8,5 +8,6 @@ import "github.com/gin-gonic/gin"
 func (s *Server) SetupRoutes(router *gin.RouterGroup) {
 	admin := s.WithStaff(router.Group("/admin"))
 	s.Products.SetupRoutes(admin)
+	s.Categories.SetupRoutes(admin)
 	// bogie:routes
 }

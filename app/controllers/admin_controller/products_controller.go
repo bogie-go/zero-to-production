@@ -84,6 +84,7 @@ func (ctl *ProductsController) Create(c *gin.Context) {
 	}
 	product, err := ctl.Store.CreateProduct(c.Request.Context(), domain.Product{
 		Name: req.Name, Description: req.Description, PriceCents: req.PriceCents, Stock: req.Stock, ImageUrl: req.ImageUrl,
+		CategoryID: req.CategoryID,
 	})
 	if err != nil {
 		ctl.fail(c, err)
@@ -109,6 +110,7 @@ func (ctl *ProductsController) Update(c *gin.Context) {
 	existing.PriceCents = req.PriceCents
 	existing.Stock = req.Stock
 	existing.ImageUrl = req.ImageUrl
+	existing.CategoryID = req.CategoryID
 	product, err := ctl.Store.UpdateProduct(c.Request.Context(), existing)
 	if err != nil {
 		ctl.fail(c, err)
@@ -181,6 +183,7 @@ func productView(p domain.Product) views.ProductResponse {
 		Stock:       p.Stock,
 		ImageUrl:    p.ImageUrl,
 		ArchivedAt:  p.ArchivedAt,
+		CategoryID:  p.CategoryID,
 		CreatedAt:   p.CreatedAt,
 		UpdatedAt:   p.UpdatedAt,
 	}

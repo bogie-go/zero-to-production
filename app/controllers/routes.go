@@ -41,6 +41,7 @@ func (s *Server) SetupRoutes() {
 	s.Orders.SetupRoutes(s.WithUser(&r.RouterGroup))
 	s.Admin.SetupRoutes(&r.RouterGroup)
 	s.Me.SetupRoutes(s.WithUser(&r.RouterGroup))
+	s.Categories.SetupRoutes(&r.RouterGroup)
 	// bogie:routes
 
 	// Every request nothing above claims, in order: a file in public/,

@@ -18,9 +18,9 @@
       .form .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
       .form .wide { grid-column: 1 / -1; }
       .form label { display: block; font-size: .82rem; color: var(--muted); margin: .8rem 0 .25rem; }
-      .form input, .form textarea { width: 100%; padding: .55rem .7rem; border-radius: .5rem; border: 1px solid var(--line);
+      .form input, .form textarea, .form select { width: 100%; padding: .55rem .7rem; border-radius: .5rem; border: 1px solid var(--line);
                                     background: var(--bg); color: inherit; font: inherit; }
-      .form input:focus, .form textarea:focus { outline: none; border-color: var(--accent); }
+      .form input:focus, .form textarea:focus, .form select:focus { outline: none; border-color: var(--accent); }
       .form .actions { display: flex; gap: .6rem; margin-top: 1.1rem; }
       .err { color: var(--accent); font-size: .9rem; margin: .8rem 0 0; }
       table { width: 100%; border-collapse: collapse; }
@@ -76,6 +76,11 @@
             <div class="wide"><label for="description">Description</label><textarea id="description" rows="3" x-model="form.description"></textarea></div>
             <div><label for="price">Price (USD)</label><input id="price" x-model="form.price" inputmode="decimal" required></div>
             <div><label for="stock">Stock</label><input id="stock" type="number" min="0" step="1" x-model="form.stock" required></div>
+            <div class="wide"><label for="category">Category</label>
+              <select id="category" x-model="form.category_id">
+                <option value="">No category</option>
+                <template x-for="c in categories" :key="c.id"><option :value="String(c.id)" x-text="c.name"></option></template>
+              </select></div>
             <div class="wide"><label for="image">Image URL</label><input id="image" x-model="form.image_url" placeholder="/images/products/example.webp"></div>
           </div>
           <p class="err" x-show="formError" x-text="formError"></p>
@@ -88,12 +93,13 @@
         <p class="state" x-show="products === null">Loading&hellip;</p>
         <p class="state" x-show="products !== null && visible.length === 0">No products to show.</p>
         <table x-show="products !== null && visible.length > 0">
-          <thead><tr><th></th><th>Name</th><th class="num">Price</th><th class="num">Stock</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Name</th><th>Category</th><th class="num">Price</th><th class="num">Stock</th><th></th></tr></thead>
           <tbody>
             <template x-for="p in visible" :key="p.id">
               <tr :class="{ archived: p.archived_at }">
                 <td><div class="thumb"><img :src="p.image_url" :alt="p.name" loading="lazy"></div></td>
                 <td><span x-text="p.name"></span> <span class="badge" x-show="p.archived_at">Archived</span></td>
+                <td x-text="categoryName(p.category_id)"></td>
                 <td class="num" x-text="formatPrice(p.price_cents)"></td>
                 <td class="num" :class="{ low: p.stock <= 5 }" x-text="p.stock"></td>
                 <td class="actions">
@@ -123,6 +129,7 @@
         return {
           ...adminShell(),
           products: null,
+          categories: [],
           showArchived: false,
           form: null,
           formError: '',
@@ -136,8 +143,15 @@
             this.loading = false;
             await this.refresh();
           },
+          // The categories fill the form's select and name each row's.
+          categoryName(id) {
+            const c = this.categories.find((c) => c.id === id);
+            return c ? c.name : '';
+          },
           async refresh() {
             try {
+              const cats = await this.api('/admin/categories');
+              if (cats.ok) this.categories = (await cats.json()).categories || [];
               const res = await this.api('/admin/products');
               if (!res.ok) throw new Error('status ' + res.status);
               this.products = (await res.json()).products || [];
@@ -145,12 +159,13 @@
               this.error = 'Could not load products: ' + e.message;
             }
           },
-          blank() { return { id: null, name: '', description: '', price: '', stock: '0', image_url: '' }; },
+          blank() { return { id: null, name: '', description: '', price: '', stock: '0', image_url: '', category_id: '' }; },
           startNew() { this.notice = ''; this.formError = ''; this.form = this.blank(); },
           startEdit(p) {
             this.notice = ''; this.formError = '';
             this.form = { id: p.id, name: p.name, description: p.description, price: (p.price_cents / 100).toFixed(2),
-                          stock: String(p.stock), image_url: p.image_url };
+                          stock: String(p.stock), image_url: p.image_url,
+                          category_id: p.category_id ? String(p.category_id) : '' };
             window.scrollTo({ top: 0, behavior: 'smooth' });
           },
           cancel() { this.form = null; this.formError = ''; },
@@ -167,6 +182,7 @@
                 body: JSON.stringify({
                   name: this.form.name, description: this.form.description, price_cents: cents,
                   stock: parseInt(this.form.stock, 10), image_url: this.form.image_url,
+                  category_id: this.form.category_id ? parseInt(this.form.category_id, 10) : null,
                 }),
               });
               const data = await res.json();

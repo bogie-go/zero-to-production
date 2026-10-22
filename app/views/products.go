@@ -13,8 +13,13 @@ type ProductResponse struct {
 	Stock       int32      `json:"stock"`
 	ImageUrl    string     `json:"image_url"`
 	ArchivedAt  *time.Time `json:"archived_at"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	// CategoryID is null for an uncategorized product; CategoryName is filled
+	// where the response joined the category (the shop's listing) and empty
+	// otherwise.
+	CategoryID   *int64    `json:"category_id"`
+	CategoryName string    `json:"category_name"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // ProductsResponse is a listing.
@@ -31,4 +36,5 @@ type ProductRequest struct {
 	PriceCents  int32  `json:"price_cents"`
 	Stock       int32  `json:"stock"`
 	ImageUrl    string `json:"image_url"`
+	CategoryID  *int64 `json:"category_id"`
 }

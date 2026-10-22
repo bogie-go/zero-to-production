@@ -25,8 +25,12 @@ func (s *Store) CreateProduct(ctx context.Context, p domain.Product) (domain.Pro
 	if err := p.Validate(); err != nil {
 		return domain.Product{}, err
 	}
-	row, err := s.q.CreateProduct(ctx, CreateProductParams{Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl})
+	row, err := s.q.CreateProduct(ctx, CreateProductParams{Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl, CategoryID: p.CategoryID})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return domain.Product{}, fmt.Errorf("%w: category does not exist", domain.ErrInvalid)
+		}
 		return domain.Product{}, fmt.Errorf("models: create product: %w", err)
 	}
 	return productFromRow(row), nil
@@ -67,10 +71,13 @@ func (s *Store) UpdateProduct(ctx context.Context, p domain.Product) (domain.Pro
 		return domain.Product{}, err
 	}
 	pk := p.ID
-	row, err := s.q.UpdateProduct(ctx, UpdateProductParams{ID: pk, Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl})
+	row, err := s.q.UpdateProduct(ctx, UpdateProductParams{ID: pk, Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl, CategoryID: p.CategoryID})
+	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.Product{}, domain.ErrNotFound
+	case errors.As(err, &pgErr) && pgErr.Code == "23503":
+		return domain.Product{}, fmt.Errorf("%w: category does not exist", domain.ErrInvalid)
 	case err != nil:
 		return domain.Product{}, fmt.Errorf("models: update product %v: %w", p.ID, err)
 	}
@@ -106,6 +113,7 @@ func productFromRow(r Product) domain.Product {
 		Stock:       r.Stock,
 		ImageUrl:    r.ImageUrl,
 		ArchivedAt:  timestamptzToTimePtr(r.ArchivedAt),
+		CategoryID:  r.CategoryID,
 		CreatedAt:   r.CreatedAt.Time,
 		UpdatedAt:   r.UpdatedAt.Time,
 	}

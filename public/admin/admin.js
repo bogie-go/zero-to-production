@@ -15,7 +15,7 @@ function adminShell() {
     links: [
       { label: 'Dashboard', href: '/admin/' },
       { label: 'Products', href: '/admin/products.html' },
-      { label: 'Categories', href: '/admin/categories.html', soon: true },
+      { label: 'Categories', href: '/admin/categories.html' },
       { label: 'Price rules', href: '/admin/price_rules.html', soon: true },
     ],
     isActive(link) {

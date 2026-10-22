@@ -463,7 +463,7 @@ are still ahead.
 ### Still to do
 
 - [ ] No way to promote a second staff account, or change the seeded password, short of editing the database by hand. Likely answer: an admin "manage users" endpoint, itself staff-only — not built yet.
-- [ ] Categories (folded in from Task B) and price-rule admin CRUD are still ahead — this note is step 1 of 3.
+- [x] Categories (folded in from Task B): done, see "Task F (2/3)" below. Price-rule admin CRUD is still ahead.
 - [ ] The public `GET /products`/`GET /products/:id` are unchanged; only `/admin/products` gained write actions.
 
 ## Pass 1 › Checkout UI (between Task F steps)
@@ -602,3 +602,28 @@ Decided with the user while setting up mail: the credentials file should be grou
 - **The design wart this exposed:** the signup page signed up and *then* logged in, to merge the guest cart, so a new user would have got a welcome email and a "new sign-in" alert seconds apart. Fix: the cart merge moved out of `SessionsController` into `app/services/cartmerge` (`Merger.FromAuthorization`), and `UsersController` calls it too (best effort: the account exists by then, so a failed merge is logged, not an error). `login.html` now sends the guest token with either request and signs a new account in by the signup itself.
 - Checked in real Chrome: a guest with 2 items signs up (the welcome email only, cart still 2), logs out and back in (the alert, with time, `::1` and the browser).
 - Known limits: an alert for **every** login is noisy for someone who logs in often, and `ClientIP()` trusts `X-Forwarded-For` from any proxy until `SetTrustedProxies` is configured for the deployment (Task H). The fix for noise is remembering known devices or addresses, which needs a table.
+
+## Pass 1 › Task F (2/3): categories (Task B, folded in)
+
+The plan's Task B, "Group products into categories: relationships, filtering, JOIN", skipped since 2026-10-18 and folded into the admin work by decision on 2026-10-22.
+
+### What was done
+
+1. **The model and the relationship.** `bogie g model category name:string:uniq` and `bogie g migration add_category_to_products category:references`. The generated migration is `NOT NULL` with no default, which cannot apply to a table that has rows, so it was edited to `category_id bigint REFERENCES categories (id) ON DELETE SET NULL`: a product belongs to at most one category, and deleting a category un-categorizes its products (kept, not refused, not deleted). `category_id` was threaded through `products.sql`, the generated `products.go` and `domain.Product` (`CategoryID *int64`) by hand, as `role` was for users; sqlc maps a nullable `bigint` straight to `*int64`.
+2. **The JOIN.** `ListActiveProducts` (the shop's catalog) is now a `LEFT JOIN categories`, so each product carries its category's name and an uncategorized one still appears; `sqlc.narg('category_id')` makes the filter optional in one query (NULL means every category). `GET /products?category_id=N` filters; a non-number is a 422. `GET /categories` is a LEFT JOIN with an aggregate: every category with its count of *active* products (an archived one does not count; an empty category shows 0).
+3. **Admin:** `bogie g controller admin/categories index show create update destroy` (full CRUD behind the staff gate), `/admin/categories.html` on the sidebar shell, and the product form has a category select with a category column in the table. A product pointed at a category that does not exist is a 422 on create and update.
+4. **Shop:** category chips (plain links, `/?category_id=3`, so a filtered view is bookmarkable and the back button works; only categories with something in them), the category name on each card and a link on the product page.
+5. **Seeds:** `bogie g seed categories` files the demo catalog into four categories, never moving a product that already has one, so re-running cannot undo an admin's edit.
+6. Verified in real Chrome: the chips and their counts, filtering and the active chip, the detail page's category link, creating a category (blank and duplicate names answer 422 with a readable message), assigning one from the product form, the shop's chips updating, and deleting the category leaving the product in the shop with no category.
+
+### Bogie gaps/bugs found
+
+- **A `:references` model's generated `Create`/`Update` do not classify a foreign-key violation**, the Create/Update side of the generated-`Delete` problem fixed in v0.2.13: a product pointed at a missing category surfaced as a raw 500. Fixed here by hand in `products.go` (23503 becomes `ErrInvalid`, "category does not exist"). Worth fixing in `g model` the same way.
+- `g migration add_x_to_y x:references` writes `NOT NULL` with no default (as `:datetime` did): it cannot apply to a table with rows, and a nullable reference needs a hand edit.
+- The generated model test's zero-value `Update...` again failed once `Validate` became real (third model to hit it).
+
+### Still to do
+
+- [ ] Price-rule admin CRUD (step 3 of 3).
+- [ ] Products still hold one category; many-to-many (tags) would be a join table and is out of scope.
+- [ ] Category order is by name; no manual ordering.

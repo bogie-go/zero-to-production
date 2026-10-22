@@ -24,6 +24,13 @@ type CartItem struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type Category struct {
+	ID        int64
+	Name      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type Order struct {
 	ID            int64
 	UserID        int64
@@ -68,6 +75,7 @@ type Product struct {
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	ArchivedAt  pgtype.Timestamptz
+	CategoryID  *int64
 }
 
 type User struct {

@@ -22,6 +22,7 @@ func Run(ctx context.Context, s *models.Store) error {
 		func() error { return SeedProduct(ctx, s) },
 		func() error { return SeedPriceRules(ctx, s) },
 		func() error { return SeedStaffUser(ctx, s) },
+		func() error { return SeedCategories(ctx, s) },
 		// bogie:seeds
 	} {
 		if err := seed(); err != nil {

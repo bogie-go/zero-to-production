@@ -7,10 +7,12 @@ package models
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const archiveProduct = `-- name: ArchiveProduct :one
-UPDATE products SET archived_at = COALESCE(archived_at, now()), updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at
+UPDATE products SET archived_at = COALESCE(archived_at, now()), updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at, category_id
 `
 
 func (q *Queries) ArchiveProduct(ctx context.Context, id int64) (Product, error) {
@@ -26,6 +28,7 @@ func (q *Queries) ArchiveProduct(ctx context.Context, id int64) (Product, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.CategoryID,
 	)
 	return i, err
 }
@@ -48,12 +51,30 @@ func (q *Queries) DecrementProductStock(ctx context.Context, arg DecrementProduc
 }
 
 const getActiveProduct = `-- name: GetActiveProduct :one
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE id = $1 AND archived_at IS NULL
+SELECT p.id, p.name, p.description, p.price_cents, p.stock, p.image_url, p.archived_at,
+       p.category_id, p.created_at, p.updated_at, c.name AS category_name
+FROM products p
+LEFT JOIN categories c ON c.id = p.category_id
+WHERE p.id = $1 AND p.archived_at IS NULL
 `
 
-func (q *Queries) GetActiveProduct(ctx context.Context, id int64) (Product, error) {
+type GetActiveProductRow struct {
+	ID           int64
+	Name         string
+	Description  string
+	PriceCents   int32
+	Stock        int32
+	ImageUrl     string
+	ArchivedAt   pgtype.Timestamptz
+	CategoryID   *int64
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	CategoryName *string
+}
+
+func (q *Queries) GetActiveProduct(ctx context.Context, id int64) (GetActiveProductRow, error) {
 	row := q.db.QueryRow(ctx, getActiveProduct, id)
-	var i Product
+	var i GetActiveProductRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -61,15 +82,17 @@ func (q *Queries) GetActiveProduct(ctx context.Context, id int64) (Product, erro
 		&i.PriceCents,
 		&i.Stock,
 		&i.ImageUrl,
+		&i.ArchivedAt,
+		&i.CategoryID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ArchivedAt,
+		&i.CategoryName,
 	)
 	return i, err
 }
 
 const getProductByName = `-- name: GetProductByName :one
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE name = $1
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at, category_id FROM products WHERE name = $1
 `
 
 func (q *Queries) GetProductByName(ctx context.Context, name string) (Product, error) {
@@ -85,23 +108,53 @@ func (q *Queries) GetProductByName(ctx context.Context, name string) (Product, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.CategoryID,
 	)
 	return i, err
 }
 
 const listActiveProducts = `-- name: ListActiveProducts :many
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE archived_at IS NULL ORDER BY created_at DESC, id DESC LIMIT $1
+SELECT p.id, p.name, p.description, p.price_cents, p.stock, p.image_url, p.archived_at,
+       p.category_id, p.created_at, p.updated_at, c.name AS category_name
+FROM products p
+LEFT JOIN categories c ON c.id = p.category_id
+WHERE p.archived_at IS NULL
+  AND ($1::bigint IS NULL OR p.category_id = $1::bigint)
+ORDER BY p.created_at DESC, p.id DESC
+LIMIT $2
 `
 
-func (q *Queries) ListActiveProducts(ctx context.Context, limit int32) ([]Product, error) {
-	rows, err := q.db.Query(ctx, listActiveProducts, limit)
+type ListActiveProductsParams struct {
+	CategoryID *int64
+	RowLimit   int32
+}
+
+type ListActiveProductsRow struct {
+	ID           int64
+	Name         string
+	Description  string
+	PriceCents   int32
+	Stock        int32
+	ImageUrl     string
+	ArchivedAt   pgtype.Timestamptz
+	CategoryID   *int64
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	CategoryName *string
+}
+
+// The shop's catalog: active products, each with its category's name (a LEFT
+// JOIN, so an uncategorized product still appears), optionally one category's.
+// narg makes category_id optional: NULL means every category.
+func (q *Queries) ListActiveProducts(ctx context.Context, arg ListActiveProductsParams) ([]ListActiveProductsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveProducts, arg.CategoryID, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Product{}
+	items := []ListActiveProductsRow{}
 	for rows.Next() {
-		var i Product
+		var i ListActiveProductsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -109,9 +162,11 @@ func (q *Queries) ListActiveProducts(ctx context.Context, limit int32) ([]Produc
 			&i.PriceCents,
 			&i.Stock,
 			&i.ImageUrl,
+			&i.ArchivedAt,
+			&i.CategoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.ArchivedAt,
+			&i.CategoryName,
 		); err != nil {
 			return nil, err
 		}
@@ -124,7 +179,7 @@ func (q *Queries) ListActiveProducts(ctx context.Context, limit int32) ([]Produc
 }
 
 const restoreProduct = `-- name: RestoreProduct :one
-UPDATE products SET archived_at = NULL, updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at
+UPDATE products SET archived_at = NULL, updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at, category_id
 `
 
 func (q *Queries) RestoreProduct(ctx context.Context, id int64) (Product, error) {
@@ -140,6 +195,7 @@ func (q *Queries) RestoreProduct(ctx context.Context, id int64) (Product, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+		&i.CategoryID,
 	)
 	return i, err
 }

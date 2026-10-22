@@ -34,7 +34,8 @@ type Server struct {
 	Tokens staffTokens
 	Log    *slog.Logger
 
-	Products *ProductsController
+	Products   *ProductsController
+	Categories *CategoriesController
 	// bogie:controllers
 }
 

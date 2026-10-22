@@ -32,7 +32,10 @@
             <h2><a href="/admin/products.html" style="color:inherit">Products</a></h2>
             <p x-text="productCount + ' in the catalog'"></p>
           </div>
-          <div class="card soon"><h2>Categories</h2><p>Coming soon</p></div>
+          <div class="card">
+            <h2><a href="/admin/categories.html" style="color:inherit">Categories</a></h2>
+            <p x-text="categoryCount + ' in the catalog'"></p>
+          </div>
           <div class="card soon"><h2>Price rules</h2><p>Coming soon</p></div>
         </div>
       </main>
@@ -48,12 +51,15 @@
         return {
           ...adminShell(),
           productCount: 0,
+          categoryCount: 0,
           async load() {
             if (!(await this.guard())) return;
             try {
               const res = await this.api('/admin/products');
               if (!res.ok) throw new Error('status ' + res.status);
               this.productCount = ((await res.json()).products || []).length;
+              const cats = await this.api('/admin/categories');
+              if (cats.ok) this.categoryCount = ((await cats.json()).categories || []).length;
             } catch (e) {
               this.error = 'Could not load the admin area: ' + e.message;
             } finally {

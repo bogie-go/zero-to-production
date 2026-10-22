@@ -38,7 +38,7 @@ func TestArchiveHidesAProductFromTheShopAndRestoreBringsItBack(t *testing.T) {
 	if _, err := store.GetActiveProduct(ctx, id); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("GetActiveProduct(archived): err = %v, want ErrNotFound", err)
 	}
-	if active, _ := store.ListActiveProducts(ctx, 10); len(active) != 0 {
+	if active, _ := store.ListActiveProducts(ctx, nil, 10); len(active) != 0 {
 		t.Errorf("ListActiveProducts = %v, want none", active)
 	}
 	if all, _ := store.ListProducts(ctx, 10); len(all) != 1 || all[0].ArchivedAt == nil {

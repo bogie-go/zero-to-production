@@ -57,6 +57,10 @@
       .add .note { font-size: .88rem; color: var(--muted); }
       .add .note.ok { color: var(--accent); }
 
+      .cat { margin: 0 0 .25rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+      .cat a { color: var(--muted); text-decoration: none; }
+      .cat a:hover { color: var(--accent); }
+
       footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
       footer .wrap { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
       footer code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel);
@@ -89,6 +93,9 @@
           <img :src="product && product.image_url" :alt="product && product.name" loading="lazy">
         </div>
         <div>
+          <p class="cat" x-show="product && product.category_name">
+            <a :href="'/?category_id=' + (product && product.category_id)" x-text="product && product.category_name"></a>
+          </p>
           <h1 x-text="product && product.name"></h1>
           <p class="desc" x-text="product && product.description"></p>
           <p class="price" x-text="product && formatPrice(product.price_cents)"></p>
