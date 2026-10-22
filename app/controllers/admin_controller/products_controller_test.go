@@ -47,6 +47,12 @@ type fakeProductsStore struct {
 	list    []domain.Product
 	err     error
 
+	total int64
+
+	gotArchived bool
+	gotLimit    int32
+	gotOffset   int32
+
 	gotID      string
 	gotProduct domain.Product
 	deleted    bool
@@ -59,8 +65,13 @@ func (f *fakeProductsStore) GetProduct(_ context.Context, id string) (domain.Pro
 	return f.product, f.err
 }
 
-func (f *fakeProductsStore) ListProducts(_ context.Context, limit int32) ([]domain.Product, error) {
+func (f *fakeProductsStore) ListProductsPage(_ context.Context, includeArchived bool, limit, offset int32) ([]domain.Product, error) {
+	f.gotArchived, f.gotLimit, f.gotOffset = includeArchived, limit, offset
 	return f.list, f.err
+}
+
+func (f *fakeProductsStore) CountProducts(_ context.Context, _ bool) (int64, error) {
+	return f.total, f.err
 }
 
 func (f *fakeProductsStore) CreateProduct(_ context.Context, p domain.Product) (domain.Product, error) {
@@ -239,5 +250,27 @@ func TestAdminProductsArchiveRequiresStaff(t *testing.T) {
 	rec := adminProductsRequest(t, store, customer, http.MethodPost, "/admin/products/5/archive", "", bearerFor(t, "9"))
 	if rec.Code != http.StatusForbidden || store.archived {
 		t.Errorf("customer archive: %d archived=%v, want 403 and nothing archived", rec.Code, store.archived)
+	}
+}
+
+// The admin list includes archived products unless told not to, and pages.
+func TestAdminProductsIndexPagesAndFiltersArchived(t *testing.T) {
+	store := &fakeProductsStore{total: 45}
+	rec := adminProductsRequest(t, store, aStaffUser, http.MethodGet, "/admin/products", "", bearerFor(t, "1"))
+	if !store.gotArchived || store.gotLimit != 20 || store.gotOffset != 0 {
+		t.Errorf("default: archived %v limit %d offset %d, want true 20 0", store.gotArchived, store.gotLimit, store.gotOffset)
+	}
+	if !strings.Contains(rec.Body.String(), `"total_pages":3`) {
+		t.Errorf("body = %s, want 3 total pages of 20 for 45", rec.Body)
+	}
+
+	adminProductsRequest(t, store, aStaffUser, http.MethodGet, "/admin/products?include_archived=false&page=2&per_page=10", "", bearerFor(t, "1"))
+	if store.gotArchived || store.gotLimit != 10 || store.gotOffset != 10 {
+		t.Errorf("page 2: archived %v limit %d offset %d, want false 10 10", store.gotArchived, store.gotLimit, store.gotOffset)
+	}
+
+	rec = adminProductsRequest(t, store, aStaffUser, http.MethodGet, "/admin/products?page=0", "", bearerFor(t, "1"))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("page=0: status = %d, want 422", rec.Code)
 	}
 }

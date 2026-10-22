@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 
 	"ecommerce/app/domain"
@@ -38,7 +39,7 @@ func TestArchiveHidesAProductFromTheShopAndRestoreBringsItBack(t *testing.T) {
 	if _, err := store.GetActiveProduct(ctx, id); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("GetActiveProduct(archived): err = %v, want ErrNotFound", err)
 	}
-	if active, _ := store.ListActiveProducts(ctx, nil, 10); len(active) != 0 {
+	if active, _ := store.ListActiveProducts(ctx, nil, 10, 0); len(active) != 0 {
 		t.Errorf("ListActiveProducts = %v, want none", active)
 	}
 	if all, _ := store.ListProducts(ctx, 10); len(all) != 1 || all[0].ArchivedAt == nil {
@@ -125,5 +126,78 @@ func TestArchivedProductsCannotBeBought(t *testing.T) {
 	}
 	if lines, _ := store.CartContents(ctx, cart.ID); len(lines) != 1 {
 		t.Errorf("cart after the refused checkout = %v, want the line still there", lines)
+	}
+}
+
+// Pages are slices of one total order: no product twice, none skipped, newest
+// first, and a page past the end is empty rather than an error. The count
+// follows the same filter, so the pager and the pages agree.
+func TestListActiveProductsPages(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	audio := category(t, store, "Audio")
+	for _, n := range []string{"A", "B", "C", "D", "E"} {
+		productIn(t, store, n, &audio.ID)
+	}
+	productIn(t, store, "Other", nil)
+	archived := productIn(t, store, "Gone", nil)
+	if _, err := store.ArchiveProduct(ctx, strconv.FormatInt(archived.ID, 10)); err != nil {
+		t.Fatal(err)
+	}
+
+	var seen []string
+	for offset := int32(0); offset < 6; offset += 2 {
+		page, err := store.ListActiveProducts(ctx, nil, 2, offset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range page {
+			seen = append(seen, p.Name)
+		}
+	}
+	want := []string{"Other", "E", "D", "C", "B", "A"}
+	if strings.Join(seen, ",") != strings.Join(want, ",") {
+		t.Errorf("pages of 2 = %v, want %v (newest first, archived left out)", seen, want)
+	}
+	if past, err := store.ListActiveProducts(ctx, nil, 2, 100); err != nil || len(past) != 0 {
+		t.Errorf("a page past the end = %v, %v; want empty", past, err)
+	}
+
+	if n, err := store.CountActiveProducts(ctx, nil); err != nil || n != 6 {
+		t.Errorf("count = %d, %v; want 6 (the archived one not counted)", n, err)
+	}
+	if n, err := store.CountActiveProducts(ctx, &audio.ID); err != nil || n != 5 {
+		t.Errorf("count in Audio = %d, %v; want 5", n, err)
+	}
+}
+
+// The admin's pages can hold the archived or leave them out, and the count
+// follows.
+func TestListProductsPageIncludesArchivedOnRequest(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	productIn(t, store, "Live", nil)
+	gone := productIn(t, store, "Gone", nil)
+	if _, err := store.ArchiveProduct(ctx, strconv.FormatInt(gone.ID, 10)); err != nil {
+		t.Fatal(err)
+	}
+
+	all, err := store.ListProductsPage(ctx, true, 10, 0)
+	if err != nil || len(all) != 2 {
+		t.Fatalf("with archived = %v, %v; want 2", all, err)
+	}
+	live, err := store.ListProductsPage(ctx, false, 10, 0)
+	if err != nil || len(live) != 1 || live[0].Name != "Live" {
+		t.Fatalf("without archived = %v, %v; want only Live", live, err)
+	}
+	if n, _ := store.CountProducts(ctx, true); n != 2 {
+		t.Errorf("count with archived = %d, want 2", n)
+	}
+	if n, _ := store.CountProducts(ctx, false); n != 1 {
+		t.Errorf("count without archived = %d, want 1", n)
+	}
+	second, err := store.ListProductsPage(ctx, true, 1, 1)
+	if err != nil || len(second) != 1 || second[0].Name != "Live" {
+		t.Errorf("page 2 of size 1 = %v, %v; want Live", second, err)
 	}
 }

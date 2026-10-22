@@ -59,6 +59,12 @@
       .chip:hover { border-color: var(--accent); }
       .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
       .chip .count { opacity: .7; margin-left: .25rem; }
+      .pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 2rem 0 0; }
+      .pager a { padding: .35rem .85rem; border-radius: 1rem; border: 1px solid var(--line); background: var(--panel);
+        color: inherit; text-decoration: none; }
+      .pager a:hover { border-color: var(--accent); }
+      .pager a.off { visibility: hidden; }
+      .pager .where { color: var(--muted); font-size: .9rem; }
       .card .cat { margin: 0 0 .15rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 
       footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
@@ -97,7 +103,10 @@
 
       <p class="state" x-show="loading">Loading products&hellip;</p>
       <p class="state" x-show="!loading && error" x-text="error"></p>
-      <p class="state" x-show="!loading && !error && products.length === 0">No products yet.</p>
+      <p class="state" x-show="!loading && !error && products.length === 0 && pagination.total === 0">No products yet.</p>
+      <p class="state" x-show="!loading && !error && products.length === 0 && pagination.total > 0">
+        There is no page <span x-text="page"></span>. <a :href="pageHref(pagination.total_pages)">Go to the last page</a>.
+      </p>
 
       <div class="grid" x-show="!loading && !error && products.length > 0">
         <template x-for="p in products" :key="p.id">
@@ -117,6 +126,12 @@
           </a>
         </template>
       </div>
+
+      <nav class="pager" x-show="!loading && !error && products.length > 0 && pagination.total_pages > 1" aria-label="Pages">
+        <a :class="{ off: pagination.page <= 1 }" :href="pageHref(pagination.page - 1)" rel="prev">&larr; Previous</a>
+        <span class="where" x-text="'Page ' + pagination.page + ' of ' + pagination.total_pages"></span>
+        <a :class="{ off: pagination.page >= pagination.total_pages }" :href="pageHref(pagination.page + 1)" rel="next">Next &rarr;</a>
+      </nav>
     </main>
 
     <footer>
@@ -155,6 +170,11 @@
           // The chosen category is in the address (/?category_id=3), so a
           // filtered view can be bookmarked and the back button works.
           selected: parseInt(new URLSearchParams(location.search).get('category_id'), 10) || null,
+          // Which page of the catalog (/?page=2), and the server's answer about
+          // the whole list. ?per_page=N is passed through untouched.
+          page: parseInt(new URLSearchParams(location.search).get('page'), 10) || 1,
+          perPage: new URLSearchParams(location.search).get('per_page'),
+          pagination: { page: 1, per_page: 0, total: 0, total_pages: 0 },
           loading: true,
           error: null,
           cartCount: 0,
@@ -166,15 +186,27 @@
             const c = this.categories.find((c) => c.id === this.selected);
             return c ? c.name : '';
           },
+          // A link to another page of this same view: the category and the
+          // page size stay, only the page changes.
+          pageHref(page) {
+            const q = new URLSearchParams();
+            if (this.selected) q.set('category_id', this.selected);
+            if (this.perPage) q.set('per_page', this.perPage);
+            if (page > 1) q.set('page', page);
+            const s = q.toString();
+            return s ? '/?' + s : '/';
+          },
           async load() {
             try {
-              const [cats, prods] = await Promise.all([
-                fetch('/categories'),
-                fetch('/products' + (this.selected ? '?category_id=' + this.selected : '')),
-              ]);
+              const q = new URLSearchParams({ page: this.page });
+              if (this.selected) q.set('category_id', this.selected);
+              if (this.perPage) q.set('per_page', this.perPage);
+              const [cats, prods] = await Promise.all([fetch('/categories'), fetch('/products?' + q)]);
               if (!prods.ok) throw new Error('status ' + prods.status);
               if (cats.ok) this.categories = (await cats.json()).categories || [];
-              this.products = (await prods.json()).products || [];
+              const data = await prods.json();
+              this.products = data.products || [];
+              if (data.pagination) this.pagination = data.pagination;
             } catch (e) {
               this.error = 'Could not load products: ' + e.message;
             } finally {

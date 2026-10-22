@@ -33,6 +33,33 @@ func (q *Queries) ArchiveProduct(ctx context.Context, id int64) (Product, error)
 	return i, err
 }
 
+const countActiveProducts = `-- name: CountActiveProducts :one
+SELECT count(*) FROM products p
+WHERE p.archived_at IS NULL
+  AND ($1::bigint IS NULL OR p.category_id = $1::bigint)
+`
+
+// How many products that list holds in all, for the pager. The same filter,
+// so the count and the pages can never disagree.
+func (q *Queries) CountActiveProducts(ctx context.Context, categoryID *int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveProducts, categoryID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countProducts = `-- name: CountProducts :one
+SELECT count(*) FROM products
+WHERE ($1::boolean OR archived_at IS NULL)
+`
+
+func (q *Queries) CountProducts(ctx context.Context, includeArchived bool) (int64, error) {
+	row := q.db.QueryRow(ctx, countProducts, includeArchived)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const decrementProductStock = `-- name: DecrementProductStock :execrows
 UPDATE products SET stock = stock - $1, updated_at = now() WHERE id = $2 AND stock >= $1 AND archived_at IS NULL
 `
@@ -121,11 +148,12 @@ LEFT JOIN categories c ON c.id = p.category_id
 WHERE p.archived_at IS NULL
   AND ($1::bigint IS NULL OR p.category_id = $1::bigint)
 ORDER BY p.created_at DESC, p.id DESC
-LIMIT $2
+LIMIT $3 OFFSET $2
 `
 
 type ListActiveProductsParams struct {
 	CategoryID *int64
+	RowOffset  int32
 	RowLimit   int32
 }
 
@@ -147,7 +175,7 @@ type ListActiveProductsRow struct {
 // JOIN, so an uncategorized product still appears), optionally one category's.
 // narg makes category_id optional: NULL means every category.
 func (q *Queries) ListActiveProducts(ctx context.Context, arg ListActiveProductsParams) ([]ListActiveProductsRow, error) {
-	rows, err := q.db.Query(ctx, listActiveProducts, arg.CategoryID, arg.RowLimit)
+	rows, err := q.db.Query(ctx, listActiveProducts, arg.CategoryID, arg.RowOffset, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +195,52 @@ func (q *Queries) ListActiveProducts(ctx context.Context, arg ListActiveProducts
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CategoryName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProductsPage = `-- name: ListProductsPage :many
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at, category_id FROM products
+WHERE ($1::boolean OR archived_at IS NULL)
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListProductsPageParams struct {
+	IncludeArchived bool
+	RowOffset       int32
+	RowLimit        int32
+}
+
+// The admin's list: every product, or only the unarchived, a page at a time.
+// The order is total (created_at, then id), so pages never overlap or skip.
+func (q *Queries) ListProductsPage(ctx context.Context, arg ListProductsPageParams) ([]Product, error) {
+	rows, err := q.db.Query(ctx, listProductsPage, arg.IncludeArchived, arg.RowOffset, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Product{}
+	for rows.Next() {
+		var i Product
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.PriceCents,
+			&i.Stock,
+			&i.ImageUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ArchivedAt,
+			&i.CategoryID,
 		); err != nil {
 			return nil, err
 		}

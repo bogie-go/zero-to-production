@@ -38,12 +38,13 @@ func (s *Store) FindOrCreateProductByName(ctx context.Context, p domain.Product)
 	}
 }
 
-// ListActiveProducts is the shop's catalog: every product that is not
+// ListActiveProducts is one page of the shop's catalog: products that are not
 // archived, newest first, each with its category's name, and only one
-// category's when categoryID is given. ListProducts (generated) still returns
-// all of them, archived included, for the admin.
-func (s *Store) ListActiveProducts(ctx context.Context, categoryID *int64, limit int32) ([]domain.Product, error) {
-	rows, err := s.q.ListActiveProducts(ctx, ListActiveProductsParams{CategoryID: categoryID, RowLimit: limit})
+// category's when categoryID is given. limit and offset pick the page;
+// CountActiveProducts says how many there are in all. ListProducts
+// (generated) still returns all of them, archived included.
+func (s *Store) ListActiveProducts(ctx context.Context, categoryID *int64, limit, offset int32) ([]domain.Product, error) {
+	rows, err := s.q.ListActiveProducts(ctx, ListActiveProductsParams{CategoryID: categoryID, RowLimit: limit, RowOffset: offset})
 	if err != nil {
 		return nil, fmt.Errorf("models: list active products: %w", err)
 	}
@@ -56,6 +57,39 @@ func (s *Store) ListActiveProducts(ctx context.Context, categoryID *int64, limit
 		})
 	}
 	return out, nil
+}
+
+// CountActiveProducts is how many products ListActiveProducts would return
+// across all its pages, for the same category filter.
+func (s *Store) CountActiveProducts(ctx context.Context, categoryID *int64) (int64, error) {
+	n, err := s.q.CountActiveProducts(ctx, categoryID)
+	if err != nil {
+		return 0, fmt.Errorf("models: count active products: %w", err)
+	}
+	return n, nil
+}
+
+// ListProductsPage is one page of the admin's list, newest first:
+// every product, or with includeArchived false only those not archived.
+func (s *Store) ListProductsPage(ctx context.Context, includeArchived bool, limit, offset int32) ([]domain.Product, error) {
+	rows, err := s.q.ListProductsPage(ctx, ListProductsPageParams{IncludeArchived: includeArchived, RowLimit: limit, RowOffset: offset})
+	if err != nil {
+		return nil, fmt.Errorf("models: list products page: %w", err)
+	}
+	out := make([]domain.Product, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, productFromRow(r))
+	}
+	return out, nil
+}
+
+// CountProducts is how many products ListProductsPage covers in all.
+func (s *Store) CountProducts(ctx context.Context, includeArchived bool) (int64, error) {
+	n, err := s.q.CountProducts(ctx, includeArchived)
+	if err != nil {
+		return 0, fmt.Errorf("models: count products: %w", err)
+	}
+	return n, nil
 }
 
 // GetActiveProduct finds one product the shop is still selling, with its

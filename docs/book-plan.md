@@ -31,7 +31,7 @@ By the end of this book, you can build a Go backend with Bogie, design it well e
 | H | Let's go live | Deployment, config, secrets |
 | I | Is it healthy? | Logging, monitoring, safe updates |
 
-Testing runs through every task. Out of scope (sketched in "Where to go next"): real payments, shipping, tax, reviews, image uploads, multiple vendors, product variants (size/color, per-variant price and stock — considered for Task B, deferred: it would mean reworking the cart and seeds already built around a bare `product_id`, not just adding something new).
+Testing runs through every task (see "Testing" below). Out of scope (sketched in "Where to go next"): real payments, shipping, tax, reviews, image uploads, multiple vendors, product variants (size/color, per-variant price and stock — considered for Task B, deferred: it would mean reworking the cart and seeds already built around a bare `product_id`, not just adding something new).
 
 ## Pass 1 status and checkpoints (2026-10-22)
 
@@ -57,6 +57,33 @@ Pass 1 is built through Task G. Task B (categories) was skipped at first and bui
 | G | `task-g3` | the sign-in alert (Task G complete) |
 
 Next in the plan: H (deploy) and I (health). `docs/build-notes.md` has the open items.
+
+## Testing
+
+Testing is taught in the tasks, not in a chapter of its own: each task ends green on `bin/ci`, and the new kind of test arrives with the task that needs it.
+
+| Layer | What it checks | Where it is taught |
+|---|---|---|
+| Unit, table-driven | pure logic with no I/O: validation, the price rules, pagination parsing, password and token helpers | A (validation), Price rules, D |
+| Store / model | real SQL against a real Postgres test database, one clean state per test: ordering, limit and offset, counts, constraints, FK and unique errors | A, B, E |
+| Transaction | all-or-nothing: a failing line leaves stock, order and cart untouched; concurrent buyers never oversell | E |
+| Controller (HTTP) | `httptest` against the router with a fake store declared next to the controller (rule 2): statuses, JSON shapes, 401/403/422 | every task that adds an endpoint |
+| Jobs and mail | a worker run directly with a fake mailer; the enqueue happens inside the transaction and rolls back with it | G |
+| Contract | the JSON the UI relies on does not change by accident (golden or shape checks), since the UI is the contract | A onward, before the UI freeze |
+| End to end | a real browser against a running server: browse, add to cart, sign up, check out, admin edit | Pass 2, `bin/e2e` |
+| Webhooks | late, duplicate and out-of-order events from the payment simulator leave one correct result | payment simulator |
+
+Rules for tests in the book:
+- Every task adds the test with the code, in the same step, never as a later "testing pass".
+- The test database is separate and is configured only through the environment (`ECOMMERCE_TEST_DATABASE_URL`), so a test can never touch development data.
+- Hand-written teaching code (price rules, cart, webhooks) gets the most tests, including the edge cases a reader would not think of (time windows, stacking, duplicates).
+- Bugs found later come with a test that fails first (the category select, the cart merge, the soft delete are the examples).
+
+Gaps to close in Pass 2:
+- The browser checks used in Pass 1 were ad hoc puppeteer scripts. Turn them into `bin/e2e`, kept out of `bin/ci` so readers need no Node for the core loop.
+- A test helper for authenticated requests (guest, user, staff), now repeated by hand.
+- A concurrency test for checkout and for `carts.token`.
+- Decide whether `bogie g model` should generate tests that survive a real `Validate` (see `docs/bogie-gaps.md`).
 
 ## Supporting pieces
 - UI: ready-made, acts as the API contract. Features unlock as endpoints appear; shows clear errors when a response doesn't match the contract; one setting for the base URL. Served by Bogie from the same origin (no CORS).

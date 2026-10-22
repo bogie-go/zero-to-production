@@ -22,9 +22,10 @@ type ProductResponse struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// ProductsResponse is a listing.
+// ProductsResponse is a page of a listing.
 type ProductsResponse struct {
-	Products []ProductResponse `json:"products"`
+	Products   []ProductResponse `json:"products"`
+	Pagination Pagination        `json:"pagination"`
 }
 
 // ProductRequest is the body of POST and PATCH /admin/products. A PATCH

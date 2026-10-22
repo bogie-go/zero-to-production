@@ -20,12 +20,16 @@ import (
 // test's fake is a few lines.
 type productsStore interface {
 	GetActiveProduct(ctx context.Context, id string) (domain.Product, error)
-	ListActiveProducts(ctx context.Context, categoryID *int64, limit int32) ([]domain.Product, error)
+	ListActiveProducts(ctx context.Context, categoryID *int64, limit, offset int32) ([]domain.Product, error)
+	CountActiveProducts(ctx context.Context, categoryID *int64) (int64, error)
 }
 
-// productsListLimit is how many a listing returns, newest first. Paging is
-// yours to add when a client needs more.
-const productsListLimit = 100
+// The catalog's page size: twelve unless the client asks (?per_page=), never
+// more than fifty.
+const (
+	productsPerPage    = 12
+	productsMaxPerPage = 50
+)
 
 // ProductsController is the HTTP surface of products: its dependencies, its
 // routes and its actions, one Rails controller in one file.
@@ -48,7 +52,8 @@ func (ctl *ProductsController) SetupRoutes(router *gin.RouterGroup) {
 	products.GET("/:id", ctl.Show)
 }
 
-// Index handles GET /products, optionally ?category_id=N.
+// Index handles GET /products, optionally ?category_id=N, ?page=N and
+// ?per_page=N.
 //
 // A handler converts HTTP into domain values, calls one service function,
 // and converts the result back. Nothing below app/controllers sees
@@ -64,12 +69,22 @@ func (ctl *ProductsController) Index(c *gin.Context) {
 		}
 		categoryID = &id
 	}
-	products, err := ctl.Store.ListActiveProducts(c.Request.Context(), categoryID, productsListLimit)
+	page, err := views.NewPageRequest(c.Query("page"), c.Query("per_page"), productsPerPage, productsMaxPerPage)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
+		return
+	}
+	products, err := ctl.Store.ListActiveProducts(c.Request.Context(), categoryID, page.PerPage, page.Offset())
 	if err != nil {
 		ctl.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, productsView(products))
+	total, err := ctl.Store.CountActiveProducts(c.Request.Context(), categoryID)
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, productsView(products, page.Pagination(total)))
 }
 
 // Show handles GET /products/:id.
@@ -119,8 +134,8 @@ func productView(p domain.Product) views.ProductResponse {
 	}
 }
 
-func productsView(products []domain.Product) views.ProductsResponse {
-	out := views.ProductsResponse{Products: make([]views.ProductResponse, 0, len(products))}
+func productsView(products []domain.Product, pagination views.Pagination) views.ProductsResponse {
+	out := views.ProductsResponse{Products: make([]views.ProductResponse, 0, len(products)), Pagination: pagination}
 	for _, p := range products {
 		out.Products = append(out.Products, productView(p))
 	}

@@ -37,7 +37,7 @@ func TestListActiveProductsJoinsAndFiltersByCategory(t *testing.T) {
 	productIn(t, store, "Mouse", &peripherals.ID)
 	productIn(t, store, "Mystery Box", nil)
 
-	all, err := store.ListActiveProducts(ctx, nil, 10)
+	all, err := store.ListActiveProducts(ctx, nil, 10, 0)
 	if err != nil || len(all) != 3 {
 		t.Fatalf("all = %v, %v; want 3 including the uncategorized one", all, err)
 	}
@@ -49,12 +49,12 @@ func TestListActiveProductsJoinsAndFiltersByCategory(t *testing.T) {
 		t.Errorf("category names = %v", names)
 	}
 
-	only, err := store.ListActiveProducts(ctx, &audio.ID, 10)
+	only, err := store.ListActiveProducts(ctx, &audio.ID, 10, 0)
 	if err != nil || len(only) != 1 || only[0].Name != "Headphones" || only[0].CategoryID == nil || *only[0].CategoryID != audio.ID {
 		t.Errorf("audio only = %+v, %v", only, err)
 	}
 	none := int64(999999999)
-	if empty, err := store.ListActiveProducts(ctx, &none, 10); err != nil || len(empty) != 0 {
+	if empty, err := store.ListActiveProducts(ctx, &none, 10, 0); err != nil || len(empty) != 0 {
 		t.Errorf("a category with nothing = %v, %v; want an empty list, not an error", empty, err)
 	}
 

@@ -84,3 +84,5 @@ tr.archived td.actions { opacity: 1; }
   .sidebar nav { flex-direction: row; flex-wrap: wrap; }
   .content { padding: 1.25rem 1rem 3rem; }
 }
+
+.pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.5rem 0 0; color: var(--muted); font-size: .9rem; }

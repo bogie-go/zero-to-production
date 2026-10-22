@@ -24,8 +24,12 @@ type fakeProductsStore struct {
 	many []domain.Product
 	err  error
 
+	total int64
+
 	gotID         string
 	gotCategoryID *int64
+	gotLimit      int32
+	gotOffset     int32
 }
 
 func (f *fakeProductsStore) GetActiveProduct(_ context.Context, id string) (domain.Product, error) {
@@ -33,9 +37,14 @@ func (f *fakeProductsStore) GetActiveProduct(_ context.Context, id string) (doma
 	return f.one, f.err
 }
 
-func (f *fakeProductsStore) ListActiveProducts(_ context.Context, categoryID *int64, _ int32) ([]domain.Product, error) {
+func (f *fakeProductsStore) ListActiveProducts(_ context.Context, categoryID *int64, limit, offset int32) ([]domain.Product, error) {
 	f.gotCategoryID = categoryID
+	f.gotLimit, f.gotOffset = limit, offset
 	return f.many, f.err
+}
+
+func (f *fakeProductsStore) CountActiveProducts(_ context.Context, _ *int64) (int64, error) {
+	return f.total, f.err
 }
 
 // productsRequest mounts the controller alone on a bare router, so these
@@ -147,5 +156,51 @@ func TestProductsIndexRefusesANonNumericCategory(t *testing.T) {
 	rec := productsRequest(t, &fakeProductsStore{}, http.MethodGet, "/products?category_id=audio", "")
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("status = %d, want 422: %s", rec.Code, rec.Body)
+	}
+}
+
+// With no query the first page of twelve is asked for, and the answer says
+// where the client is in the whole list.
+func TestProductsIndexDefaultsToTheFirstPage(t *testing.T) {
+	store := &fakeProductsStore{many: []domain.Product{{ID: 1}}, total: 30}
+	rec := productsRequest(t, store, http.MethodGet, "/products", "")
+
+	if store.gotLimit != 12 || store.gotOffset != 0 {
+		t.Errorf("asked for limit %d offset %d, want 12 and 0", store.gotLimit, store.gotOffset)
+	}
+	var body struct {
+		Pagination struct {
+			Page       int   `json:"page"`
+			PerPage    int   `json:"per_page"`
+			Total      int64 `json:"total"`
+			TotalPages int   `json:"total_pages"`
+		} `json:"pagination"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if p := body.Pagination; p.Page != 1 || p.PerPage != 12 || p.Total != 30 || p.TotalPages != 3 {
+		t.Errorf("pagination = %+v", p)
+	}
+}
+
+func TestProductsIndexPassesThePageAndClampsPerPage(t *testing.T) {
+	store := &fakeProductsStore{}
+	productsRequest(t, store, http.MethodGet, "/products?page=3&per_page=5", "")
+	if store.gotLimit != 5 || store.gotOffset != 10 {
+		t.Errorf("page 3 of 5: limit %d offset %d, want 5 and 10", store.gotLimit, store.gotOffset)
+	}
+	productsRequest(t, store, http.MethodGet, "/products?per_page=5000", "")
+	if store.gotLimit != 50 {
+		t.Errorf("per_page=5000: limit %d, want it clamped to 50", store.gotLimit)
+	}
+}
+
+func TestProductsIndexRefusesABadPage(t *testing.T) {
+	for _, q := range []string{"page=0", "page=-1", "page=abc", "per_page=0", "per_page=x", "page=99999999999"} {
+		rec := productsRequest(t, &fakeProductsStore{}, http.MethodGet, "/products?"+q, "")
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("?%s: status = %d, want 422", q, rec.Code)
+		}
 	}
 }

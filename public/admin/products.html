@@ -28,18 +28,18 @@
         <div class="bar">
           <h1>Products</h1>
           <div class="tools">
-            <label class="toggle"><input type="checkbox" x-model="showArchived"> Show archived</label>
+            <label class="toggle"><input type="checkbox" x-model="showArchived" @change="page = 1; refresh()"> Show archived</label>
             <a class="btn primary" href="/admin/product.html">New product</a>
           </div>
         </div>
         <p class="err" x-show="notice" x-text="notice"></p>
 
         <p class="state" x-show="products === null">Loading&hellip;</p>
-        <p class="state" x-show="products !== null && visible.length === 0">No products to show.</p>
-        <table x-show="products !== null && visible.length > 0">
+        <p class="state" x-show="products !== null && products.length === 0">No products to show.</p>
+        <table x-show="products !== null && products.length > 0">
           <thead><tr><th></th><th>Name</th><th>Category</th><th class="num">Price</th><th class="num">Stock</th><th></th></tr></thead>
           <tbody>
-            <template x-for="p in visible" :key="p.id">
+            <template x-for="p in products" :key="p.id">
               <tr :class="{ archived: p.archived_at }">
                 <td><div class="thumb"><img :src="p.image_url" :alt="p.name" loading="lazy"></div></td>
                 <td><span x-text="p.name"></span> <span class="badge" x-show="p.archived_at">Archived</span></td>
@@ -56,6 +56,11 @@
             </template>
           </tbody>
         </table>
+        <p class="pager" x-show="pagination.total_pages > 1">
+          <button class="secondary" :disabled="pagination.page <= 1" @click="go(pagination.page - 1)">&larr; Previous</button>
+          <span x-text="'Page ' + pagination.page + ' of ' + pagination.total_pages + ' (' + pagination.total + ' products)'"></span>
+          <button class="secondary" :disabled="pagination.page >= pagination.total_pages" @click="go(pagination.page + 1)">Next &rarr;</button>
+        </p>
       </main>
     </div>
 
@@ -71,10 +76,9 @@
           products: null,
           categories: [],
           showArchived: false,
+          page: 1,
+          pagination: { page: 1, per_page: 0, total: 0, total_pages: 0 },
           notice: '',
-          get visible() {
-            return (this.products || []).filter((p) => this.showArchived || !p.archived_at);
-          },
           async load() {
             if (!(await this.guard())) return;
             this.loading = false;
@@ -89,13 +93,22 @@
             try {
               const cats = await this.api('/admin/categories');
               if (cats.ok) this.categories = (await cats.json()).categories || [];
-              const res = await this.api('/admin/products');
+              const res = await this.api('/admin/products?page=' + this.page + '&include_archived=' + this.showArchived);
               if (!res.ok) throw new Error('status ' + res.status);
-              this.products = (await res.json()).products || [];
+              const data = await res.json();
+              // Deleting or archiving the last row of the last page leaves it
+              // empty: step back to the new last page instead.
+              if (data.products.length === 0 && this.page > 1 && data.pagination.total_pages > 0) {
+                this.page = data.pagination.total_pages;
+                return this.refresh();
+              }
+              this.products = data.products;
+              this.pagination = data.pagination;
             } catch (e) {
               this.error = 'Could not load products: ' + e.message;
             }
           },
+          go(page) { this.page = page; this.notice = ''; return this.refresh(); },
           // Archive is the soft delete: off the shop, kept in every old order.
           async setArchived(p, archive) {
             this.notice = '';

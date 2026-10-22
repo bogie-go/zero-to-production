@@ -17,7 +17,8 @@ import (
 // call. *models.Store satisfies it.
 type productsStore interface {
 	GetProduct(ctx context.Context, id string) (domain.Product, error)
-	ListProducts(ctx context.Context, limit int32) ([]domain.Product, error)
+	ListProductsPage(ctx context.Context, includeArchived bool, limit, offset int32) ([]domain.Product, error)
+	CountProducts(ctx context.Context, includeArchived bool) (int64, error)
 	CreateProduct(ctx context.Context, p domain.Product) (domain.Product, error)
 	UpdateProduct(ctx context.Context, p domain.Product) (domain.Product, error)
 	DeleteProduct(ctx context.Context, id string) error
@@ -25,8 +26,11 @@ type productsStore interface {
 	RestoreProduct(ctx context.Context, id string) (domain.Product, error)
 }
 
-// productsListLimit mirrors the public ProductsController's own.
-const productsListLimit = 100
+// The admin list's page size, as the shop's catalog but a little longer.
+const (
+	productsPerPage    = 20
+	productsMaxPerPage = 100
+)
 
 // ProductsController is the admin surface of products: the full five
 // actions, unlike the public ProductsController's read-only two. Only
@@ -55,14 +59,27 @@ func (ctl *ProductsController) SetupRoutes(router *gin.RouterGroup) {
 	products.POST("/:id/restore", ctl.Restore)
 }
 
-// Index handles GET /admin/products.
+// Index handles GET /admin/products, ?page=N and ?per_page=N for the page,
+// and ?include_archived=false to leave the archived ones out (they are
+// included by default).
 func (ctl *ProductsController) Index(c *gin.Context) {
-	products, err := ctl.Store.ListProducts(c.Request.Context(), productsListLimit)
+	includeArchived := c.Query("include_archived") != "false"
+	page, err := views.NewPageRequest(c.Query("page"), c.Query("per_page"), productsPerPage, productsMaxPerPage)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
+		return
+	}
+	products, err := ctl.Store.ListProductsPage(c.Request.Context(), includeArchived, page.PerPage, page.Offset())
 	if err != nil {
 		ctl.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, productsView(products))
+	total, err := ctl.Store.CountProducts(c.Request.Context(), includeArchived)
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, productsView(products, page.Pagination(total)))
 }
 
 // Show handles GET /admin/products/:id.
@@ -189,8 +206,8 @@ func productView(p domain.Product) views.ProductResponse {
 	}
 }
 
-func productsView(products []domain.Product) views.ProductsResponse {
-	out := views.ProductsResponse{Products: make([]views.ProductResponse, 0, len(products))}
+func productsView(products []domain.Product, pagination views.Pagination) views.ProductsResponse {
+	out := views.ProductsResponse{Products: make([]views.ProductResponse, 0, len(products)), Pagination: pagination}
 	for _, p := range products {
 		out.Products = append(out.Products, productView(p))
 	}
