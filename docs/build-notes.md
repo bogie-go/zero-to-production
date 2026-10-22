@@ -551,3 +551,9 @@ Decided with the user while setting up mail: the credentials file should be grou
 - Env names changed: `ECOMMERCE_SMTP_ADDR` -> `SMTP_ADDRESS`, `ECOMMERCE_MAIL_FROM` -> `MAIL_FROM`, `ECOMMERCE_TOKEN_SECRET` -> `TOKEN_SECRET`, `ECOMMERCE_DATABASE_URL` -> `DATABASE_URL`, `ECOMMERCE_ADDR` -> `SERVER_ADDR`.
 - Verified: `bin/ci` green; the server boots from the new file; staff login works with the carried-over secret; a test email carries the `mail.from` written in the file, and `MAIL_FROM` overrides it.
 - Along the way Bogie also fixed `markers.AddImport` for a file with no import block, and a dead `appName` helper.
+
+### Addendum, 2026-10-22: flat keys and alphabetical top-level order (Bogie v0.3.1)
+
+- `bogie g config hello=world` (or `retries:int=3`) adds a **flat** top-level key: a field directly on `Config`, overridden by `HELLO`. A bare word with no keys is refused with a hint.
+- New top-level entries, groups and flat keys together, go in **alphabetical order** in both the credentials file and the `Config` struct. The keys *inside* a group stay in the order typed (the user's call: sort the outer layer only). An existing file that is out of order is not reshuffled; a new entry goes before the first existing one that sorts after it, and the file's opening comment stays on top.
+- Applied here once by hand: `config/config.go` and the development credentials are now `database`, `mail`, `server`, `smtp`, `token`.

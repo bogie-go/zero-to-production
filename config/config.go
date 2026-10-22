@@ -90,25 +90,15 @@ type Config struct {
 	Source  string `mapstructure:"-"`
 	KeyFile string `mapstructure:"-"`
 
-	// One field per group of the credentials file. A group `bogie g config`
-	// adds goes above the marker, with its own type in config/<group>.go.
-	Server   ServerConfig   `mapstructure:"server"`
+	// One field per top-level entry of the credentials file, in alphabetical
+	// order, which is where `bogie g config` puts a new one: a group (with
+	// its own type in config/<group>.go) or a flat key.
 	Database DatabaseConfig `mapstructure:"database"`
-	Token    TokenConfig    `mapstructure:"token"`
-	Smtp     SmtpConfig     `mapstructure:"smtp"`
 	Mail     MailConfig     `mapstructure:"mail"`
+	Server   ServerConfig   `mapstructure:"server"`
+	Smtp     SmtpConfig     `mapstructure:"smtp"`
+	Token    TokenConfig    `mapstructure:"token"`
 	// bogie:config
-}
-
-// ServerConfig is the server: group.
-type ServerConfig struct {
-	// Addr is the listen address, default :8080.
-	Addr string `mapstructure:"addr"`
-	// LogLevel is debug, info, warn or error.
-	LogLevel string `mapstructure:"log_level"`
-	// ShutdownGrace is how long Start waits for in-flight requests on
-	// SIGTERM, default 10s.
-	ShutdownGrace time.Duration `mapstructure:"shutdown_grace"`
 }
 
 // DatabaseConfig is the database: group.
@@ -121,6 +111,17 @@ type DatabaseConfig struct {
 	// default true. Set it to false only for a deployment that migrates from
 	// one place on purpose.
 	MigrateAtBoot bool `mapstructure:"migrate_at_boot"`
+}
+
+// ServerConfig is the server: group.
+type ServerConfig struct {
+	// Addr is the listen address, default :8080.
+	Addr string `mapstructure:"addr"`
+	// LogLevel is debug, info, warn or error.
+	LogLevel string `mapstructure:"log_level"`
+	// ShutdownGrace is how long Start waits for in-flight requests on
+	// SIGTERM, default 10s.
+	ShutdownGrace time.Duration `mapstructure:"shutdown_grace"`
 }
 
 // Load reads configuration and validates it.
@@ -204,9 +205,9 @@ func defaults(env string) Config {
 		Server:   ServerConfig{Addr: ":8080", LogLevel: "info", ShutdownGrace: 10 * time.Second},
 		Database: DatabaseConfig{URL: defaultDatabaseURL(env), MigrateAtBoot: true},
 	}
-	c.Token.defaults(env)
-	c.Smtp.defaults(env)
 	c.Mail.defaults(env)
+	c.Smtp.defaults(env)
+	c.Token.defaults(env)
 	// bogie:defaults
 	return c
 }
@@ -244,9 +245,9 @@ func (c Config) validate() error {
 	// One check per group a generator added: a missing required key refuses
 	// to boot rather than running without it.
 	for _, err := range []error{
-		c.Token.validate(c.Env),
-		c.Smtp.validate(c.Env),
 		c.Mail.validate(c.Env),
+		c.Smtp.validate(c.Env),
+		c.Token.validate(c.Env),
 		// bogie:validate
 	} {
 		if err != nil {
