@@ -31,7 +31,8 @@ spelling and nothing else; the app never imports it. In development
 `bogie server` and `bogie worker` run under Air, so a saved file rebuilds
 and restarts the process; `.air.toml` holds the settings and deleting it
 turns reload off. `make server` never reloads, which is the thing to run
-when you want one boot and one set of logs. A newer Bogie moves the
+when you want one boot and one set of logs. The worker is a second
+process in a second terminal: `bogie worker`, which reloads the same way. A newer Bogie moves the
 app to its layout with `bogie app:update`, a three-way merge of the files the
 templates produce against the version `bogie.toml` records; your edits and
 everything the generators wrote are kept, and a real overlap leaves conflict
@@ -69,7 +70,7 @@ nobody's secrets and can never open the development database.
 
 ## Layout
 
-    main.go                      dispatches on the first argument: serve | migrate | db
+    main.go                      dispatches on the first argument: serve | worker | migrate | db
     cli.go                       the migrate and db subcommands
     app/
       application.go             wiring: migrate at boot, config, connections, controllers
@@ -81,6 +82,7 @@ nobody's secrets and can never open the development database.
         <name>_controller.go     one Rails controller: a <Name>Controller, its routes, its actions
         <ns>_controller/         one Rails namespace: server.go · routes.go · <name>_controller.go …
       middlewares/               request id · logging · recover
+      jobs/                      River workers, one file per job, registered above // bogie:jobs
       services/<name>/           ctx first, knows nothing about HTTP
       services/database/         db create and drop, through the maintenance database
       services/migrate/          goose over the embedded migrations
@@ -107,7 +109,7 @@ Kamal 2, as the Rails app next door. `config/deploy.yml` IS staging and a
 bare `kamal deploy` targets it; `kamal deploy -d production` overlays
 `config/deploy.production.yml`. Three things to fill in first: the servers,
 the host names and the registry, marked CHANGE-ME. The image is one binary
-in every role;
+in every role, and the `job` role is that image started as `ecommerce worker`;
 it migrates at boot, so the database only has to exist. The encrypted
 credentials travel in the image and the key arrives as `ECOMMERCE_MASTER_KEY`
 from `.kamal/secrets`, which reads `config/credentials/staging.key`.
@@ -214,6 +216,19 @@ Dependencies never thread through the namespace. One level of namespace; a
 version such as `v1` is a route group inside the namespace's `routes.go`.
 `bogie d controller admin/reports` removes the controller, and the package
 too once it holds no controller.
+
+### Add a background job
+
+    bogie g job send_welcome
+
+writes `app/jobs/send_welcome.go`, an Args type with a `Kind` and a Worker with
+`Work(ctx, job)`, and registers it above `// bogie:jobs` in `app/jobs/jobs.go`.
+Jobs run on River, on the same Postgres: enqueue with
+`app.Jobs.Insert(ctx, jobs.SendWelcomeArgs{...}, nil)`, or inside a
+transaction with `InsertTx`, so the job commits with the row or not at all.
+`bogie worker` (or `make worker`) works the queue; it is its own process so a
+backlog never slows a request. Args are stored as JSON: carry ids, not
+records. River's schema is applied by `migrate`, not by db/migrate.
 
 ### Add a setting
 

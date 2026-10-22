@@ -11,13 +11,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"ecommerce/app/domain"
 )
 
 // Store wraps the connection pool and the generated queries.
 type Store struct {
 	pool *pgxpool.Pool
 	q    *Queries
+
+	// onOrderPlaced runs inside CreateOrderFromCart's transaction; see
+	// OnOrderPlaced in orders_extra.go.
+	onOrderPlaced func(ctx context.Context, tx pgx.Tx, order domain.Order) error
 }
 
 // Open connects and verifies the database is reachable, so a bad URL fails at
@@ -67,3 +74,8 @@ func (s *Store) withTx(ctx context.Context, fn func(q *Queries) error) error {
 	}
 	return tx.Commit(ctx)
 }
+
+// Pool is the connection pool, for River and nothing else: the job queue
+// shares the database so an enqueue can ride a business transaction. Every
+// other caller goes through the methods above.
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }

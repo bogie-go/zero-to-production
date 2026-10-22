@@ -8,10 +8,17 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+
 	"ecommerce/app/controllers"
 	"ecommerce/app/controllers/admin_controller"
+	"ecommerce/app/domain"
+	"ecommerce/app/jobs"
 	"ecommerce/app/models"
 	"ecommerce/app/services/database"
+	"ecommerce/app/services/mailer"
 	"ecommerce/app/services/migrate"
 	"ecommerce/config"
 	"ecommerce/lib/logger"
@@ -23,6 +30,14 @@ type Application struct {
 	Log    *slog.Logger
 	Store  *models.Store
 	Server *controllers.Server
+
+	// Jobs enqueues background jobs from anywhere and, in the worker
+	// process, works them. Never started by serve, so there it only inserts.
+	Jobs *river.Client[pgx.Tx]
+	// jobsRegistered is false until the first `bogie g job`: River refuses
+	// an empty bundle, so until then the client is insert-only and the
+	// worker idles.
+	jobsRegistered bool
 }
 
 // NewApplication loads configuration and opens every connection. It returns an
@@ -59,6 +74,34 @@ func NewApplication(ctx context.Context) (*Application, error) {
 		return nil, database.Hint(err, cfg.Database.URL)
 	}
 
+	// River runs on the same Postgres, so a job enqueued in a transaction
+	// commits with the business row or not at all. The workers are
+	// registered in app/jobs; `bogie g job` adds one.
+	mail := mailer.New(MailerConfig(cfg))
+	workers, jobsRegistered := jobs.Workers(log, store, mail)
+	riverConfig := &river.Config{Logger: log}
+	if jobsRegistered {
+		// Queues and Workers go together: a client with either alone is
+		// refused, and one with neither is insert-only.
+		riverConfig.Queues = map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 10}}
+		riverConfig.Workers = workers
+	} else {
+		log.WarnContext(ctx, "no jobs registered yet: the queue accepts inserts and the worker has nothing to do (bogie g job NAME)")
+	}
+	queue, err := river.NewClient(riverpgxv5.New(store.Pool()), riverConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// A checkout enqueues its confirmation email inside its own transaction,
+	// so the job exists if and only if the order does: the hook runs after the
+	// order is written and before it commits, and an enqueue that fails rolls
+	// the order back with it.
+	store.OnOrderPlaced(func(ctx context.Context, tx pgx.Tx, order domain.Order) error {
+		_, err := queue.InsertTx(ctx, tx, jobs.SendOrderConfirmationArgs{UserID: order.UserID, OrderID: order.ID}, nil)
+		return err
+	})
+
 	server := controllers.NewServer(cfg, log)
 
 	// Each controller is built here, with its dependencies, and assigned to
@@ -81,13 +124,41 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	// bogie:wire
 	server.SetupRoutes()
 
-	return &Application{Config: cfg, Log: log, Store: store, Server: server}, nil
+	return &Application{Config: cfg, Log: log, Store: store, Server: server, Jobs: queue, jobsRegistered: jobsRegistered}, nil
+}
+
+// MailerConfig is how the mailer service is configured: the smtp and mail
+// groups of the credentials file. Shared by the worker and `mail test`.
+func MailerConfig(cfg config.Config) mailer.Config {
+	return mailer.Config{Addr: cfg.Smtp.Address, User: cfg.Smtp.Username, Password: cfg.Smtp.Password, From: cfg.Mail.From}
 }
 
 // Start serves HTTP until ctx is cancelled.
 func (a *Application) Start(ctx context.Context) error {
 	defer a.Close()
 	return a.Server.Start(ctx)
+}
+
+// StartWorker works the queue until ctx is cancelled, then drains.
+func (a *Application) StartWorker(ctx context.Context) error {
+	defer a.Close()
+	if !a.jobsRegistered {
+		a.Log.Info("worker idle: no jobs registered yet", "env", a.Config.Env)
+		<-ctx.Done()
+		return nil
+	}
+	if err := a.Jobs.Start(ctx); err != nil {
+		return err
+	}
+	a.Log.Info("worker started", "env", a.Config.Env)
+	<-ctx.Done()
+
+	// In-flight jobs get the same grace a request does; after that River
+	// marks what is still running as retryable and returns.
+	a.Log.Info("worker draining", "grace", a.Config.Server.ShutdownGrace)
+	stopCtx, cancel := context.WithTimeout(context.Background(), a.Config.Server.ShutdownGrace)
+	defer cancel()
+	return a.Jobs.Stop(stopCtx)
 }
 
 // Close releases connections.

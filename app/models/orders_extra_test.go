@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	"ecommerce/app/domain"
 )
 
@@ -166,5 +168,80 @@ func TestGetOrderForUserIsScopedToItsOwner(t *testing.T) {
 	}
 	if _, _, err := store.GetOrderForUser(ctx, user.ID, strconv.FormatInt(order.ID, 10)); err != nil {
 		t.Errorf("GetOrderForUser(owner): err = %v, want nil", err)
+	}
+}
+
+// The hook runs inside the checkout's transaction, after the order exists,
+// with that transaction: what it writes there commits with the order.
+func TestOnOrderPlacedRunsInsideTheTransaction(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	user, cart, product := checkoutFixtures(t, store, 10)
+	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	var seen domain.Order
+	var sawTx bool
+	store.OnOrderPlaced(func(ctx context.Context, tx pgx.Tx, order domain.Order) error {
+		seen, sawTx = order, tx != nil
+		// The order is already visible on this transaction, not yet outside it.
+		var n int
+		if err := tx.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&n); err != nil || n != 1 {
+			t.Errorf("inside the transaction the order is not visible: n=%d err=%v", n, err)
+		}
+		if err := store.pool.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&n); err != nil || n != 0 {
+			t.Errorf("outside the transaction the order is visible before commit: n=%d err=%v", n, err)
+		}
+		return nil
+	})
+
+	order, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawTx || seen.ID != order.ID || seen.UserID != user.ID {
+		t.Errorf("hook saw %+v (tx %v), want order %d for user %d", seen, sawTx, order.ID, user.ID)
+	}
+}
+
+// A hook that fails undoes the checkout: no order, stock back, cart intact.
+// This is what makes "the job exists if and only if the order does" true.
+func TestAFailingOnOrderPlacedRollsBackTheCheckout(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	user, cart, product := checkoutFixtures(t, store, 10)
+	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 3); err != nil {
+		t.Fatal(err)
+	}
+	store.OnOrderPlaced(func(context.Context, pgx.Tx, domain.Order) error { return errors.New("queue is down") })
+
+	if _, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID); err == nil {
+		t.Fatal("CreateOrderFromCart succeeded although the hook failed")
+	}
+	if orders, _ := store.ListOrdersForUser(ctx, user.ID, 10); len(orders) != 0 {
+		t.Errorf("orders = %v, want none", orders)
+	}
+	if got, _ := store.GetProduct(ctx, strconv.FormatInt(product.ID, 10)); got.Stock != 10 {
+		t.Errorf("stock = %d, want 10", got.Stock)
+	}
+	if lines, _ := store.CartContents(ctx, cart.ID); len(lines) != 1 {
+		t.Errorf("cart = %v, want the line still there", lines)
+	}
+}
+
+// No checkout, no job: the hook only runs for an order that was written.
+func TestOnOrderPlacedIsNotCalledWhenCheckoutFails(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	user, cart, _ := checkoutFixtures(t, store, 10) // an empty cart
+	called := false
+	store.OnOrderPlaced(func(context.Context, pgx.Tx, domain.Order) error { called = true; return nil })
+
+	if _, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID); err == nil {
+		t.Fatal("an empty cart checked out")
+	}
+	if called {
+		t.Error("the hook ran for a checkout that failed")
 	}
 }

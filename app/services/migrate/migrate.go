@@ -17,8 +17,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for goose
 	"github.com/pressly/goose/v3"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivermigrate"
 
 	"ecommerce/db"
 )
@@ -63,6 +66,9 @@ func nothingToDo(err error) bool { return errors.Is(err, goose.ErrNoMigrations) 
 func Run(ctx context.Context, databaseURL string, log *slog.Logger) error {
 	ctx, cancel := context.WithTimeout(ctx, bootTimeout)
 	defer cancel()
+	if err := riverSchema(ctx, databaseURL, log); err != nil {
+		return err
+	}
 	p, conn, err := provider(databaseURL)
 	if nothingToDo(err) {
 		log.InfoContext(ctx, "schema: nothing to apply", "dir", "migrate")
@@ -88,6 +94,31 @@ func Run(ctx context.Context, databaseURL string, log *slog.Logger) error {
 		log.InfoContext(ctx, "schema up to date", "version", after)
 	} else {
 		log.InfoContext(ctx, "schema applied", "from", before, "to", after)
+	}
+	return nil
+}
+
+// riverSchema applies River's own tables. River versions its schema itself,
+// in river_migration, and ships the SQL with the library, so applying it here
+// rather than copying it into db/migrate means a River upgrade brings its
+// schema change with it.
+func riverSchema(ctx context.Context, databaseURL string, log *slog.Logger) error {
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		return fmt.Errorf("migrate: river: open: %w", err)
+	}
+	defer pool.Close()
+
+	m, err := rivermigrate.New(riverpgxv5.New(pool), nil)
+	if err != nil {
+		return fmt.Errorf("migrate: river: %w", err)
+	}
+	res, err := m.Migrate(ctx, rivermigrate.DirectionUp, nil)
+	if err != nil {
+		return fmt.Errorf("migrate: river schema: %w", err)
+	}
+	if len(res.Versions) > 0 {
+		log.InfoContext(ctx, "river schema applied", "versions", len(res.Versions))
 	}
 	return nil
 }

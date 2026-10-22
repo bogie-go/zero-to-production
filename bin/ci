@@ -86,6 +86,7 @@ step "Style: go vet"           "go vet ./..."
 step "Style: golangci-lint"    "lint"
 step "Build"                   "go build ./..."
 step "Tests"                   "go test -race -cover ./..."
+step "Worker: boots and drains" "go build -o bin/ecommerce . && timeout -s TERM 6 ./bin/ecommerce worker; s=\$?; test \$s -eq 124 || test \$s -eq 0"
 
 printf '\n'
 if [ "$failed" -eq 0 ]; then

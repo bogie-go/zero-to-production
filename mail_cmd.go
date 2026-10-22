@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"ecommerce/app"
 	"ecommerce/app/services/mailer"
 	"ecommerce/config"
 )
@@ -27,7 +28,7 @@ func runMail(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	m := mailer.New(mailer.Config{Addr: cfg.Smtp.Address, User: cfg.Smtp.Username, Password: cfg.Smtp.Password, From: cfg.Mail.From})
+	m := mailer.New(app.MailerConfig(cfg))
 	err = m.Send(ctx, mailer.Message{
 		To:      args[1],
 		Subject: "Ecommerce test email",

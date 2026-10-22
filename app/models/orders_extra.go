@@ -92,6 +92,19 @@ func (s *Store) CreateOrderFromCart(ctx context.Context, userID int64, cartID in
 		if _, err := q.DeleteCartItemsForCart(ctx, cartID); err != nil {
 			return fmt.Errorf("models: clear cart %d: %w", cartID, err)
 		}
+
+		// Last, still inside the transaction: whatever the hook does (enqueue
+		// the confirmation email) commits with the order or not at all, and a
+		// hook that fails rolls the whole checkout back.
+		if s.onOrderPlaced != nil {
+			tx, ok := txOf(q)
+			if !ok {
+				return errors.New("models: onOrderPlaced needs a transaction")
+			}
+			if err := s.onOrderPlaced(ctx, tx, order); err != nil {
+				return fmt.Errorf("models: after order %d: %w", order.ID, err)
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -106,6 +119,22 @@ func (s *Store) CreateOrderFromCart(ctx context.Context, userID int64, cartID in
 		})
 	}
 	return order, orderLines, nil
+}
+
+// OnOrderPlaced registers a function CreateOrderFromCart calls inside its
+// transaction, after the order is written, with that transaction. It exists
+// so the app can enqueue a job in the same transaction (River's InsertTx)
+// without this package knowing about River: the job is created if and only if
+// the order is. app/application.go sets it; tests that need no job leave it
+// unset.
+func (s *Store) OnOrderPlaced(fn func(ctx context.Context, tx pgx.Tx, order domain.Order) error) {
+	s.onOrderPlaced = fn
+}
+
+// txOf is the transaction a withTx closure's Queries is bound to.
+func txOf(q *Queries) (pgx.Tx, bool) {
+	tx, ok := q.db.(pgx.Tx)
+	return tx, ok
 }
 
 // ListOrdersForUser returns a user's own orders, newest first — never

@@ -1,5 +1,6 @@
-# ONE IMAGE, several roles. `ecommerce` serves and `ecommerce migrate` moves the schema, so a web container and a
-# migration container are the same artifact started with different arguments,
+# ONE IMAGE, several roles. `ecommerce` serves, `ecommerce worker` works the
+# queue and `ecommerce migrate` moves the schema, so a web container and a
+# job container are the same artifact started with different arguments,
 # and cannot be built from different commits.
 # go.mod decides the Go version, as .ruby-version does for a Rails image:
 # with GOTOOLCHAIN=auto the builder fetches the toolchain go.mod names if

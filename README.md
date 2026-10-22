@@ -22,6 +22,9 @@ embedded in the binary and applied at boot. `.air.toml` holds the settings;
 delete it, or run `make server`, for a single boot with no watcher. Nothing
 reloads outside development: production runs the compiled binary.
 
+The worker runs beside it, in its own terminal and with the same reload:
+`bogie worker`.
+
 ## Your own Postgres, without Docker
 
 `make up` runs the bundled Postgres; any Postgres the app can reach will do.
@@ -57,6 +60,18 @@ Production has no default: set `smtp.address` (host:port of your provider) and
 `make credentials ENV=production` or the environment (`SMTP_ADDRESS`,
 `MAIL_FROM`, `SMTP_USERNAME`, `SMTP_PASSWORD`). It refuses to boot without the
 first two. Adding a setting like these is `bogie g config`.
+
+## Background jobs
+
+Jobs run on River, on the same Postgres, in their own process:
+
+    make worker               # or: go run . worker; bogie worker adds live reload
+
+Placing an order enqueues `send_order_confirmation` inside the order's own
+transaction, so the email job exists if and only if the order does; the worker
+loads the order and sends the email through the mailer. In development read it
+at http://localhost:8125. The server alone never sends anything: without a
+worker running, jobs just wait in `river_job`.
 
 ## Admin namespace
 

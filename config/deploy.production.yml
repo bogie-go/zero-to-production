@@ -18,6 +18,10 @@ service: ecommerce
 servers:
   web:
     - CHANGE-ME.example.com
+  job:
+    hosts:
+      - CHANGE-ME.example.com
+    cmd: ecommerce worker
 
 proxy:
   ssl: true

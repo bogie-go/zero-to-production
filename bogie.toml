@@ -4,5 +4,5 @@
 bogie = "v0.3.1"
 name = "ecommerce"
 module = "ecommerce"
-jobs = false
+jobs = true
 id = "bigint"

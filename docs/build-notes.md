@@ -557,3 +557,24 @@ Decided with the user while setting up mail: the credentials file should be grou
 - `bogie g config hello=world` (or `retries:int=3`) adds a **flat** top-level key: a field directly on `Config`, overridden by `HELLO`. A bare word with no keys is refused with a hint.
 - New top-level entries, groups and flat keys together, go in **alphabetical order** in both the credentials file and the `Config` struct. The keys *inside* a group stay in the order typed (the user's call: sort the outer layer only). An existing file that is out of order is not reshuffled; a new entry goes before the first existing one that sorts after it, and the file's opening comment stays on top.
 - Applied here once by hand: `config/config.go` and the development credentials are now `database`, `mail`, `server`, `smtp`, `token`.
+
+## Pass 1 › Task G: Email a confirmation (background jobs)
+
+### What was done
+
+1. **2026-10-22, jobs enabled.** `bogie g job send_order_confirmation` on an app made without `--jobs`: Bogie turned jobs on first (merged the layout like `app:update`: River, `app/jobs`, a `worker` command, the Makefile and bin/ci worker steps, `jobs = true` in `bogie.toml`), then wrote the job and registered it.
+2. **The job** (`app/jobs/send_order_confirmation.go`): args are `{user_id, order_id}`, ids only, so the email always shows what was saved. The worker loads the user and order through a small store interface declared beside it (rule 2), composes the message, and sends it through the mailer. A send failure is returned, so River retries with backoff; an order or user that no longer exists cancels the job (`river.JobCancel`) instead of retrying 25 times. Delivery is at-least-once.
+3. **`app/mailers`** (new, hand-made, no generator): pure functions from domain values to a `mailer.Message` (`OrderConfirmation`: text and HTML, prices from the order not from today's catalog, product names HTML-escaped). The split is a Rails mailer class (compose) / `deliver_later` (the job) / the SMTP service (deliver).
+4. **Transactional enqueue.** `Store.OnOrderPlaced(fn)` registers a hook that `CreateOrderFromCart` calls *inside its transaction*, after the order is written, with the `pgx.Tx`; `app/application.go` sets it to River's `InsertTx`. So the job exists if and only if the order does, and a failed enqueue rolls the checkout back (tested: the hook sees the order inside the transaction but not outside, a failing hook leaves no order, stock restored, cart intact, a failed checkout never runs the hook). The store stays free of River: the app wires them.
+5. Verified live with a server and a worker as separate processes: an order placed over the API left a `completed` `send_order_confirmation` row in `river_job`, and Mailpit held the email.
+
+### Bogie gaps/bugs found
+
+- The generated `jobs.Workers(log)` takes only a logger, but a real worker needs dependencies, so the signature was widened by hand (`Workers(log, store, mail)`). Bogie could pass a dependencies struct, or generate the registration with the arguments the worker declares.
+- No `g mailer`: `app/mailers` is by hand. Worth deciding whether Bogie should ship the shape.
+
+### Still to do
+
+- [ ] A welcome email on signup and a sign-in alert on login, as further jobs (the user raised the login one).
+- [ ] Retries and failures are only visible in `river_job`; a view in the admin, later.
+- [ ] Idempotent delivery (at-least-once means an occasional duplicate).

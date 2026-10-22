@@ -33,6 +33,9 @@ build: ## compile the binary
 server: ## run the HTTP server (bogie server adds live reload)
 	go run . serve
 
+worker: ## work the job queue (bogie worker adds live reload)
+	go run . worker
+
 
 test: ## run the suite with coverage, in the test environment (needs: make up, then ECOMMERCE_ENV=test bogie db:prepare once)
 	ECOMMERCE_ENV=test go test -race -cover ./...

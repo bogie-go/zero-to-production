@@ -23,6 +23,7 @@ const usage = `Usage: ecommerce [command]
 
 Commands:
   serve               the HTTP server (default)
+  worker              work the job queue
   migrate <command>   inspect or move the embedded schema
   db <command>        create, drop or prepare the database itself
   routes              every mounted route, method and path (rails routes)
@@ -58,6 +59,7 @@ func main() {
 		"db":      runDB,
 		"routes":  runRoutes,
 		"mail":    runMail,
+		"worker":  runWorker,
 		// bogie:commands
 	}
 	if command == "help" || command == "-h" || command == "--help" {
@@ -102,4 +104,17 @@ func runRoutes(ctx context.Context, _ []string) error {
 	}
 	_, err := app.NewApplication(ctx)
 	return err
+}
+
+// runWorker works the job queue.
+//
+// Its own process rather than a goroutine in the server: a backlog of jobs
+// must never slow a request, and the two scale on different signals. Same
+// binary, because they share a schema and must never disagree about it.
+func runWorker(ctx context.Context, _ []string) error {
+	application, err := app.NewApplication(ctx)
+	if err != nil {
+		return err
+	}
+	return application.StartWorker(ctx)
 }
