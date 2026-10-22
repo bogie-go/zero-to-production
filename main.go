@@ -26,6 +26,7 @@ Commands:
   migrate <command>   inspect or move the embedded schema
   db <command>        create, drop or prepare the database itself
   routes              every mounted route, method and path (rails routes)
+  mail test ADDRESS   send a test email through the configured SMTP server
 
 With no command this serves, which is what the container does. Every command
 reads the same ECOMMERCE_ENV, so they all act on the same database.
@@ -56,6 +57,7 @@ func main() {
 		"migrate": runMigrate,
 		"db":      runDB,
 		"routes":  runRoutes,
+		"mail":    runMail,
 		// bogie:commands
 	}
 	if command == "help" || command == "-h" || command == "--help" {

@@ -106,6 +106,15 @@ type AppConfig struct {
 	// marker, one field each, read from the same section and overridden by
 	// the same ECOMMERCE_<KEY> rule.
 	TokenSecret string `mapstructure:"token_secret"`
+
+	// Mail. SMTPAddr is host:port of the server mail is delivered to:
+	// development and test default to Mailpit from docker-compose (1125),
+	// production has no default. SMTPUser and SMTPPassword are for a provider
+	// that wants a login; Mailpit does not. MailFrom is the From address.
+	SMTPAddr     string `mapstructure:"smtp_addr"`
+	SMTPUser     string `mapstructure:"smtp_user"`
+	SMTPPassword string `mapstructure:"smtp_password"`
+	MailFrom     string `mapstructure:"mail_from"`
 	// bogie:config
 }
 
@@ -190,7 +199,26 @@ func defaults(env string) AppConfig {
 		ShutdownGrace: 10 * time.Second,
 		DatabaseURL:   defaultDatabaseURL(env),
 		MigrateAtBoot: true,
+		SMTPAddr:      defaultSMTPAddr(env),
+		MailFrom:      defaultMailFrom(env),
 	}
+}
+
+// defaultSMTPAddr is the compose stack's Mailpit outside production, and
+// nothing in production: delivering real mail is a deliberate choice of
+// provider, never a default.
+func defaultSMTPAddr(env string) string {
+	if env == EnvDevelopment || env == EnvTest {
+		return "localhost:1125"
+	}
+	return ""
+}
+
+func defaultMailFrom(env string) string {
+	if env == EnvDevelopment || env == EnvTest {
+		return "Ecommerce <shop@ecommerce.test>"
+	}
+	return ""
 }
 
 // defaultDatabaseURL is the compose stack's database for the environment, and
@@ -227,6 +255,10 @@ func applyEnv(a *AppConfig) error {
 		a.MigrateAtBoot = b
 	}
 	a.TokenSecret = envOr("ECOMMERCE_TOKEN_SECRET", a.TokenSecret)
+	a.SMTPAddr = envOr("ECOMMERCE_SMTP_ADDR", a.SMTPAddr)
+	a.SMTPUser = envOr("ECOMMERCE_SMTP_USER", a.SMTPUser)
+	a.SMTPPassword = envOr("ECOMMERCE_SMTP_PASSWORD", a.SMTPPassword)
+	a.MailFrom = envOr("ECOMMERCE_MAIL_FROM", a.MailFrom)
 	// bogie:env
 	return nil
 }
@@ -250,6 +282,14 @@ func (c Config) validate() error {
 	}
 	if _, err := url.Parse(a.DatabaseURL); err != nil {
 		return fmt.Errorf("config: ECOMMERCE_DATABASE_URL: %w", err)
+	}
+	if c.Env == EnvProduction {
+		if a.SMTPAddr == "" {
+			return fmt.Errorf("config: ECOMMERCE_SMTP_ADDR is required in production (host:port of your mail provider)")
+		}
+		if a.MailFrom == "" {
+			return fmt.Errorf("config: ECOMMERCE_MAIL_FROM is required in production")
+		}
 	}
 	// One check per generated setting; a missing secret refuses to boot
 	// rather than serving open.
@@ -284,6 +324,7 @@ func (c Config) PrintTo(w io.Writer) {
 	_, _ = fmt.Fprintf(w, "ecommerce: env=%s settings=%q key=%q\n", c.Env, c.Source, c.KeyFile)
 	_, _ = fmt.Fprintf(w, "ecommerce: addr=%s log_level=%s shutdown_grace=%s database=%s migrate_at_boot=%t\n",
 		c.App.Addr, c.App.LogLevel, c.App.ShutdownGrace, redacted(c.App.DatabaseURL), c.App.MigrateAtBoot)
+	_, _ = fmt.Fprintf(w, "ecommerce: smtp=%s mail_from=%q\n", c.App.SMTPAddr, c.App.MailFrom)
 }
 
 // redacted hides the password in a URL; the boot log is not where it belongs.

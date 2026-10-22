@@ -42,6 +42,21 @@ own URL:
 `make up`, `make down`, `make psql` and the database step of `bin/ci` still use
 Docker.
 
+## Mail
+
+`make up` also starts [Mailpit](https://mailpit.axllent.org), a fake SMTP
+server: the app delivers mail to it exactly as it will to a real provider, and
+nothing leaves your machine. Read what it caught at http://localhost:8125 (SMTP
+on 1125; the usual 1025/8025 plus 100, since another project's Mailpit likely
+holds those).
+
+    go run . mail test you@example.com     # send one, then look in the inbox
+
+Production has no default: set `smtp_addr` (host:port of your provider),
+`mail_from`, and `smtp_user`/`smtp_password` if it wants a login, with
+`make credentials ENV=production` or `ECOMMERCE_SMTP_ADDR` and friends. It
+refuses to boot without the first two.
+
 ## Admin namespace
 
 `db seed` creates one staff account, `staff@shop.test` /

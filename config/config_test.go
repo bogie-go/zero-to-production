@@ -195,3 +195,35 @@ func TestPrintToRedactsThePassword(t *testing.T) {
 		t.Errorf("boot log does not show the redacted url: %s", out.String())
 	}
 }
+
+// Development and test deliver mail to Mailpit with no setup; production has
+// to name a provider and a From address or it refuses to boot — mail must
+// never silently go to localhost, or nowhere, in production.
+func TestMailDefaultsAndProductionRequirements(t *testing.T) {
+	t.Setenv(EnvVar, "test")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.App.SMTPAddr != "localhost:1125" || cfg.App.MailFrom == "" {
+		t.Errorf("test mail = %q from %q, want Mailpit's address and a from address", cfg.App.SMTPAddr, cfg.App.MailFrom)
+	}
+
+	t.Setenv(EnvVar, "production")
+	t.Setenv(ConfigDirVar, t.TempDir())
+	t.Setenv("ECOMMERCE_DATABASE_URL", "postgres://u:p@db:5432/ecommerce")
+	t.Setenv("ECOMMERCE_TOKEN_SECRET", strings.Repeat("s", 32))
+	t.Setenv("ECOMMERCE_SMTP_ADDR", "")
+	t.Setenv("ECOMMERCE_MAIL_FROM", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_ADDR") {
+		t.Errorf("production without smtp: err = %v, want a refusal naming ECOMMERCE_SMTP_ADDR", err)
+	}
+	t.Setenv("ECOMMERCE_SMTP_ADDR", "smtp.example.com:587")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "MAIL_FROM") {
+		t.Errorf("production without mail_from: err = %v, want a refusal naming ECOMMERCE_MAIL_FROM", err)
+	}
+	t.Setenv("ECOMMERCE_MAIL_FROM", "shop@example.com")
+	if _, err := Load(); err != nil {
+		t.Errorf("production with both set: %v", err)
+	}
+}

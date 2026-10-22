@@ -514,3 +514,24 @@ Verified in real Chrome (puppeteer-core, scratch script, not committed): guest c
 - **Bogie fix, v0.2.13:** the generated `Delete` returned the raw foreign-key violation as a 500 (the `:uniq` problem again, on the delete side). `g model` now maps SQLSTATE 23503 to `domain.ErrInvalid` ("product is still in use"). `app:update` does not regenerate existing models, so `app/models/products.go` got the same change by hand; the other models' generated `Delete`s still have the old behavior until they need it.
 - Another small generator gap seen: `g migration add_x_to_y x:datetime` writes `NOT NULL` with no default.
 - Checked in real Chrome: create, validation error, edit, archive (gone from the shop API, hidden then shown in admin), restore, delete, and a refused delete of an ordered product.
+
+## Pass 1 › Task G prep: mail (Mailpit and the mailer)
+
+Decided 2026-10-22, with the user: develop against a fake SMTP server (Mailpit) rather than a `letter_opener`-style file sender, so development and production run the same code path and only config differs. Jobs come next.
+
+### What was done
+
+1. **Mailpit in `docker-compose.yml`** (pinned `axllent/mailpit:v1.31.6`, health-checked, so `make up` waits for it). Ports 1125 (SMTP) and 8125 (inbox): the defaults plus 100, the same reasoning as Postgres on 5440, and noted in the compose header.
+2. **Config:** `smtp_addr`, `smtp_user`, `smtp_password`, `mail_from` (env `ECOMMERCE_SMTP_ADDR` etc.), written by hand above the existing `bogie:config`/`bogie:env` markers. Development and test default to Mailpit; production has no default and refuses to boot without `smtp_addr` and `mail_from`.
+3. **`app/services/mailer`:** standard library only (`net/smtp`, `mime`, `net/mail`). Dials with a context deadline (`net/smtp` has none of its own), uses STARTTLS and PLAIN auth when offered, encodes bodies as quoted-printable and subjects as RFC 2047 so UTF-8 is safe whatever the server supports, builds `multipart/alternative` when there is HTML, and parses every address instead of concatenating, refusing a subject with a line break (header injection). Tested against an in-process fake SMTP server, no Mailpit needed.
+4. **`ecommerce mail test ADDRESS`:** sends one email so setup can be seen working before any job exists.
+5. Verified live: sent through Mailpit, read back from its API (from, to, subject, body) and its inbox page answered 200.
+
+### Bogie gaps/bugs found
+
+- None new; the config fields go above `bogie:config` by hand, as the markers intend, but there is no `g mail`/`g mailer` shape, so a reader writes this part. Worth deciding later whether Bogie should ship a mailer.
+
+### Still to do
+
+- [ ] Jobs (`bogie g job ...` enables River; a worker role; an `--jobs` app). Then the order-confirmation email as the first job, with welcome and login-alert emails as follow-ups.
+- [ ] `bin/ci` now also starts Mailpit (it runs `docker compose up --wait`); harmless, but the image has to be pulled once.

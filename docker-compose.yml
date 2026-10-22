@@ -14,6 +14,13 @@
 #                                       and the URL its test expects
 #   Makefile                            the "ready" line of make up
 #
+# Mailpit is a fake SMTP server for development: the app sends mail to it
+# exactly as it will to a real provider in production, and nothing leaves this
+# machine. Read what it caught at http://localhost:8125. Its ports are the
+# defaults plus 100 (1025, 8025), for the same reason Postgres is on 5440:
+# another project's Mailpit or MailHog probably holds the usual ones. To move
+# them, change the numbers here and the smtp_addr default in config/config.go.
+#
 # The database starts EMPTY on purpose: ecommerce owns its schema and applies
 # the migrations embedded in its own binary at boot (make db-prepare, or just
 # make server). Seed data is separate and deliberate.
@@ -38,6 +45,18 @@ services:
       - "5440:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres -d ecommerce_development" ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  mail:
+    container_name: ecommerce-mail
+    image: axllent/mailpit:v1.31.6
+    ports:
+      - "1125:1025"   # SMTP, where the app delivers
+      - "8125:8025"   # the web inbox
+    healthcheck:
+      test: [ "CMD", "/mailpit", "readyz" ]
       interval: 2s
       timeout: 3s
       retries: 15
