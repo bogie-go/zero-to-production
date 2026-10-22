@@ -2,7 +2,7 @@
 // library. In development the server is Mailpit from docker-compose, which
 // catches every message for you to read at http://localhost:8125; in
 // production it is your provider's SMTP endpoint. The code is identical:
-// only config (smtp_addr, smtp_user, smtp_password, mail_from) changes.
+// only config (smtp.address, smtp.username, smtp.password, mail.from) changes.
 //
 // A *Mailer is safe for concurrent use. Send blocks until the server has
 // accepted the message or the context ends, so call it from a job, not from

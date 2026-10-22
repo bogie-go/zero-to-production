@@ -19,39 +19,40 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	a := cfg.App
-	if cfg.Env != EnvTest || a.Addr != ":8080" || a.LogLevel != "info" || a.ShutdownGrace.Seconds() != 10 {
-		t.Errorf("defaults = %+v", a)
+	sv, db := cfg.Server, cfg.Database
+	if cfg.Env != EnvTest || sv.Addr != ":8080" || sv.LogLevel != "info" || sv.ShutdownGrace.Seconds() != 10 {
+		t.Errorf("defaults = %+v", sv)
 	}
-	if a.DatabaseURL != "postgres://postgres:postgres@localhost:5440/ecommerce_test?sslmode=disable" {
-		t.Errorf("test database = %q; want the compose stack's ecommerce_test", a.DatabaseURL)
+	if db.URL != "postgres://postgres:postgres@localhost:5440/ecommerce_test?sslmode=disable" {
+		t.Errorf("test database = %q; want the compose stack's ecommerce_test", db.URL)
 	}
-	if !a.MigrateAtBoot {
+	if !db.MigrateAtBoot {
 		t.Error("MigrateAtBoot defaults to false; want true")
 	}
 }
 
 // The suite truncates every table and bin/ci drops the database, so test must
-// never follow a ECOMMERCE_DATABASE_URL exported for development; it
+// never follow a DATABASE_URL exported for development (or by another
+// app in the same shell); it
 // moves only with its own variable.
 func TestTestIgnoresTheSharedDatabaseURL(t *testing.T) {
 	t.Setenv(EnvVar, "test")
-	t.Setenv("ECOMMERCE_DATABASE_URL", "postgres://postgres:postgres@localhost:5440/ecommerce_development?sslmode=disable")
+	t.Setenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5440/ecommerce_development?sslmode=disable")
 	t.Setenv(TestDatabaseURLVar, "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "postgres://postgres:postgres@localhost:5440/ecommerce_test?sslmode=disable"; cfg.App.DatabaseURL != want {
-		t.Errorf("test database = %q; want %q, whatever ECOMMERCE_DATABASE_URL says", cfg.App.DatabaseURL, want)
+	if want := "postgres://postgres:postgres@localhost:5440/ecommerce_test?sslmode=disable"; cfg.Database.URL != want {
+		t.Errorf("test database = %q; want %q, whatever DATABASE_URL says", cfg.Database.URL, want)
 	}
 
 	t.Setenv(TestDatabaseURLVar, "postgres://ci:ci@db:5432/ecommerce_test")
 	if cfg, err = Load(); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.App.DatabaseURL != "postgres://ci:ci@db:5432/ecommerce_test" {
-		t.Errorf("test database = %q; want the one %s names", cfg.App.DatabaseURL, TestDatabaseURLVar)
+	if cfg.Database.URL != "postgres://ci:ci@db:5432/ecommerce_test" {
+		t.Errorf("test database = %q; want the one %s names", cfg.Database.URL, TestDatabaseURLVar)
 	}
 }
 
@@ -68,12 +69,12 @@ func TestLoadRefusesUnknownEnv(t *testing.T) {
 
 func TestLoadRefusesBadValues(t *testing.T) {
 	t.Setenv(EnvVar, "test")
-	t.Setenv("ECOMMERCE_SHUTDOWN_GRACE", "soon")
+	t.Setenv("SERVER_SHUTDOWN_GRACE", "soon")
 	if _, err := Load(); err == nil {
 		t.Error("SHUTDOWN_GRACE=soon accepted")
 	}
-	t.Setenv("ECOMMERCE_SHUTDOWN_GRACE", "5s")
-	t.Setenv("ECOMMERCE_MIGRATE_AT_BOOT", "maybe")
+	t.Setenv("SERVER_SHUTDOWN_GRACE", "5s")
+	t.Setenv("DATABASE_MIGRATE_AT_BOOT", "maybe")
 	if _, err := Load(); err == nil {
 		t.Error("MIGRATE_AT_BOOT=maybe accepted")
 	}
@@ -84,9 +85,9 @@ func TestLoadRefusesBadValues(t *testing.T) {
 func TestLoadRequiresADatabaseInProduction(t *testing.T) {
 	t.Setenv(EnvVar, "production")
 	t.Setenv(ConfigDirVar, t.TempDir()) // no credentials file anywhere
-	t.Setenv("ECOMMERCE_DATABASE_URL", "")
+	t.Setenv("DATABASE_URL", "")
 	if _, err := Load(); err == nil {
-		t.Error("production booted without ECOMMERCE_DATABASE_URL")
+		t.Error("production booted without DATABASE_URL")
 	}
 }
 
@@ -117,23 +118,23 @@ func hexOf(key []byte) string {
 // Development reads the shared file. A key the file names is taken from it, a
 // key it omits keeps its default, and the environment beats both.
 func TestLoadReadsTheSharedFile(t *testing.T) {
-	dir := writeCredentials(t, "ecommerce:\n  addr: \":9999\"\n  log_level: debug\n")
+	dir := writeCredentials(t, "server:\n  addr: \":9999\"\n  log_level: debug\n")
 	t.Setenv(EnvVar, "development")
 	t.Setenv(ConfigDirVar, dir)
-	t.Setenv("ECOMMERCE_LOG_LEVEL", "warn")
+	t.Setenv("SERVER_LOG_LEVEL", "warn")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.App.Addr != ":9999" {
-		t.Errorf("addr = %q; want the file's :9999", cfg.App.Addr)
+	if cfg.Server.Addr != ":9999" {
+		t.Errorf("addr = %q; want the file's :9999", cfg.Server.Addr)
 	}
-	if cfg.App.LogLevel != "warn" {
-		t.Errorf("log_level = %q; want the environment's warn over the file's debug", cfg.App.LogLevel)
+	if cfg.Server.LogLevel != "warn" {
+		t.Errorf("log_level = %q; want the environment's warn over the file's debug", cfg.Server.LogLevel)
 	}
-	if cfg.App.ShutdownGrace.Seconds() != 10 || !cfg.App.MigrateAtBoot {
-		t.Errorf("a key absent from the file lost its default: %+v", cfg.App)
+	if cfg.Server.ShutdownGrace.Seconds() != 10 || !cfg.Database.MigrateAtBoot {
+		t.Errorf("a key absent from the file lost its default: %+v", cfg)
 	}
 	if cfg.Source != filepath.Join(dir, "credentials.yml.enc") {
 		t.Errorf("source = %q", cfg.Source)
@@ -142,7 +143,7 @@ func TestLoadReadsTheSharedFile(t *testing.T) {
 
 // Test never reads a file, even when one is right there.
 func TestTestEnvironmentIgnoresCredentials(t *testing.T) {
-	dir := writeCredentials(t, "ecommerce:\n  addr: \":9999\"\n")
+	dir := writeCredentials(t, "server:\n  addr: \":9999\"\n")
 	t.Setenv(EnvVar, "test")
 	t.Setenv(ConfigDirVar, dir)
 
@@ -150,14 +151,14 @@ func TestTestEnvironmentIgnoresCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.App.Addr != ":8080" {
-		t.Errorf("addr = %q; test read the credentials file", cfg.App.Addr)
+	if cfg.Server.Addr != ":8080" {
+		t.Errorf("addr = %q; test read the credentials file", cfg.Server.Addr)
 	}
 }
 
 // A deployment hands the key over in the environment and ships no key file.
 func TestMasterKeyFromTheEnvironment(t *testing.T) {
-	dir := writeCredentials(t, "ecommerce:\n  addr: \":7777\"\n")
+	dir := writeCredentials(t, "server:\n  addr: \":7777\"\n")
 	key, err := os.ReadFile(filepath.Join(dir, "master.key"))
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +175,7 @@ func TestMasterKeyFromTheEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load without a key file: %v", err)
 	}
-	if cfg.App.Addr != ":7777" || !strings.Contains(cfg.KeyFile, MasterKeyVar) {
+	if cfg.Server.Addr != ":7777" || !strings.Contains(cfg.KeyFile, MasterKeyVar) {
 		t.Errorf("cfg = %+v", cfg)
 	}
 }
@@ -197,7 +198,7 @@ func TestPrintToRedactsThePassword(t *testing.T) {
 }
 
 // Development and test deliver mail to Mailpit with no setup; production has
-// to name a provider and a From address or it refuses to boot — mail must
+// to name a provider and a From address or it refuses to boot: mail must
 // never silently go to localhost, or nowhere, in production.
 func TestMailDefaultsAndProductionRequirements(t *testing.T) {
 	t.Setenv(EnvVar, "test")
@@ -205,25 +206,38 @@ func TestMailDefaultsAndProductionRequirements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.App.SMTPAddr != "localhost:1125" || cfg.App.MailFrom == "" {
-		t.Errorf("test mail = %q from %q, want Mailpit's address and a from address", cfg.App.SMTPAddr, cfg.App.MailFrom)
+	if cfg.Smtp.Address != "localhost:1125" || cfg.Mail.From == "" {
+		t.Errorf("test mail = %q from %q, want Mailpit's address and a from address", cfg.Smtp.Address, cfg.Mail.From)
 	}
 
 	t.Setenv(EnvVar, "production")
 	t.Setenv(ConfigDirVar, t.TempDir())
-	t.Setenv("ECOMMERCE_DATABASE_URL", "postgres://u:p@db:5432/ecommerce")
-	t.Setenv("ECOMMERCE_TOKEN_SECRET", strings.Repeat("s", 32))
-	t.Setenv("ECOMMERCE_SMTP_ADDR", "")
-	t.Setenv("ECOMMERCE_MAIL_FROM", "")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_ADDR") {
-		t.Errorf("production without smtp: err = %v, want a refusal naming ECOMMERCE_SMTP_ADDR", err)
+	t.Setenv("DATABASE_URL", "postgres://u:p@db:5432/ecommerce")
+	t.Setenv("TOKEN_SECRET", strings.Repeat("s", 32))
+	t.Setenv("SMTP_ADDRESS", "")
+	t.Setenv("MAIL_FROM", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_ADDRESS") {
+		t.Errorf("production without smtp: err = %v, want a refusal naming SMTP_ADDRESS", err)
 	}
-	t.Setenv("ECOMMERCE_SMTP_ADDR", "smtp.example.com:587")
+	t.Setenv("SMTP_ADDRESS", "smtp.example.com:587")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "MAIL_FROM") {
-		t.Errorf("production without mail_from: err = %v, want a refusal naming ECOMMERCE_MAIL_FROM", err)
+		t.Errorf("production without mail.from: err = %v, want a refusal naming MAIL_FROM", err)
 	}
-	t.Setenv("ECOMMERCE_MAIL_FROM", "shop@example.com")
+	t.Setenv("MAIL_FROM", "shop@example.com")
 	if _, err := Load(); err != nil {
 		t.Errorf("production with both set: %v", err)
+	}
+}
+
+// A short token secret is refused in production: it signs every login.
+func TestProductionRefusesAShortTokenSecret(t *testing.T) {
+	t.Setenv(EnvVar, "production")
+	t.Setenv(ConfigDirVar, t.TempDir())
+	t.Setenv("DATABASE_URL", "postgres://u:p@db:5432/ecommerce")
+	t.Setenv("SMTP_ADDRESS", "smtp.example.com:587")
+	t.Setenv("MAIL_FROM", "shop@example.com")
+	t.Setenv("TOKEN_SECRET", "too-short")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TOKEN_SECRET") {
+		t.Errorf("a short token secret: err = %v, want a refusal naming TOKEN_SECRET", err)
 	}
 }

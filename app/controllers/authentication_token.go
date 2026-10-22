@@ -8,7 +8,7 @@ import (
 )
 
 // Tokens is the token maker for this app: the secret from config
-// (ecommerce.token_secret in the credentials file, ECOMMERCE_TOKEN_SECRET in the environment) and the
+// (token.secret in the credentials file, TOKEN_SECRET in the environment) and the
 // app's name as issuer. A sessions controller that signs users in here mints
 // with it; a Rails app that signs them in mints the same token with the jwt
 // gem and the same secret:
@@ -16,7 +16,7 @@ import (
 //	JWT.encode({ iss: "ecommerce", sub: user.id.to_s, iat: Time.now.to_i, exp: 15.minutes.from_now.to_i, jti: SecureRandom.uuid },
 //	           Rails.application.credentials.ecommerce_token_secret, "HS256")
 func (s *Server) Tokens() token.Maker {
-	return token.Maker{Secret: []byte(s.Config.App.TokenSecret), Issuer: "ecommerce"}
+	return token.Maker{Secret: []byte(s.Config.Token.Secret), Issuer: "ecommerce"}
 }
 
 // WithUser is the route group a signed-in user is required for. Mount a

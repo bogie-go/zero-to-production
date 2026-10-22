@@ -25,14 +25,14 @@ reloads outside development: production runs the compiled binary.
 ## Your own Postgres, without Docker
 
 `make up` runs the bundled Postgres; any Postgres the app can reach will do.
-Point development at yours (the role needs `CREATEDB`), or set `database_url`
+Point development at yours (the role needs `CREATEDB`), or set `database.url`
 with `bogie credentials:edit` instead of exporting it:
 
-    export ECOMMERCE_DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/ecommerce_development?sslmode=disable'
+    export DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/ecommerce_development?sslmode=disable'
     bogie db:prepare
     bogie s
 
-Tests never read the credentials or ECOMMERCE_DATABASE_URL; they take their
+Tests never read the credentials or DATABASE_URL; they take their
 own URL:
 
     export ECOMMERCE_TEST_DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/ecommerce_test?sslmode=disable'
@@ -52,10 +52,11 @@ holds those).
 
     go run . mail test you@example.com     # send one, then look in the inbox
 
-Production has no default: set `smtp_addr` (host:port of your provider),
-`mail_from`, and `smtp_user`/`smtp_password` if it wants a login, with
-`make credentials ENV=production` or `ECOMMERCE_SMTP_ADDR` and friends. It
-refuses to boot without the first two.
+Production has no default: set `smtp.address` (host:port of your provider) and
+`mail.from`, plus `smtp.username` / `smtp.password` if it wants a login, with
+`make credentials ENV=production` or the environment (`SMTP_ADDRESS`,
+`MAIL_FROM`, `SMTP_USERNAME`, `SMTP_PASSWORD`). It refuses to boot without the
+first two. Adding a setting like these is `bogie g config`.
 
 ## Admin namespace
 

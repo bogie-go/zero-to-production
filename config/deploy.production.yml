@@ -39,4 +39,4 @@ env:
     # point. Production is the only place both say production.
     ECOMMERCE_ENV: production
     ECOMMERCE_CREDENTIALS: production
-    ECOMMERCE_ADDR: ":8080"
+    SERVER_ADDR: ":8080"

@@ -32,7 +32,7 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	log := logger.New(cfg.App.LogLevel, cfg.Env)
+	log := logger.New(cfg.Server.LogLevel, cfg.Env)
 
 	// Printed before anything connects, so a wrong setting shows up next to
 	// the failure it causes rather than after it.
@@ -45,18 +45,18 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	// always the one its code was built for. Failing here stops the deploy,
 	// which is the point: serving traffic against a half-applied schema is
 	// worse.
-	if cfg.App.MigrateAtBoot {
-		if err := migrate.Run(ctx, cfg.App.DatabaseURL, log); err != nil {
+	if cfg.Database.MigrateAtBoot {
+		if err := migrate.Run(ctx, cfg.Database.URL, log); err != nil {
 			// database.Hint tells apart the three ways this fails -- nothing
 			// listening, credentials refused, database not created yet --
 			// because the pgx error alone reads the same for all of them.
-			return nil, database.Hint(err, cfg.App.DatabaseURL)
+			return nil, database.Hint(err, cfg.Database.URL)
 		}
 	}
 
-	store, err := models.Open(ctx, cfg.App.DatabaseURL)
+	store, err := models.Open(ctx, cfg.Database.URL)
 	if err != nil {
-		return nil, database.Hint(err, cfg.App.DatabaseURL)
+		return nil, database.Hint(err, cfg.Database.URL)
 	}
 
 	server := controllers.NewServer(cfg, log)

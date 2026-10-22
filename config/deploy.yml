@@ -49,13 +49,13 @@ env:
     # ECOMMERCE_CREDENTIALS is what selects the secrets.
     ECOMMERCE_ENV: production
     ECOMMERCE_CREDENTIALS: staging
-    ECOMMERCE_ADDR: ":8080"
+    SERVER_ADDR: ":8080"
 
 builder:
   arch: amd64
 
 # The database is not an accessory here on purpose. The premise is a service
-# next to a Rails app that already runs Postgres, so ecommerce.database_url in
+# next to a Rails app that already runs Postgres, so database.url in
 # config/credentials/staging.yml.enc points at that server, as a SEPARATE
 # database on it. If this service is to run its own, uncomment:
 #

@@ -27,16 +27,15 @@ func runMail(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	a := cfg.App
-	m := mailer.New(mailer.Config{Addr: a.SMTPAddr, User: a.SMTPUser, Password: a.SMTPPassword, From: a.MailFrom})
+	m := mailer.New(mailer.Config{Addr: cfg.Smtp.Address, User: cfg.Smtp.Username, Password: cfg.Smtp.Password, From: cfg.Mail.From})
 	err = m.Send(ctx, mailer.Message{
 		To:      args[1],
 		Subject: "Ecommerce test email",
-		Text:    "If you can read this, mail works.\n\nSent " + time.Now().Format(time.RFC1123) + " via " + a.SMTPAddr + "\n",
+		Text:    "If you can read this, mail works.\n\nSent " + time.Now().Format(time.RFC1123) + " via " + cfg.Smtp.Address + "\n",
 	})
 	if err != nil {
 		return err
 	}
-	fmt.Printf("sent a test email to %s via %s\n", args[1], a.SMTPAddr)
+	fmt.Printf("sent a test email to %s via %s\n", args[1], cfg.Smtp.Address)
 	return nil
 }

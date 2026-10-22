@@ -22,7 +22,7 @@ var (
 )
 
 // Maker holds the secret and the issuer every token must carry. The secret
-// is ecommerce.token_secret in the credentials file (ECOMMERCE_TOKEN_SECRET in the environment), at
+// is token.secret in the credentials file (TOKEN_SECRET in the environment), at
 // least 32 bytes; the issuer is the app's name, so a token minted for
 // another service with the same secret is still refused.
 type Maker struct {
