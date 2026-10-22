@@ -216,9 +216,15 @@ func TestMailDefaultsAndProductionRequirements(t *testing.T) {
 	t.Setenv("TOKEN_SECRET", strings.Repeat("s", 32))
 	t.Setenv("SMTP_ADDRESS", "")
 	t.Setenv("MAIL_FROM", "")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_ADDRESS") {
-		t.Errorf("production without smtp: err = %v, want a refusal naming SMTP_ADDRESS", err)
+	if _, err := Load(); err == nil {
+		t.Error("production booted with neither smtp.address nor mail.from")
 	}
+	// Each one is refused on its own, whichever group is checked first.
+	t.Setenv("MAIL_FROM", "shop@example.com")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_ADDRESS") {
+		t.Errorf("production without smtp.address: err = %v, want a refusal naming SMTP_ADDRESS", err)
+	}
+	t.Setenv("MAIL_FROM", "")
 	t.Setenv("SMTP_ADDRESS", "smtp.example.com:587")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "MAIL_FROM") {
 		t.Errorf("production without mail.from: err = %v, want a refusal naming MAIL_FROM", err)
