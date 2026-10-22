@@ -7,6 +7,7 @@ package password
 
 import (
 	"fmt"
+	"sync"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -31,4 +32,23 @@ func Hash(plain string) (string, error) {
 // Check reports whether plain is the password digest hashed.
 func Check(digest, plain string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(digest), []byte(plain)) == nil
+}
+
+var (
+	dummyOnce   sync.Once
+	dummyDigest []byte
+)
+
+// DummyCheck spends the time a real Check would and always reports false. A
+// login for an email with no account calls it, so answering "no such account"
+// takes as long as answering "wrong password": otherwise the faster refusal
+// tells a caller which emails have accounts, even though both say the same
+// words. The digest it compares against is made once, at the same cost every
+// real one is, from a value nothing can match.
+func DummyCheck(plain string) bool {
+	dummyOnce.Do(func() {
+		dummyDigest, _ = bcrypt.GenerateFromPassword([]byte("no account has this password digest"), bcrypt.DefaultCost)
+	})
+	_ = bcrypt.CompareHashAndPassword(dummyDigest, []byte(plain))
+	return false
 }

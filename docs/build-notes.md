@@ -2,7 +2,29 @@
 
 Raw material for the book "Bogie, How to Go from zero to production": what was actually done while building the e-commerce API, which Bogie commands were run, what was generated and what was written by hand, and where Bogie fell short. These are notes, not chapters.
 
-Last updated: 2026-10-20 (covers through Task D, accounts). Times are Bangkok time (UTC+7). "(inferred)" marks things read from files, timestamps or the Bogie repo, not confirmed by Mac.
+Last updated: 2026-10-22 (covers through Task G; Task F is complete). Times are Bangkok time (UTC+7). "(inferred)" marks things read from files, timestamps or the Bogie repo, not confirmed by Mac.
+
+---
+
+## Where things stand (2026-10-22)
+
+Pass 1 has reached the end of Task G. Every checkpoint is a git tag; the table is in `docs/book-plan.md`. The "Still to do" lists below were audited on this date: an item is checked when the code (or a decision) closes it, with the evidence beside it, and what remains open is the list here.
+
+**Real gaps, small enough to just do**
+- Pagination for `GET /products` (Task A is meant to teach it; the list is capped at 100).
+- A unique index on `carts.token`, and a find-or-create that survives two concurrent first requests.
+- Empty carts piling up: `POST /guest_sessions` makes a cart at mint time.
+- No way to promote a second staff account, or change the seeded password, short of editing the database.
+- The headless-browser checks (real Chrome, via a scratch script) are not part of `bin/ci`.
+
+**Known limitations, kept on purpose**
+- `buy_x_get_y` records free items but does not lower the price (needs per-line pricing). The admin form says so.
+- Coupon codes (`price_rules.code`) are deferred; no record of which rule discounted which past order.
+- At-least-once email delivery (an occasional duplicate), and failures visible only in `river_job`.
+- A sign-in alert for every login is noisy; knowing a device needs a table.
+- One category per product; no manual ordering of categories.
+
+**Ahead in the plan:** Task H (deploy: Kamal, running the worker, a real mail provider, trusted proxies for the alert's address) and Task I (health, logging, monitoring); the payment simulator (its own task or "where to go next", undecided); `requests/*.http` per chapter; and Pass 2, rebuilding from an empty folder, tagging each iteration as a reader would.
 
 ---
 
@@ -101,12 +123,12 @@ Hand-written, or hand-edited after generation:
 - [x] A basic HTML page listing products: `public/index.html` with Alpine.js (`4e4281f`), plus a detail page (`7fbdd93`).
 - [x] Decide where `index.html` lives versus the welcome page: `public/index.html` wins at `/`, welcome is the fallback (`f6cd452`).
 - [x] Start `docs/bogie-gaps.md` (`a21c9da`). The Task A gaps above are not in it yet.
-- [ ] Create, update and delete actions (POST, PATCH, DELETE `/products`) with `Validate` rules (name required, price ≥ 0, stock ≥ 0) and 422 responses.
-- [ ] Fill in the model round-trip test. The TODO is still in `products_test.go`, and now in `carts_test.go` and `cart_items_test.go` too.
-- [ ] Pagination for `GET /products`: decide offset or cursor, and the response shape (count, next).
-- [ ] Serving CSS and JS from `public/` (widen `go:embed`), or decide the CDN plus inline approach is fine for the book.
-- [ ] Decide whether the Task A gaps above (seeds redesign, `posts_test.go` TODO, `ImageUrl`, non-unique `GetProductByName`) move into `docs/bogie-gaps.md`.
-- [ ] Tag Task A checkpoints (`task-a1`, ...). Only `task-c1` and `task-c2` exist so far.
+- [x] Create, update and delete actions (POST, PATCH, DELETE `/products`) with `Validate` rules (name required, price ≥ 0, stock ≥ 0) and 422 responses. (Done in Task F: `/admin/products`, with `Product.Validate`.)
+- [x] Fill in the model round-trip test. The TODO is still in `products_test.go`, and now in `carts_test.go` and `cart_items_test.go` too. (Done: products in Task F, carts and cart_items on 2026-10-22; no generated TODO is left in the code.)
+- [ ] Pagination for `GET /products`: decide offset or cursor, and the response shape (count, next). **Still open, and the plan says Task A teaches it:** the list is capped at 100 (`productsListLimit`), with no paging.
+- [x] Serving CSS and JS from `public/` (widen `go:embed`), or decide the CDN plus inline approach is fine for the book. (Decided: the embed is `*.html *.js admin images`, so `auth.js` and `admin/*.css|js` are served from the binary; Alpine comes from a CDN, pinned.)
+- [x] Decide whether the Task A gaps above (seeds redesign, `posts_test.go` TODO, `ImageUrl`, non-unique `GetProductByName`) move into `docs/bogie-gaps.md`. (Decided: they are chapter observations; the generator gaps are in `docs/bogie-gaps.md`.)
+- [x] Tag Task A checkpoints (`task-a1`, ...). Only `task-c1` and `task-c2` exist so far. (Done 2026-10-22: `task-a1` to `task-a3`, and the rest of Pass 1; see `docs/book-plan.md`.)
 
 ---
 
@@ -155,8 +177,8 @@ Not started. The build went from Task A straight to Task C on 2026-10-18 (inferr
 
 ### Still to do
 
-- [ ] Report the sqlc doc-comment leak to Bogie (or add it to `docs/bogie-gaps.md`).
-- [ ] Pick up Bogie's `4d10633` fix in the next release.
+- [x] Report the sqlc doc-comment leak to Bogie (or add it to `docs/bogie-gaps.md`). (Not a leak: sqlc copies the comment above `-- name:` into the Go doc, which later queries here use on purpose.)
+- [x] Pick up Bogie's `4d10633` fix in the next release. (Shipped in Bogie v0.2.10; this app has been past it since.)
 
 ---
 
@@ -205,10 +227,10 @@ Not started. The build went from Task A straight to Task C on 2026-10-18 (inferr
 
 ### Still to do
 
-- [ ] Scope cart_items changes to the visitor's cart (see C2, this became a real bug there).
-- [ ] Unique index on `carts.token`, or `ON CONFLICT`.
-- [ ] Move `quantity > 0` into `CartItem.Validate`, or decide to keep it in the store and say why.
-- [ ] Fix the `CartContents` comment.
+- [x] Scope cart_items changes to the visitor's cart (see C2, this became a real bug there). (Done in `48133b7`.)
+- [ ] Unique index on `carts.token`, or `ON CONFLICT`. **Still open and real:** `carts.token` has no unique index and `FindOrCreateCartByToken` is a plain find-then-create, so two concurrent first requests can make two carts for one token.
+- [x] Move `quantity > 0` into `CartItem.Validate`, or decide to keep it in the store and say why. (Decided and done 2026-10-22: `Validate` is the invariant for every writer; `AddCartItem` still refuses a bad quantity to *add* before it is added to the line, which is a different check.)
+- [x] Fix the `CartContents` comment. (Done 2026-10-22: it is oldest first.)
 
 ---
 
@@ -248,10 +270,10 @@ Not started. The build went from Task A straight to Task C on 2026-10-18 (inferr
 ### Still to do
 
 - [x] Fix the cart_items ownership bug (scoped queries for update and delete, plus tests with two carts) — done 2026-10-20, see below.
-- [ ] Decide whether to only accept server-issued tokens.
-- [ ] Clean up abandoned carts, or create a cart only on the first add, not on `GET /cart`.
-- [ ] Plan the guest-cart merge for Task D.
-- [ ] Task B (categories) and the price rules task are still ahead.
+- [x] Decide whether to only accept server-issued tokens. (Obsolete: tokens are signed JWTs, so only a token this server minted verifies.)
+- [ ] Clean up abandoned carts, or create a cart only on the first add, not on `GET /cart`. **Still open:** `POST /guest_sessions` still makes a cart at mint time, so every visitor who never adds anything leaves an empty cart.
+- [x] Plan the guest-cart merge for Task D. (Done in Task D, and again in `app/services/cartmerge`.)
+- [x] Task B (categories) and the price rules task are still ahead. (Both done: price rules, then categories as part of Task F.)
 
 ### Addendum, 2026-10-20: fixing the ownership bug
 
@@ -320,8 +342,8 @@ coverage 31% → 47%.
 ### Still to do
 
 - [ ] Thread real metadata (cart quantity per product, at least) through `pricing.Calculate` so `BuyXGetYRule` has something to act on.
-- [ ] Table-driven coverage for `starts_at`/`ends_at` scheduling and `priority` ordering against a live database (`ListActivePriceRules` itself is untested against Postgres, only unit-tested in `app/pricing`).
-- [ ] Decide whether `BuyXGetYRule`'s price-reduction gap gets fixed now or stays a documented limitation until cart-line-level pricing exists.
+- [x] Table-driven coverage for `starts_at`/`ends_at` scheduling and `priority` ordering against a live database (`ListActivePriceRules` itself is untested against Postgres, only unit-tested in `app/pricing`). (Done 2026-10-22: `TestActivePriceRulesRespectTheirDates` against Postgres, and the admin list's priority order.)
+- [x] Decide whether `BuyXGetYRule`'s price-reduction gap gets fixed now or stays a documented limitation until cart-line-level pricing exists. (Decided: a documented limitation, and the admin form now says so beside the kind.)
 - [ ] Coupon codes, when Task E starts: add `price_rules.code` (nullable), and a checkout-time lookup/validation.
 
 ---
@@ -367,9 +389,9 @@ coverage 31% → 47%.
 
 ### Still to do
 
-- [ ] Pad login's timing with a dummy bcrypt comparison when the email doesn't exist, closing the minor timing side-channel.
+- [x] Pad login's timing with a dummy bcrypt comparison when the email doesn't exist, closing the minor timing side-channel. (Done 2026-10-22: `password.DummyCheck`, called when the email has no account.)
 - [x] Decide whether `DeleteCartAndItems` should become a real transaction once Task E introduces them — see Task E's notes below.
-- [ ] Task E (checkout) is next: orders now belong to a real account.
+- [x] Task E (checkout) is next: orders now belong to a real account. (Done.)
 
 ## Pass 1 › Task E: Let customers place orders
 
@@ -411,9 +433,9 @@ coverage 31% → 47%.
 
 ### Still to do
 
-- [ ] Payment capture (`status` transitioning `pending` → `paid`/`cancelled` via a webhook) is out of scope here on purpose — `payment-simulator/` doesn't exist yet, and CLAUDE.md already calls out webhook handling as its own hand-written teaching material, later.
-- [ ] `BuyXGetYRule`'s known limitation (metadata only, no actual per-line discount) is unchanged; checkout inherits it from the cart's own pricing calculation rather than introducing a new one.
-- [ ] No git tag exists yet for price rules, Task D, or Task E — only `task-c1`/`task-c2` exist so far. Still an open offer, not yet acted on.
+- [ ] Payment capture (`status` transitioning `pending` → `paid`/`cancelled` via a webhook) is out of scope here on purpose — `payment-simulator/` doesn't exist yet, and CLAUDE.md already calls out webhook handling as its own hand-written teaching material, later. It belongs with the payment simulator decision (a task of its own, or "where to go next").
+- [x] `BuyXGetYRule`'s known limitation (metadata only, no actual per-line discount) is unchanged; checkout inherits it from the cart's own pricing calculation rather than introducing a new one. (Same item as the `BuyXGetYRule` lines above; one open item, tracked there.)
+- [x] No git tag exists yet for price rules, Task D, or Task E — only `task-c1`/`task-c2` exist so far. Still an open offer, not yet acted on. (Done 2026-10-22.)
 
 ## Pass 1 › Task F (1/3): roles, the admin namespace, and product CRUD
 
@@ -464,7 +486,7 @@ are still ahead.
 
 - [ ] No way to promote a second staff account, or change the seeded password, short of editing the database by hand. Likely answer: an admin "manage users" endpoint, itself staff-only — not built yet.
 - [x] Categories (folded in from Task B): done, see "Task F (2/3)" below. Price-rule admin CRUD is still ahead.
-- [ ] The public `GET /products`/`GET /products/:id` are unchanged; only `/admin/products` gained write actions.
+- [x] The public `GET /products`/`GET /products/:id` are unchanged; only `/admin/products` gained write actions. (Informational; since then the public listing gained `?category_id=`.)
 
 ## Pass 1 › Checkout UI (between Task F steps)
 
@@ -533,8 +555,8 @@ Decided 2026-10-22, with the user: develop against a fake SMTP server (Mailpit) 
 
 ### Still to do
 
-- [ ] Jobs (`bogie g job ...` enables River; a worker role; an `--jobs` app). Then the order-confirmation email as the first job, with welcome and login-alert emails as follow-ups.
-- [ ] `bin/ci` now also starts Mailpit (it runs `docker compose up --wait`); harmless, but the image has to be pulled once.
+- [x] Jobs (`bogie g job ...` enables River; a worker role; an `--jobs` app). Then the order-confirmation email as the first job, with welcome and login-alert emails as follow-ups. (Done: Task G.)
+- [x] `bin/ci` now also starts Mailpit (it runs `docker compose up --wait`); harmless, but the image has to be pulled once. (Accepted: it is one more small container, pulled once.)
 
 ### Addendum, 2026-10-22: mail keys in the credentials file
 

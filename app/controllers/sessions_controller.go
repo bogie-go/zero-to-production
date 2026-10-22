@@ -71,6 +71,11 @@ func (ctl *SessionsController) Create(c *gin.Context) {
 		return
 	}
 	user, err := ctl.Store.GetUserByEmail(c.Request.Context(), req.Email)
+	if errors.Is(err, domain.ErrNotFound) {
+		// Take the time a real check takes, so an unknown email is not
+		// answered faster than a wrong password (see password.DummyCheck).
+		password.DummyCheck(req.Password)
+	}
 	if err != nil || !password.Check(user.PasswordDigest, req.Password) {
 		if err != nil && !errors.Is(err, domain.ErrNotFound) {
 			ctl.fail(c, err)

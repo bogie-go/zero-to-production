@@ -33,6 +33,31 @@ By the end of this book, you can build a Go backend with Bogie, design it well e
 
 Testing runs through every task. Out of scope (sketched in "Where to go next"): real payments, shipping, tax, reviews, image uploads, multiple vendors, product variants (size/color, per-variant price and stock — considered for Task B, deferred: it would mean reworking the cart and seeds already built around a bare `product_id`, not just adding something new).
 
+## Pass 1 status and checkpoints (2026-10-22)
+
+Pass 1 is built through Task G. Task B (categories) was skipped at first and built inside Task F, where the admin pages it needs live. Each checkpoint is a git tag on the commit that finished that step. They are Pass 1's, so provisional: Pass 2 rebuilds from an empty folder and re-cuts them the way a reader would.
+
+| Task | Tag | What the checkpoint is |
+|---|---|---|
+| A | `task-a1` | products: model, seeds' API, index and show |
+| A | `task-a2` | the catalog front page, seeds with real photos |
+| A | `task-a3` | the product detail page (Task A complete) |
+| C | `task-c1` | cart mechanics and UI |
+| C | `task-c2` | personal carts (Task C complete) |
+| Price rules | `task-pricing` | the rule engine, wired into the cart |
+| D | `task-d` | accounts: signup, login, merging a guest's cart |
+| E | `task-e1` | checkout: a real transaction, stock, price snapshot |
+| E | `task-e2` | the checkout UI, receipts, order history |
+| F | `task-f1` | roles, the admin namespace, product CRUD API |
+| F | `task-f2` | the admin UI and soft delete (archive) |
+| F | `task-f3` | categories: relationship, JOIN, filtering |
+| F | `task-f4` | price rules in the admin (Task F complete) |
+| G | `task-g1` | background jobs: the order confirmation |
+| G | `task-g2` | the welcome email |
+| G | `task-g3` | the sign-in alert (Task G complete) |
+
+Next in the plan: H (deploy) and I (health). `docs/build-notes.md` has the open items.
+
 ## Supporting pieces
 - UI: ready-made, acts as the API contract. Features unlock as endpoints appear; shows clear errors when a response doesn't match the contract; one setting for the base URL. Served by Bogie from the same origin (no CORS).
 - Payments: simulated provider that sends webhooks (teaches idempotency and handling late/duplicate events).

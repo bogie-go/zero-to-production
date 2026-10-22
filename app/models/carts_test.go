@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 
 	"ecommerce/app/domain"
@@ -28,5 +29,32 @@ func TestUnknownCartsAreNotFound(t *testing.T) {
 	}
 }
 
-// TODO: a round trip. Create a cart with real values, Get it, List it,
-// Update it, Delete it; see posts_test.go for the shape.
+func TestCartRoundTrip(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	created, err := store.CreateCart(ctx, domain.Cart{Token: "visitor-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID == 0 {
+		t.Error("CreateCart did not assign an id")
+	}
+	got, err := store.GetCart(ctx, strconv.FormatInt(created.ID, 10))
+	if err != nil || got != created {
+		t.Fatalf("GetCart = %+v, %v; want %+v", got, err, created)
+	}
+	if all, err := store.ListCarts(ctx, 10); err != nil || len(all) != 1 || all[0].ID != created.ID {
+		t.Errorf("ListCarts = %+v, %v; want just the one created above", all, err)
+	}
+	created.Token = "visitor-2"
+	if updated, err := store.UpdateCart(ctx, created); err != nil || updated.Token != "visitor-2" {
+		t.Fatalf("UpdateCart = %+v, %v", updated, err)
+	}
+	if err := store.DeleteCart(ctx, strconv.FormatInt(created.ID, 10)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetCart(ctx, strconv.FormatInt(created.ID, 10)); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("GetCart after delete: err = %v, want ErrNotFound", err)
+	}
+}

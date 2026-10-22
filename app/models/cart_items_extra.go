@@ -106,7 +106,7 @@ func (s *Store) DeleteCartItemForCart(ctx context.Context, cartID int64, id stri
 }
 
 // CartContents is the cart's line items, each joined with the product it
-// names, newest first in the order they were added.
+// names, in the order they were added (oldest first).
 func (s *Store) CartContents(ctx context.Context, cartID int64) ([]domain.CartLine, error) {
 	rows, err := s.q.ListCartItemsForCart(ctx, cartID)
 	if err != nil {

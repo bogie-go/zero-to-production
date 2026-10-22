@@ -109,3 +109,55 @@ scaffolding a fresh app (plain and `--jobs`) and running its own
 `bin/ci` clean with zero models. `bogie app:update` here merged it in,
 one conflict (the hand-written version's comment vs. the template's;
 kept the template's, since it's slightly more general).
+
+## Generated `Create`/`Update` do not classify a foreign-key violation
+
+The generated `Delete` maps a foreign-key violation to `domain.ErrInvalid`
+since v0.2.13, but `Create` and `Update` on a model with a `:references`
+column do not: a product pointed at a category that does not exist surfaced
+as a raw 500. Found building categories (2026-10-22) and fixed by hand in
+`app/models/products.go` (SQLSTATE 23503 becomes `ErrInvalid`, "category does
+not exist"). **Real fix:** the same mapping in `g model`'s `Create`/`Update`
+for any model with a `:references` attribute, named for the column.
+
+## `bogie app:update` does not regenerate existing models
+
+A generator fix to the code `g model` writes (the `:uniq` mapping in v0.2.11,
+the foreign-key `Delete` in v0.2.13) reaches new models only. `app:update`
+merges the layout's template files and leaves `app/models/<table>.go` alone,
+so an app that wants the fix applies it by hand (done here for `products.go`;
+the other models' `Delete` still has the old behavior). Re-running `g model`
+would overwrite hand edits, which is the point of the `_extra` convention but
+not an answer for edits to the generated file itself, like a nullable column.
+
+## `g migration add_x_to_y` writes columns that cannot apply to a table with rows
+
+`x:datetime` and `x:references` come out `NOT NULL` with no default, which
+fails on any table that already has data (archived_at, category_id, both
+edited by hand), and a nullable column or a `ON DELETE SET NULL` needs the
+same edit. **Real fix:** a nullable form (`x:datetime?`), or a safe default
+for an added column.
+
+## A generated model test breaks as soon as `Validate` is real
+
+Every model's generated "unknown ones are not found" test calls `Update` with
+a zero-value struct. That passes while `Validate` is an empty stub and fails
+the moment it has a rule (users, orders, order items, products, categories,
+price rules and cart items have all hit it, each fixed by hand with a
+valid-looking value). **Real fix:** generate a valid-looking value, or skip
+the call and test the not-found path through a different method.
+
+## `g job` registers a worker with only a logger
+
+`jobs.Workers(log)` and the generated line `&XWorker{Log: log}` leave a real
+worker's dependencies (a store, a mailer, a setting) to be widened by hand,
+and the second job made it a `Deps` struct (`app/jobs/jobs.go`). **Real fix:**
+generate the `Deps` struct, and the registration with the fields the worker
+declares.
+
+## No mailer shape
+
+Bogie has no `g mailer`. The SMTP service (`app/services/mailer`), the
+composing functions (`app/mailers`) and the Mailpit container in
+`docker-compose.yml` are by hand, as is the config (now a `bogie g config`
+group). Worth deciding whether Bogie should ship the shape.

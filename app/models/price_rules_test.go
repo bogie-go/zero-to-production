@@ -113,3 +113,48 @@ func TestPriceRulesAreValidatedOnSave(t *testing.T) {
 		}
 	}
 }
+
+// The cart's rules are the active ones inside their dates: a rule that has not
+// started, or has ended, is left out even though it is switched on, and one
+// with no dates (or only one end) applies whenever that allows. This is the
+// scheduling the admin's start and end dates rely on.
+func TestActivePriceRulesRespectTheirDates(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	hour := time.Hour
+	past, future := time.Now().Add(-48*hour), time.Now().Add(48*hour)
+	earlier := time.Now().Add(-24 * hour)
+	later := time.Now().Add(24 * hour)
+
+	mk := func(name string, priority int32, starts, ends *time.Time) {
+		_, err := store.CreatePriceRule(ctx, domain.PriceRule{
+			Name: name, Kind: "fixed_discount", Properties: []byte(`{"amount_cents":100}`),
+			Active: true, Priority: priority, StartsAt: starts, EndsAt: ends,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("no dates", 10, nil, nil)
+	mk("inside its window", 20, &past, &future)
+	mk("started, no end", 30, &earlier, nil)
+	mk("ends later, no start", 40, nil, &later)
+	mk("not started yet", 50, &later, &future)
+	mk("already ended", 60, &past, &earlier)
+	mk("ended, no start", 70, nil, &earlier)
+
+	active, err := store.ListActivePriceRules(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := names(active)
+	want := []string{"no dates", "inside its window", "started, no end", "ends later, no start"}
+	if len(got) != len(want) {
+		t.Fatalf("active = %v, want %v (in priority order)", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("active[%d] = %q, want %q (all: %v)", i, got[i], want[i], got)
+		}
+	}
+}
