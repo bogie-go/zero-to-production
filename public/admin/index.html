@@ -4,111 +4,29 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Admin</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        --fg: #1c1b19; --muted: #6a675f; --line: #e4e1d8; --bg: #f8f6f1; --panel: #fffdf9;
-        --accent: #c0392b; --accent-soft: #fbe9e6; --glow: #bfe8f2;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root { --fg: #ecebe7; --muted: #9c9a93; --line: #2e2d2a; --bg: #151514; --panel: #1d1d1b;
-                --accent: #ea6e5f; --accent-soft: #3a2320; --glow: #1f3a42; }
-      }
-      * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
-             font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-
-      header { border-bottom: 1px solid var(--line); }
-      header .wrap { max-width: 72rem; margin: 0 auto; padding: 1.1rem 1.5rem; display: flex; align-items: center; gap: .6rem; }
-      header .brand { font-weight: 700; font-size: 1.15rem; letter-spacing: -.01em; text-decoration: none; color: inherit; }
-      header .tag { color: var(--muted); font-size: .85rem; flex: 1; }
-      header .cart-link { color: inherit; text-decoration: none; font-size: .9rem; padding: .4rem .75rem;
-                           border-radius: .5rem; background: var(--panel); border: 1px solid var(--line); }
-      header .cart-link:hover { border-color: var(--accent); }
-      header .account { font-size: .88rem; color: var(--muted); }
-      header .account a { color: inherit; }
-      header .account a:hover { color: var(--accent); }
-      header .account .who { margin: 0 .4rem; }
-      header .account button { background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; padding: 0; }
-      header .account button:hover { color: var(--accent); }
-
-      main { max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
-      .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: .9rem; margin-bottom: 1.5rem; }
-      .back:hover { color: var(--accent); }
-      h1 { font-size: clamp(1.5rem, 3vw, 1.9rem); margin: 0 0 1.5rem; letter-spacing: -.01em; }
-
-      .state { padding: 3rem 1rem; text-align: center; color: var(--muted); }
-
-      .line { display: grid; grid-template-columns: 5rem 1fr auto; gap: 1rem; align-items: center;
-              padding: 1rem 0; border-bottom: 1px solid var(--line); }
-      .line .thumb { width: 5rem; height: 5rem; border-radius: .6rem; overflow: hidden; background: var(--accent-soft); }
-      .line .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      .line .name { font-weight: 600; margin: 0 0 .25rem; }
-      .line .unit { color: var(--muted); font-size: .88rem; margin: 0; }
-      .line .error { color: var(--accent); font-size: .85rem; margin: .3rem 0 0; }
-      .line .controls { display: flex; flex-direction: column; align-items: flex-end; gap: .5rem; }
-      .line .qty { display: flex; align-items: center; gap: .5rem; }
-      .line .qty button { width: 1.8rem; height: 1.8rem; border-radius: .4rem; border: 1px solid var(--line);
-                           background: var(--panel); color: inherit; font-size: 1rem; cursor: pointer; line-height: 1; }
-      .line .qty button:hover { border-color: var(--accent); }
-      .line .qty button:disabled { opacity: .4; cursor: not-allowed; }
-      .line .subtotal { font-weight: 700; }
-      .line .remove { background: none; border: none; color: var(--muted); font-size: .82rem;
-                       cursor: pointer; text-decoration: underline; padding: 0; }
-      .line .remove:hover { color: var(--accent); }
-
-      .summary { display: flex; justify-content: space-between; align-items: baseline; padding-top: 1.25rem; }
-      .summary .label { color: var(--muted); }
-      .summary .total { font-size: 1.4rem; font-weight: 700; }
-
-      footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
-      footer .wrap { max-width: 72rem; margin: 0 auto; padding: 1.5rem; }
-      footer code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel);
-                    border: 1px solid var(--line); border-radius: .3rem; padding: .05rem .35rem; }
-    
-      .panel { max-width: 26rem; }
-      label { display: block; font-size: .85rem; color: var(--muted); margin: 1rem 0 .3rem; }
-      input { width: 100%; padding: .65rem .8rem; border-radius: .5rem; border: 1px solid var(--line);
-              background: var(--panel); color: inherit; font: inherit; }
-      input:focus { outline: none; border-color: var(--accent); }
-      button.primary, a.primary { display: inline-block; margin-top: 1.25rem; padding: .7rem 1.3rem; border-radius: .6rem;
-              border: none; background: var(--accent); color: #fff; font: inherit; font-weight: 600;
-              text-decoration: none; cursor: pointer; }
-      button.primary:disabled { opacity: .5; cursor: not-allowed; }
-      .alt { margin-top: 1.25rem; font-size: .9rem; color: var(--muted); }
-      .alt button { background: none; border: none; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; padding: 0; }
-      .err { color: var(--accent); font-size: .9rem; margin: .8rem 0 0; }
-      .note { color: var(--muted); font-size: .88rem; }
-      .row { display: flex; justify-content: space-between; padding: .5rem 0; border-bottom: 1px solid var(--line); }
-      .row .qty { color: var(--muted); }
-      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
-      .card { padding: 1.1rem 1.25rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--panel); }
-      .card h2 { margin: 0 0 .25rem; font-size: 1.05rem; }
-      .card p { margin: 0; color: var(--muted); font-size: .88rem; }
-      .card.soon { opacity: .6; }
-    </style>
+    <link rel="stylesheet" href="/admin/admin.css">
   </head>
   <body x-data="adminPage()" x-init="load()">
-    <header>
-      <div class="wrap">
-        <a class="brand" href="/">Ecommerce</a>
-        <span class="tag">built with Bogie</span>
-        <nav class="account" x-data="account()" x-init="load()" x-show="ready">
-          <template x-if="email">
-            <span><a x-show="isStaff" href="/admin/">Admin</a> <a href="/orders.html">Orders</a> <span class="who" x-text="email"></span> <button @click="logout()">Log out</button></span>
+    <div class="shell" x-show="!loading && !error">
+      <aside class="sidebar">
+        <a class="brand" href="/admin/">Ecommerce<small>admin</small></a>
+        <nav>
+          <template x-for="link in links" :key="link.href">
+            <a :href="link.soon ? null : link.href" :class="{ active: isActive(link), soon: link.soon }">
+              <span x-text="link.label"></span><em x-show="link.soon">soon</em>
+            </a>
           </template>
-          <a x-show="!email" :href="loginUrl">Log in</a>
+          <a href="/">&larr; Back to the shop</a>
         </nav>
-        <a class="cart-link" href="/cart.html">Cart</a>
-      </div>
-    </header>
+        <div class="who">
+          <span x-text="email"></span>
+          <div><button @click="logout()">Log out</button></div>
+        </div>
+      </aside>
 
-    <main>
-      <p class="state" x-show="loading">Checking access&hellip;</p>
-      <p class="state" x-show="!loading && error" x-text="error"></p>
-      <div x-show="!loading && !error">
-        <h1>Admin</h1>
-        <p class="note" x-text="'Signed in as ' + email"></p>
+      <main class="content">
+        <h1>Dashboard</h1>
+        <p class="note">Manage the shop. Each section arrives as its page is built.</p>
         <div class="cards">
           <div class="card">
             <h2>Products</h2>
@@ -117,40 +35,25 @@
           <div class="card soon"><h2>Categories</h2><p>Coming soon</p></div>
           <div class="card soon"><h2>Price rules</h2><p>Coming soon</p></div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
 
-    <script src="/auth.js"></script>
+    <p class="state" x-show="loading">Checking access&hellip;</p>
+    <p class="state" x-show="!loading && error" x-text="error"></p>
+
+    <script src="/admin/admin.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
     <script>
       function adminPage() {
         return {
-          email: '', productCount: 0, loading: true, error: null,
-          // The gate is a convenience, not the security: every /admin API
-          // call is checked again by the server (RequireStaff), so skipping
-          // this page's redirect gets a visitor nothing.
-          async api(url) {
-            let token = '';
-            try { token = localStorage.getItem('cartToken') || ''; } catch (e) {}
-            return fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
-          },
+          ...adminShell(),
+          productCount: 0,
           async load() {
+            if (!(await this.guard())) return;
             try {
-              const me = await this.api('/me');
-              if (me.status === 401 || me.status === 403) {
-                location.href = '/login.html?next=' + encodeURIComponent('/admin/');
-                return;
-              }
-              if (!me.ok) throw new Error('status ' + me.status);
-              const account = await me.json();
-              if (account.role !== 'staff') {
-                location.href = '/';
-                return;
-              }
-              this.email = account.email;
-              const products = await this.api('/admin/products');
-              if (!products.ok) throw new Error('status ' + products.status);
-              this.productCount = ((await products.json()).products || []).length;
+              const res = await this.api('/admin/products');
+              if (!res.ok) throw new Error('status ' + res.status);
+              this.productCount = ((await res.json()).products || []).length;
             } catch (e) {
               this.error = 'Could not load the admin area: ' + e.message;
             } finally {

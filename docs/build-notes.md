@@ -498,3 +498,10 @@ Verified in real Chrome (puppeteer-core, scratch script, not committed): guest c
 - The header shows an "Admin" link to staff only (`/me` already returned `role`; `account()` gained `isStaff`).
 - Checked in real Chrome for all three outcomes: no login, a customer, and staff.
 - Categories wait for the admin pages, as agreed; next is the admin products page.
+
+### Addendum, 2026-10-22: admin sidebar layout
+
+- `public/admin/admin.css` (the two-column layout, collapsing to a top block under 48rem) and `public/admin/admin.js` (`adminShell()`: the sidebar's links listed once, active-link highlighting, who is signed in, and the staff `guard()`). A page spreads `adminShell()` into its own component and calls `guard()` first; the page markup is just the sidebar block plus its content.
+- Links for pages not built yet render as muted "soon" items; building a page means dropping `soon: true` from its entry.
+- The admin area no longer uses the shop's header or `auth.js`; it has its own shell, with "Back to the shop" and Log out in the sidebar.
+- Checked in real Chrome, with screenshots at desktop and phone width.
