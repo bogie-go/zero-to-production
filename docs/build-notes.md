@@ -205,7 +205,7 @@ Not started. The build went from Task A straight to Task C on 2026-10-18 (inferr
 - **No singular resource.** See [`docs/bogie-gaps.md`](bogie-gaps.md#no-singular-resource-rails-resource-x): `GET /cart` is an `Index` action.
 - **Snake-case Go variable from the controller generator.** `cart_items := router.Group("/cart_items")` uses the table name as a variable name. It compiles, but Go style (and linters like revive) wants `cartItems` (inferred template bug).
 - **Validation lives outside `Validate`.** `domain.CartItem.Validate` is still empty. Quantity and stock checks are in the store extras, so the generated `CreateCartItem`/`UpdateCartItem` still accept quantity 0 or negative if called directly. Stock needs the database, which is why it can't sit in `Validate`, but `quantity > 0` could (inferred design question).
-- **`carts.token` has no unique index**, and `GetCartByToken` is `:one`. The find-then-create race noted in the code comment can create two carts with one token.
+- ~~**`carts.token` has no unique index.**~~ Fixed (2026-10-22): unique index `index_carts_on_token`, and `FindOrCreateCartByToken` is one `INSERT ... ON CONFLICT` upsert.
 - **Comment mismatch.** `CartContents` says "newest first", but the query orders by `created_at` ascending (oldest first).
 - **`ImageUrl` again.** The sqlc naming spreads into `CartLine` and `CartLineResponse`.
 
@@ -226,7 +226,7 @@ Not started. The build went from Task A straight to Task C on 2026-10-18 (inferr
 ### Still to do
 
 - [x] Scope cart_items changes to the visitor's cart (see C2, this became a real bug there). (Done in `48133b7`.)
-- [ ] Unique index on `carts.token`, or `ON CONFLICT`. **Still open and real:** `carts.token` has no unique index and `FindOrCreateCartByToken` is a plain find-then-create, so two concurrent first requests can make two carts for one token.
+- [x] Unique index on `carts.token`, and an atomic find-or-create (`UpsertCartByToken`: `ON CONFLICT (token) DO UPDATE` so `RETURNING` hands back the winner's row). Tested with eight concurrent callers.
 - [x] Move `quantity > 0` into `CartItem.Validate`, or decide to keep it in the store and say why. (Decided and done 2026-10-22: `Validate` is the invariant for every writer; `AddCartItem` still refuses a bad quantity to *add* before it is added to the line, which is a different check.)
 - [x] Fix the `CartContents` comment. (Done 2026-10-22: it is oldest first.)
 
