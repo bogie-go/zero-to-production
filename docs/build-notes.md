@@ -490,3 +490,11 @@ Verified in real Chrome (puppeteer-core, scratch script, not committed): guest c
 - `public/auth.js` (new; `go:embed` widened to `*.html *.js images`) holds `account()`, an Alpine component every page's header uses: asks `GET /me` who the saved token is for, shows "Log in" (with `next` set to the current page) or "Orders / email / Log out". Log out just forgets the saved token; the next visit mints a guest. A plain global function rather than `Alpine.data(...)`; same effect.
 - `orders.html`: the history, from `GET /orders`, each row linking to `order.html?id=N`; a guest is sent to login first. `GET /orders` rows gained `created_at` (additive).
 - Checked in real Chrome again: guest header, orders-as-guest redirect, sign up from there, history empty then one row, row opens the receipt, log out.
+
+### Addendum, 2026-10-22: the admin landing page
+
+- `public/admin/index.html`: the first admin page. It asks `/me`; no login goes to `login.html?next=/admin/`, a signed-in non-staff account goes to `/`, staff see a small dashboard (Products with a live count from `GET /admin/products`; Categories and Price rules marked "coming soon"). The redirect is a convenience, not the security: every `/admin` API call is checked again by `RequireStaff`.
+- `staticFile` now serves a folder's `index.html` (`/admin/`, with a 301 from `/admin` so relative links work); a folder without one is still 404. The embed widened to `*.html *.js admin images`.
+- The header shows an "Admin" link to staff only (`/me` already returned `role`; `account()` gained `isStaff`).
+- Checked in real Chrome for all three outcomes: no login, a customer, and staff.
+- Categories wait for the admin pages, as agreed; next is the admin products page.

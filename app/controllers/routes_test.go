@@ -165,3 +165,21 @@ func TestPanicRecoveredServesThe500Page(t *testing.T) {
 		t.Errorf("GET /boom = %d %q, want 500 and public/500.html", rec.Code, rec.Body.String())
 	}
 }
+
+// A folder in public/ answers with its index.html, redirecting to the
+// trailing slash first so the page's relative links resolve; a folder with
+// no index.html is simply not found. /admin/index.html itself is the
+// page the staff gate lives in (the API behind it is guarded separately).
+func TestStaticFolderServesItsIndex(t *testing.T) {
+	s := testServer(config.EnvProduction)
+
+	if rec := get(s, "/admin"); rec.Code != http.StatusMovedPermanently || rec.Header().Get("Location") != "/admin/" {
+		t.Errorf("GET /admin = %d %q, want 301 to /admin/", rec.Code, rec.Header().Get("Location"))
+	}
+	if rec := get(s, "/admin/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<title>Admin</title>") {
+		t.Errorf("GET /admin/ = %d, want the admin page", rec.Code)
+	}
+	if rec := get(s, "/images"); rec.Code != http.StatusNotFound {
+		t.Errorf("GET /images = %d, want 404: a folder with no index.html is not listed", rec.Code)
+	}
+}

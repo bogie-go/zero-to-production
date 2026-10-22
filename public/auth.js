@@ -5,6 +5,8 @@
 function account() {
   return {
     email: '',
+    role: '',
+    get isStaff() { return this.role === 'staff'; },
     ready: false,
     get loginUrl() {
       return '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
@@ -14,7 +16,11 @@ function account() {
         const token = localStorage.getItem('cartToken') || '';
         if (token) {
           const res = await fetch('/me', { headers: { Authorization: 'Bearer ' + token } });
-          if (res.ok) this.email = (await res.json()).email;
+          if (res.ok) {
+            const me = await res.json();
+            this.email = me.email;
+            this.role = me.role;
+          }
         }
       } catch (e) {}
       this.ready = true;

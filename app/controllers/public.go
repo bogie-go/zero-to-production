@@ -24,8 +24,23 @@ func (s *Server) staticFile(c *gin.Context) {
 	if name == "" || name == "." {
 		name = "index.html"
 	}
-	if info, err := fs.Stat(public.Files, name); err != nil || info.IsDir() {
+	info, err := fs.Stat(public.Files, name)
+	if err != nil {
 		return
+	}
+	if info.IsDir() {
+		// A folder answers with its index.html, as a web server in front of
+		// Rails would: /admin/ is public/admin/index.html. Without the
+		// trailing slash, redirect, so the page's relative links resolve.
+		if _, err := fs.Stat(public.Files, name+"/index.html"); err != nil {
+			return
+		}
+		if !strings.HasSuffix(c.Request.URL.Path, "/") {
+			c.Redirect(http.StatusMovedPermanently, c.Request.URL.Path+"/")
+			c.Abort()
+			return
+		}
+		name += "/index.html"
 	}
 	http.ServeFileFS(c.Writer, c.Request, public.Files, name)
 	c.Abort()

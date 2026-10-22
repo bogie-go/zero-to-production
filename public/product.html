@@ -70,7 +70,7 @@
         <span class="tag">built with Bogie</span>
         <nav class="account" x-data="account()" x-init="load()" x-show="ready">
           <template x-if="email">
-            <span><a href="/orders.html">Orders</a> <span class="who" x-text="email"></span> <button @click="logout()">Log out</button></span>
+            <span><a x-show="isStaff" href="/admin/">Admin</a> <a href="/orders.html">Orders</a> <span class="who" x-text="email"></span> <button @click="logout()">Log out</button></span>
           </template>
           <a x-show="!email" :href="loginUrl">Log in</a>
         </nav>
