@@ -38,3 +38,14 @@ func (r PercentageDiscountRule) Apply(ctx *PriceContext) (map[string]any, error)
 	ctx.CurrentCents -= discount
 	return map[string]any{"percentage": r.Percentage, "discount_cents": discount}, nil
 }
+
+func init() {
+	RegisterSpec(Spec{
+		Kind: "percentage_discount", Label: "Percentage off",
+		Help:   "Takes a percentage off the price so far, so it compounds with rules that run before it.",
+		Fields: []Field{{Name: "percentage", Label: "Percentage off", Type: "percent", Help: "Between 0 and 100."}},
+	})
+}
+
+// Summary says "20% off".
+func (r PercentageDiscountRule) Summary() string { return fmt.Sprintf("%g%% off", r.Percentage) }

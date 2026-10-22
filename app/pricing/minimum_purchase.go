@@ -45,3 +45,19 @@ func (r MinimumPurchaseRule) Apply(ctx *PriceContext) (map[string]any, error) {
 	ctx.CurrentCents -= discount
 	return map[string]any{"minimum_cents": r.MinimumCents, "discount_cents": discount}, nil
 }
+
+func init() {
+	RegisterSpec(Spec{
+		Kind: "minimum_purchase", Label: "Amount off a big order",
+		Help: "A fixed discount, but only once the order reaches a minimum.",
+		Fields: []Field{
+			{Name: "minimum_cents", Label: "Order must reach", Type: "cents"},
+			{Name: "discount_cents", Label: "Amount off", Type: "cents"},
+		},
+	})
+}
+
+// Summary says "$75.00 off orders of $500.00 or more".
+func (r MinimumPurchaseRule) Summary() string {
+	return fmt.Sprintf("%s off orders of %s or more", money(r.DiscountCents), money(r.MinimumCents))
+}

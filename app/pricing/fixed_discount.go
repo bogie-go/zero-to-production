@@ -39,3 +39,14 @@ func (r FixedDiscountRule) Apply(ctx *PriceContext) (map[string]any, error) {
 	ctx.CurrentCents -= discount
 	return map[string]any{"amount_cents": r.AmountCents, "discount_cents": discount}, nil
 }
+
+func init() {
+	RegisterSpec(Spec{
+		Kind: "fixed_discount", Label: "Fixed amount off",
+		Help:   "Takes a fixed amount off the order, never below zero.",
+		Fields: []Field{{Name: "amount_cents", Label: "Amount off", Type: "cents"}},
+	})
+}
+
+// Summary says "$50.00 off".
+func (r FixedDiscountRule) Summary() string { return money(r.AmountCents) + " off" }

@@ -3,7 +3,9 @@ package models
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
+	"time"
 
 	"ecommerce/app/domain"
 )
@@ -23,10 +25,91 @@ func TestUnknownPriceRulesAreNotFound(t *testing.T) {
 		}
 	}
 
-	if _, err := store.UpdatePriceRule(ctx, domain.PriceRule{ID: 999999999}); !errors.Is(err, domain.ErrNotFound) {
+	// A valid-looking rule, so Validate (no longer a no-op) passes and the
+	// not-found check is what actually gets exercised.
+	if _, err := store.UpdatePriceRule(ctx, domain.PriceRule{ID: 999999999, Name: "Nope", Kind: "fixed_discount", Properties: []byte(`{}`)}); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("UpdatePriceRule(%d): err = %v, want ErrNotFound", 999999999, err)
 	}
 }
 
-// TODO: a round trip. Create a price_rule with real values, Get it, List it,
-// Update it, Delete it; see posts_test.go for the shape.
+// The admin's list is every rule in the order the engine runs them, active or
+// not; the cart's own list is only the active ones, in the same order.
+func TestAdminListIncludesInactiveRulesInRunningOrder(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	mk := func(name string, priority int32, active bool) domain.PriceRule {
+		r, err := store.CreatePriceRule(ctx, domain.PriceRule{Name: name, Kind: "fixed_discount", Properties: []byte(`{"amount_cents":100}`), Active: active, Priority: priority})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	mk("second", 20, true)
+	mk("off", 5, false)
+	mk("first", 10, true)
+
+	all, err := store.ListAllPriceRules(ctx)
+	if err != nil || len(all) != 3 || all[0].Name != "off" || all[1].Name != "first" || all[2].Name != "second" {
+		t.Errorf("all = %v, %v; want off, first, second by priority", names(all), err)
+	}
+	active, err := store.ListActivePriceRules(ctx)
+	if err != nil || len(active) != 2 || active[0].Name != "first" || active[1].Name != "second" {
+		t.Errorf("active = %v, %v; want first, second", names(active), err)
+	}
+}
+
+func names(rs []domain.PriceRule) []string {
+	out := make([]string, len(rs))
+	for i, r := range rs {
+		out[i] = r.Name
+	}
+	return out
+}
+
+// Switching a rule off changes nothing but whether it applies: the very next
+// read of the active rules (the cart's) no longer has it, and switching it
+// back on restores it.
+func TestSetPriceRuleActiveTakesEffectOnTheNextRead(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	rule, err := store.CreatePriceRule(ctx, domain.PriceRule{Name: "Sale", Kind: "fixed_discount", Properties: []byte(`{"amount_cents":100}`), Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := strconv.FormatInt(rule.ID, 10)
+
+	off, err := store.SetPriceRuleActive(ctx, id, false)
+	if err != nil || off.Active || off.Name != "Sale" {
+		t.Fatalf("off = %+v, %v", off, err)
+	}
+	if active, _ := store.ListActivePriceRules(ctx); len(active) != 0 {
+		t.Errorf("a switched-off rule is still active: %v", names(active))
+	}
+	if _, err := store.SetPriceRuleActive(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	if active, _ := store.ListActivePriceRules(ctx); len(active) != 1 {
+		t.Errorf("switched back on: %v, want the rule", names(active))
+	}
+	for _, bad := range []string{"nope", "", "999999999"} {
+		if _, err := store.SetPriceRuleActive(ctx, bad, true); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("SetPriceRuleActive(%q): err = %v, want ErrNotFound", bad, err)
+		}
+	}
+}
+
+// A rule needs a name and a kind, and cannot end before it starts.
+func TestPriceRulesAreValidatedOnSave(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	start, before := time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	for name, r := range map[string]domain.PriceRule{
+		"no name":               {Kind: "fixed_discount", Properties: []byte(`{}`)},
+		"no kind":               {Name: "x", Properties: []byte(`{}`)},
+		"ends before it starts": {Name: "x", Kind: "fixed_discount", Properties: []byte(`{}`), StartsAt: &start, EndsAt: &before},
+	} {
+		if _, err := store.CreatePriceRule(ctx, r); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
+		}
+	}
+}

@@ -69,3 +69,67 @@ func (q *Queries) ListActivePriceRules(ctx context.Context) ([]PriceRule, error)
 	}
 	return items, nil
 }
+
+const listAllPriceRules = `-- name: ListAllPriceRules :many
+SELECT id, name, kind, properties, active, priority, starts_at, ends_at, created_at, updated_at FROM price_rules ORDER BY priority ASC, id ASC
+`
+
+// The admin's list: every rule in the order the engine runs them (priority,
+// then id), active or not.
+func (q *Queries) ListAllPriceRules(ctx context.Context) ([]PriceRule, error) {
+	rows, err := q.db.Query(ctx, listAllPriceRules)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PriceRule{}
+	for rows.Next() {
+		var i PriceRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Kind,
+			&i.Properties,
+			&i.Active,
+			&i.Priority,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setPriceRuleActive = `-- name: SetPriceRuleActive :one
+UPDATE price_rules SET active = $2, updated_at = now() WHERE id = $1 RETURNING id, name, kind, properties, active, priority, starts_at, ends_at, created_at, updated_at
+`
+
+type SetPriceRuleActiveParams struct {
+	ID     int64
+	Active bool
+}
+
+func (q *Queries) SetPriceRuleActive(ctx context.Context, arg SetPriceRuleActiveParams) (PriceRule, error) {
+	row := q.db.QueryRow(ctx, setPriceRuleActive, arg.ID, arg.Active)
+	var i PriceRule
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Kind,
+		&i.Properties,
+		&i.Active,
+		&i.Priority,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

@@ -52,3 +52,34 @@ func (s *Store) ListActivePriceRules(ctx context.Context) ([]domain.PriceRule, e
 	}
 	return out, nil
 }
+
+// ListAllPriceRules is every rule, active or not, in the order the engine
+// runs them: the admin's list. ListActivePriceRules is what the cart uses.
+func (s *Store) ListAllPriceRules(ctx context.Context) ([]domain.PriceRule, error) {
+	rows, err := s.q.ListAllPriceRules(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("models: list all price rules: %w", err)
+	}
+	out := make([]domain.PriceRule, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, price_ruleFromRow(r))
+	}
+	return out, nil
+}
+
+// SetPriceRuleActive turns a rule on or off and nothing else: the next cart
+// request recomputes with it or without it.
+func (s *Store) SetPriceRuleActive(ctx context.Context, id string, active bool) (domain.PriceRule, error) {
+	pk, err := parseID(id)
+	if err != nil {
+		return domain.PriceRule{}, domain.ErrNotFound
+	}
+	row, err := s.q.SetPriceRuleActive(ctx, SetPriceRuleActiveParams{ID: pk, Active: active})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return domain.PriceRule{}, domain.ErrNotFound
+	case err != nil:
+		return domain.PriceRule{}, fmt.Errorf("models: set price rule %s active: %w", id, err)
+	}
+	return price_ruleFromRow(row), nil
+}

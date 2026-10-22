@@ -624,7 +624,7 @@ The plan's Task B, "Group products into categories: relationships, filtering, JO
 
 ### Still to do
 
-- [ ] Price-rule admin CRUD (step 3 of 3).
+- [x] Price-rule admin CRUD (step 3 of 3): see "Task F (3/3)" below.
 - [ ] Products still hold one category; many-to-many (tags) would be a join table and is out of scope.
 - [ ] Category order is by name; no manual ordering.
 
@@ -642,3 +642,28 @@ The user's design call: with CRUD in the admin, New and Edit should be pages of 
 - The form and table styles moved out of the pages into `admin.css`; `adminShell()` gained `queryId()` and a link's `also` list, so a form page highlights its list's sidebar item.
 - A route-per-resource URL (`/admin/products/5/edit`) would need server routes for the pages; the query string keeps them static files.
 - Checked in Chrome: new and edit with validation errors staying on the form, Cancel, the Back button, an unknown id, and delete from the list, for both resources.
+
+## Pass 1 › Task F (3/3): price rules in the admin
+
+Closes the "seeded until Task F" note from the pricing task, and with it Task F.
+
+### What was done
+
+1. **Each kind describes itself.** `app/pricing/spec.go`: a `Spec` (label, help, an optional caveat, and the fields its properties take, each typed `cents`, `percent` or `int`) that a kind registers in its own file beside its decoder, plus an optional `Summary()` on the rule ("20% off", "$75.00 off orders of $500.00 or more"). A new kind is still one new file; the admin form and the list learn about it with no other change. A test builds a properties object from every spec's field names and loads it through the kind's decoder, so a form can never ask for a field the decoder does not read.
+2. **`/admin/price_rules`** (`bogie g controller admin/price_rules ...`, behind the staff gate): CRUD, `GET /kinds` (what the form is built from) and `POST /:id/activate` / `/deactivate`. The properties are validated by the kind's own decoder (`pricing.Load`), so every kind's 422 message comes from the kind and the controller knows no rules; what is stored is the loaded rule written back out, so unknown keys a client sends never reach the database. Responses carry a `summary` and a `status` ("active", "off", "scheduled", "ended") computed against the clock.
+3. **The domain** (`PriceRule.Validate`): a name and a kind are required, and it cannot end before it starts. Whether properties suit the kind is not checked there: `pricing` imports `domain`, not the reverse, so the caller that saves a rule runs `pricing.Load` first.
+4. **Store:** `ListAllPriceRules` (every rule, in the order the engine runs them: priority, then id) beside the cart's `ListActivePriceRules`, and `SetPriceRuleActive`.
+5. **UI:** `price_rules.html` (the list: order, name and summary, a status badge, the dates, and Turn on/off, Edit, Delete) and `price_rule.html` (the form: the field inputs are built from the kind chosen, money typed in dollars and stored as cents, optional start and end dates, an order). The sidebar entry is live and the dashboard counts the active rules.
+6. Verified in real Chrome against the live cart: switching two rules off moved the next cart total from $29.96 to $99.95 and switching them on restored it, a new rule slots into the order by its priority, an ended rule is ignored, a non-number is caught on the form and 500% is refused with the kind's own message.
+
+### Notes
+
+- **`buy_x_get_y` records free items but does not lower the price** (the known limitation carried from the article). The form says so beside the kind rather than let an admin believe a switched-on rule is discounting; the seeded one is "active" and a no-op.
+- Deleting a rule never changes a receipt: an order stores its totals, not a reference to the rules.
+- A change applies on the very next cart request; nothing is cached.
+
+### Still to do
+
+- [ ] Coupon codes (`price_rules.code`) are still deferred.
+- [ ] No way to see which rule discounted which past order (an order keeps only its totals).
+- [ ] `buy_x_get_y` needs per-line pricing to actually discount.

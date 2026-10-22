@@ -2,6 +2,8 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -22,9 +24,18 @@ type PriceRule struct {
 
 // Validate is the model's validations, as Rails would put them. Wrap every
 // failure in ErrInvalid so a controller can answer 422 without knowing the
-// rule:
-//
-//	return fmt.Errorf("%w: title is required", ErrInvalid)
+// rule. Whether Properties suit Kind is not checked here: that is the pricing
+// package's (each kind validates its own), which imports this one, so the
+// caller that saves a rule runs pricing.Load first.
 func (p PriceRule) Validate() error {
+	if strings.TrimSpace(p.Name) == "" {
+		return fmt.Errorf("%w: name is required", ErrInvalid)
+	}
+	if strings.TrimSpace(p.Kind) == "" {
+		return fmt.Errorf("%w: kind is required", ErrInvalid)
+	}
+	if p.StartsAt != nil && p.EndsAt != nil && !p.EndsAt.After(*p.StartsAt) {
+		return fmt.Errorf("%w: it must end after it starts", ErrInvalid)
+	}
 	return nil
 }

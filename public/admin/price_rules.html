@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Price rules - Admin</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+      <style>
+      .badge.st-active { color: #1d7a3a; border-color: #1d7a3a; }
+      .badge.st-scheduled { color: #8a6d00; border-color: #8a6d00; }
+      .badge.st-ended, .badge.st-off { color: var(--muted); }
+    </style>
+  </head>
+  <body x-data="priceRulesPage()" x-init="load()">
+    <div class="shell" x-show="!loading && !error">
+      <aside class="sidebar">
+        <a class="brand" href="/admin/">Ecommerce<small>admin</small></a>
+        <nav>
+          <template x-for="link in links" :key="link.href">
+            <a :href="link.soon ? null : link.href" :class="{ active: isActive(link), soon: link.soon }">
+              <span x-text="link.label"></span><em x-show="link.soon">soon</em>
+            </a>
+          </template>
+          <a href="/">&larr; Back to the shop</a>
+        </nav>
+        <div class="who">
+          <span x-text="email"></span>
+          <div><button @click="logout()">Log out</button></div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <div class="bar">
+          <h1>Price rules</h1>
+          <a class="btn primary" href="/admin/price_rule.html">New price rule</a>
+        </div>
+        <p class="note">Rules run in the order shown, lowest first, and each one sees the price the last one left, so the order changes the result. A rule you switch off stops applying to the very next cart.</p>
+        <p class="err" x-show="notice" x-text="notice"></p>
+
+        <p class="state" x-show="rules === null">Loading&hellip;</p>
+        <p class="state" x-show="rules !== null && rules.length === 0">No price rules yet.</p>
+        <table x-show="rules !== null && rules.length > 0">
+          <thead><tr><th class="num">Order</th><th>Rule</th><th>Status</th><th>When</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="r in rules || []" :key="r.id">
+              <tr :class="{ archived: r.status === 'off' }">
+                <td class="num" x-text="r.priority"></td>
+                <td>
+                  <strong x-text="r.name"></strong><br>
+                  <span class="note" x-text="r.summary"></span>
+                </td>
+                <td><span class="badge" :class="'st-' + r.status" x-text="statusLabel(r.status)"></span></td>
+                <td class="note" x-text="when(r)"></td>
+                <td class="actions">
+                  <button class="secondary" x-show="r.active" @click="setActive(r, false)">Turn off</button>
+                  <button class="secondary" x-show="!r.active" @click="setActive(r, true)">Turn on</button>
+                  <a class="btn secondary" :href="'/admin/price_rule.html?id=' + r.id">Edit</a>
+                  <button class="danger" @click="destroy(r)">Delete</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </main>
+    </div>
+
+    <p class="state" x-show="loading">Checking access&hellip;</p>
+    <p class="state" x-show="!loading && error" x-text="error"></p>
+
+    <script src="/admin/admin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+    <script>
+      function priceRulesPage() {
+        return {
+          ...adminShell(),
+          rules: null,
+          notice: '',
+          async load() {
+            if (!(await this.guard())) return;
+            this.loading = false;
+            await this.refresh();
+          },
+          async refresh() {
+            try {
+              const res = await this.api('/admin/price_rules');
+              if (!res.ok) throw new Error('status ' + res.status);
+              this.rules = (await res.json()).price_rules || [];
+            } catch (e) {
+              this.error = 'Could not load price rules: ' + e.message;
+            }
+          },
+          statusLabel(s) {
+            return { active: 'Active', off: 'Off', scheduled: 'Scheduled', ended: 'Ended' }[s] || s;
+          },
+          when(r) {
+            const d = (iso) => new Date(iso).toLocaleDateString();
+            if (r.starts_at && r.ends_at) return d(r.starts_at) + ' to ' + d(r.ends_at);
+            if (r.starts_at) return 'From ' + d(r.starts_at);
+            if (r.ends_at) return 'Until ' + d(r.ends_at);
+            return 'Always';
+          },
+          // Switching a rule on or off changes the very next cart: the cart
+          // reads the active rules on every request.
+          async setActive(r, on) {
+            this.notice = '';
+            const res = await this.api('/admin/price_rules/' + r.id + (on ? '/activate' : '/deactivate'), { method: 'POST' });
+            if (!res.ok) { this.notice = 'Could not switch "' + r.name + '" ' + (on ? 'on' : 'off'); return; }
+            await this.refresh();
+          },
+          async destroy(r) {
+            if (!confirm('Delete "' + r.name + '"? Orders already placed keep the totals they were placed with.')) return;
+            this.notice = '';
+            const res = await this.api('/admin/price_rules/' + r.id, { method: 'DELETE' });
+            if (res.ok) { await this.refresh(); return; }
+            const data = await res.json().catch(() => ({}));
+            this.notice = 'Could not delete: ' + (data.error || 'status ' + res.status);
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

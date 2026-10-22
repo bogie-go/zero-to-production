@@ -36,6 +36,7 @@ type Server struct {
 
 	Products   *ProductsController
 	Categories *CategoriesController
+	PriceRules *PriceRulesController
 	// bogie:controllers
 }
 

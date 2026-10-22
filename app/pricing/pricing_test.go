@@ -160,3 +160,51 @@ func TestRuleValidation(t *testing.T) {
 		})
 	}
 }
+
+// Every registered kind describes itself: a label, and fields that name real
+// JSON keys of its properties, so the admin form can never ask for a field the
+// decoder does not read.
+func TestEveryKindHasASpecWhoseFieldsAreItsProperties(t *testing.T) {
+	kinds := map[string]bool{}
+	for kind := range registry {
+		kinds[kind] = true
+	}
+	for _, s := range Specs() {
+		if !kinds[s.Kind] {
+			t.Errorf("spec for %q, which is not a registered kind", s.Kind)
+		}
+		delete(kinds, s.Kind)
+		if s.Label == "" || len(s.Fields) == 0 {
+			t.Errorf("%s: spec lacks a label or fields: %+v", s.Kind, s)
+		}
+		// Feed the decoder an object holding exactly the spec's fields: if it
+		// reads a different name, the properties come back zero and invalid.
+		props := map[string]any{}
+		for _, f := range s.Fields {
+			props[f.Name] = 5
+		}
+		raw, _ := json.Marshal(props)
+		if _, err := Load(s.Kind, raw); err != nil {
+			t.Errorf("%s: a properties object built from the spec's fields (%s) does not load: %v", s.Kind, raw, err)
+		}
+	}
+	for kind := range kinds {
+		t.Errorf("kind %q is registered but has no spec", kind)
+	}
+}
+
+func TestSummarizeSaysWhatARuleDoes(t *testing.T) {
+	for _, c := range []struct{ kind, props, want string }{
+		{"fixed_discount", `{"amount_cents": 5000}`, "$50.00 off"},
+		{"percentage_discount", `{"percentage": 20}`, "20% off"},
+		{"percentage_discount", `{"percentage": 12.5}`, "12.5% off"},
+		{"minimum_purchase", `{"minimum_cents": 50000, "discount_cents": 7500}`, "$75.00 off orders of $500.00 or more"},
+		{"buy_x_get_y", `{"required_quantity": 2, "free_quantity": 1}`, "Buy 2, get 1 free"},
+		{"no_such_kind", `{}`, "invalid no_such_kind rule"},
+		{"percentage_discount", `{"percentage": 500}`, "invalid percentage_discount rule"},
+	} {
+		if got := Summarize(c.kind, json.RawMessage(c.props)); got != c.want {
+			t.Errorf("Summarize(%s, %s) = %q, want %q", c.kind, c.props, got, c.want)
+		}
+	}
+}

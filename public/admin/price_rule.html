@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Price rule - Admin</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+  </head>
+  <body x-data="priceRulePage()" x-init="load()">
+    <div class="shell" x-show="!loading && !error">
+      <aside class="sidebar">
+        <a class="brand" href="/admin/">Ecommerce<small>admin</small></a>
+        <nav>
+          <template x-for="link in links" :key="link.href">
+            <a :href="link.soon ? null : link.href" :class="{ active: isActive(link), soon: link.soon }">
+              <span x-text="link.label"></span><em x-show="link.soon">soon</em>
+            </a>
+          </template>
+          <a href="/">&larr; Back to the shop</a>
+        </nav>
+        <div class="who">
+          <span x-text="email"></span>
+          <div><button @click="logout()">Log out</button></div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <a class="back" href="/admin/price_rules.html">&larr; Price rules</a>
+        <h1 x-text="id ? 'Edit price rule' : 'New price rule'"></h1>
+        <p class="state" x-show="notFound">No such price rule. <a href="/admin/price_rules.html">Back to the list</a></p>
+
+        <form class="form" x-show="!notFound" @submit.prevent="save()">
+          <div class="grid">
+            <div class="wide"><label for="name">Name</label><input id="name" x-model="form.name" required placeholder="Spring sale"></div>
+
+            <div class="wide"><label for="kind">Kind of rule</label>
+              <select id="kind" x-model="form.kind" @change="props = {}; formError = ''">
+                <template x-for="k in kinds" :key="k.kind"><option :value="k.kind" :selected="k.kind === form.kind" x-text="k.label"></option></template>
+              </select>
+              <p class="note" x-show="spec" x-text="spec && spec.help"></p>
+              <p class="err" x-show="spec && spec.note" x-text="spec && spec.note"></p>
+            </div>
+
+            <template x-for="f in (spec ? spec.fields : [])" :key="form.kind + f.name">
+              <div>
+                <label :for="'f_' + f.name" x-text="f.label + (f.type === 'cents' ? ' (USD)' : f.type === 'percent' ? ' (%)' : '')"></label>
+                <input :id="'f_' + f.name" x-model="props[f.name]" inputmode="decimal" required>
+                <p class="note" x-show="f.help" x-text="f.help"></p>
+              </div>
+            </template>
+
+            <div><label for="priority">Order</label><input id="priority" type="number" step="1" x-model="form.priority" required>
+              <p class="note">Lowest runs first. Each rule sees the price the previous one left.</p></div>
+            <div><label>&nbsp;</label><label class="toggle"><input type="checkbox" x-model="form.active" style="width:auto"> Switched on</label>
+              <p class="note">Off keeps the rule but it stops applying.</p></div>
+
+            <div><label for="starts">Starts (optional)</label><input id="starts" type="datetime-local" x-model="form.starts_at"></div>
+            <div><label for="ends">Ends (optional)</label><input id="ends" type="datetime-local" x-model="form.ends_at"></div>
+          </div>
+          <p class="err" x-show="formError" x-text="formError"></p>
+          <div class="actions">
+            <button class="primary" type="submit" :disabled="saving" x-text="saving ? 'Saving…' : 'Save'"></button>
+            <a class="btn secondary" href="/admin/price_rules.html">Cancel</a>
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <p class="state" x-show="loading">Checking access&hellip;</p>
+    <p class="state" x-show="!loading && error" x-text="error"></p>
+
+    <script src="/admin/admin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+    <script>
+      // The server's validation messages arrive as "invalid: percentage must
+      // be between 0 and 100"; the prefix is for code, not for people.
+      const friendly = (msg) => (msg || '').replace(/^invalid: /, '');
+      // datetime-local inputs speak local time without a zone; the API speaks
+      // an instant. These two convert.
+      const toInput = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso), p = (n) => String(n).padStart(2, '0');
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+      };
+      const fromInput = (v) => (v ? new Date(v).toISOString() : null);
+
+      function priceRulePage() {
+        return {
+          ...adminShell(),
+          id: null,
+          notFound: false,
+          kinds: [],
+          // The values of the chosen kind's fields, as typed: dollars for a
+          // "cents" field, which save() turns back into cents.
+          props: {},
+          form: { name: '', kind: '', priority: '100', active: true, starts_at: '', ends_at: '' },
+          formError: '',
+          saving: false,
+          get spec() {
+            return this.kinds.find((k) => k.kind === this.form.kind) || null;
+          },
+          async load() {
+            if (!(await this.guard())) return;
+            this.id = this.queryId();
+            try {
+              const res = await this.api('/admin/price_rules/kinds');
+              if (!res.ok) throw new Error('status ' + res.status);
+              this.kinds = (await res.json()).kinds || [];
+              this.form.kind = this.kinds.length ? this.kinds[0].kind : '';
+              if (this.id) {
+                const r = await this.api('/admin/price_rules/' + encodeURIComponent(this.id));
+                if (r.status === 404) { this.notFound = true; return; }
+                if (!r.ok) throw new Error('status ' + r.status);
+                const rule = await r.json();
+                this.form = { name: rule.name, kind: rule.kind, priority: String(rule.priority), active: rule.active,
+                              starts_at: toInput(rule.starts_at), ends_at: toInput(rule.ends_at) };
+                const props = {};
+                for (const f of (this.spec ? this.spec.fields : [])) {
+                  const v = (rule.properties || {})[f.name];
+                  props[f.name] = v === undefined ? '' : f.type === 'cents' ? (v / 100).toFixed(2) : String(v);
+                }
+                this.props = props;
+              }
+            } catch (e) {
+              this.error = 'Could not load the price rule: ' + e.message;
+            } finally {
+              this.loading = false;
+            }
+          },
+          // Read each field as its type says; stop at the first that is not a
+          // number, naming it, rather than send the server something to guess at.
+          properties() {
+            const out = {};
+            for (const f of this.spec.fields) {
+              const n = parseFloat(this.props[f.name]);
+              if (!Number.isFinite(n)) throw new Error(f.label + ' must be a number');
+              out[f.name] = f.type === 'cents' ? Math.round(n * 100) : f.type === 'int' ? Math.trunc(n) : n;
+            }
+            return out;
+          },
+          async save() {
+            this.saving = true;
+            this.formError = '';
+            try {
+              const res = await this.api('/admin/price_rules' + (this.id ? '/' + encodeURIComponent(this.id) : ''), {
+                method: this.id ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  name: this.form.name, kind: this.form.kind, properties: this.properties(),
+                  active: this.form.active, priority: parseInt(this.form.priority, 10),
+                  starts_at: fromInput(this.form.starts_at), ends_at: fromInput(this.form.ends_at),
+                }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(friendly(data.error) || 'status ' + res.status);
+              location.href = '/admin/price_rules.html';
+            } catch (e) {
+              this.formError = e.message;
+              this.saving = false;
+            }
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

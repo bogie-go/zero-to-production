@@ -55,3 +55,20 @@ func (r BuyXGetYRule) Apply(ctx *PriceContext) (map[string]any, error) {
 		"free_items":        freeItems,
 	}, nil
 }
+
+func init() {
+	RegisterSpec(Spec{
+		Kind: "buy_x_get_y", Label: "Buy X, get Y free",
+		Help: "Counts free items once a quantity is reached.",
+		Note: "For now this only records how many items are free; it does not lower the price yet.",
+		Fields: []Field{
+			{Name: "required_quantity", Label: "Buy this many", Type: "int"},
+			{Name: "free_quantity", Label: "Get this many free", Type: "int"},
+		},
+	})
+}
+
+// Summary says "Buy 2, get 1 free".
+func (r BuyXGetYRule) Summary() string {
+	return fmt.Sprintf("Buy %d, get %d free", r.RequiredQuantity, r.FreeQuantity)
+}

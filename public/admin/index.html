@@ -36,7 +36,10 @@
             <h2><a href="/admin/categories.html" style="color:inherit">Categories</a></h2>
             <p x-text="categoryCount + ' in the catalog'"></p>
           </div>
-          <div class="card soon"><h2>Price rules</h2><p>Coming soon</p></div>
+          <div class="card">
+            <h2><a href="/admin/price_rules.html" style="color:inherit">Price rules</a></h2>
+            <p x-text="activeRuleCount + ' active'"></p>
+          </div>
         </div>
       </main>
     </div>
@@ -52,6 +55,7 @@
           ...adminShell(),
           productCount: 0,
           categoryCount: 0,
+          activeRuleCount: 0,
           async load() {
             if (!(await this.guard())) return;
             try {
@@ -60,6 +64,8 @@
               this.productCount = ((await res.json()).products || []).length;
               const cats = await this.api('/admin/categories');
               if (cats.ok) this.categoryCount = ((await cats.json()).categories || []).length;
+              const rules = await this.api('/admin/price_rules');
+              if (rules.ok) this.activeRuleCount = ((await rules.json()).price_rules || []).filter((r) => r.status === 'active').length;
             } catch (e) {
               this.error = 'Could not load the admin area: ' + e.message;
             } finally {
