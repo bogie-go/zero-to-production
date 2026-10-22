@@ -627,3 +627,7 @@ The plan's Task B, "Group products into categories: relationships, filtering, JO
 - [ ] Price-rule admin CRUD (step 3 of 3).
 - [ ] Products still hold one category; many-to-many (tags) would be a join table and is out of scope.
 - [ ] Category order is by name; no manual ordering.
+
+### Addendum, 2026-10-22: the category select opened on "No category"
+
+Reported by the user: editing a product always showed "No category". The select's value was applied (by `x-model`) before its options existed, because they are rendered by an `x-for` after the select is bound, and a value with no matching option is dropped. It was a **display** bug only: the form's data still held the real category, so a plain save kept it (checked: `category_id` stayed the same). Fixed by marking the selected option explicitly (`:selected` on each `<option>`). Checked in Chrome: a categorized product opens on its category, "No category" clears it, and choosing one again restores it. Note for the next dynamic select: `public/` is embedded, so the server must be restarted to see an edit to it.

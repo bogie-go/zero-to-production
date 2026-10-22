@@ -77,9 +77,12 @@
             <div><label for="price">Price (USD)</label><input id="price" x-model="form.price" inputmode="decimal" required></div>
             <div><label for="stock">Stock</label><input id="stock" type="number" min="0" step="1" x-model="form.stock" required></div>
             <div class="wide"><label for="category">Category</label>
+              <!-- :selected on each option, not just x-model on the select: the
+                   options are rendered after the select is bound, and a value
+                   set before its option exists is silently dropped. -->
               <select id="category" x-model="form.category_id">
-                <option value="">No category</option>
-                <template x-for="c in categories" :key="c.id"><option :value="String(c.id)" x-text="c.name"></option></template>
+                <option value="" :selected="!form.category_id">No category</option>
+                <template x-for="c in categories" :key="c.id"><option :value="String(c.id)" :selected="String(c.id) === form.category_id" x-text="c.name"></option></template>
               </select></div>
             <div class="wide"><label for="image">Image URL</label><input id="image" x-model="form.image_url" placeholder="/images/products/example.webp"></div>
           </div>
