@@ -13,12 +13,13 @@ import (
 )
 
 // productsStore is the slice of the store this controller uses, declared next
-// to its caller and holding only the methods the actions call.
+// to its caller and holding only the methods the actions call. The shop
+// only ever sees active products: an archived one is not found.
 // *models.Store satisfies it, and app/application.go passes it in; the
 // test's fake is a few lines.
 type productsStore interface {
-	GetProduct(ctx context.Context, id string) (domain.Product, error)
-	ListProducts(ctx context.Context, limit int32) ([]domain.Product, error)
+	GetActiveProduct(ctx context.Context, id string) (domain.Product, error)
+	ListActiveProducts(ctx context.Context, limit int32) ([]domain.Product, error)
 }
 
 // productsListLimit is how many a listing returns, newest first. Paging is
@@ -52,7 +53,7 @@ func (ctl *ProductsController) SetupRoutes(router *gin.RouterGroup) {
 // and converts the result back. Nothing below app/controllers sees
 // *gin.Context (rule 5).
 func (ctl *ProductsController) Index(c *gin.Context) {
-	products, err := ctl.Store.ListProducts(c.Request.Context(), productsListLimit)
+	products, err := ctl.Store.ListActiveProducts(c.Request.Context(), productsListLimit)
 	if err != nil {
 		ctl.fail(c, err)
 		return
@@ -66,7 +67,7 @@ func (ctl *ProductsController) Index(c *gin.Context) {
 // and converts the result back. Nothing below app/controllers sees
 // *gin.Context (rule 5).
 func (ctl *ProductsController) Show(c *gin.Context) {
-	product, err := ctl.Store.GetProduct(c.Request.Context(), c.Param("id"))
+	product, err := ctl.Store.GetActiveProduct(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		ctl.fail(c, err)
 		return
@@ -99,6 +100,7 @@ func productView(p domain.Product) views.ProductResponse {
 		PriceCents:  p.PriceCents,
 		Stock:       p.Stock,
 		ImageUrl:    p.ImageUrl,
+		ArchivedAt:  p.ArchivedAt,
 		CreatedAt:   p.CreatedAt,
 		UpdatedAt:   p.UpdatedAt,
 	}

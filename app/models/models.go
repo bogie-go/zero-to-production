@@ -67,6 +67,7 @@ type Product struct {
 	ImageUrl    string
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+	ArchivedAt  pgtype.Timestamptz
 }
 
 type User struct {

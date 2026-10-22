@@ -9,8 +9,29 @@ import (
 	"context"
 )
 
+const archiveProduct = `-- name: ArchiveProduct :one
+UPDATE products SET archived_at = COALESCE(archived_at, now()), updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at
+`
+
+func (q *Queries) ArchiveProduct(ctx context.Context, id int64) (Product, error) {
+	row := q.db.QueryRow(ctx, archiveProduct, id)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.Stock,
+		&i.ImageUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const decrementProductStock = `-- name: DecrementProductStock :execrows
-UPDATE products SET stock = stock - $1, updated_at = now() WHERE id = $2 AND stock >= $1
+UPDATE products SET stock = stock - $1, updated_at = now() WHERE id = $2 AND stock >= $1 AND archived_at IS NULL
 `
 
 type DecrementProductStockParams struct {
@@ -26,8 +47,29 @@ func (q *Queries) DecrementProductStock(ctx context.Context, arg DecrementProduc
 	return result.RowsAffected(), nil
 }
 
+const getActiveProduct = `-- name: GetActiveProduct :one
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE id = $1 AND archived_at IS NULL
+`
+
+func (q *Queries) GetActiveProduct(ctx context.Context, id int64) (Product, error) {
+	row := q.db.QueryRow(ctx, getActiveProduct, id)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.Stock,
+		&i.ImageUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const getProductByName = `-- name: GetProductByName :one
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products WHERE name = $1
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE name = $1
 `
 
 func (q *Queries) GetProductByName(ctx context.Context, name string) (Product, error) {
@@ -42,6 +84,62 @@ func (q *Queries) GetProductByName(ctx context.Context, name string) (Product, e
 		&i.ImageUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const listActiveProducts = `-- name: ListActiveProducts :many
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE archived_at IS NULL ORDER BY created_at DESC, id DESC LIMIT $1
+`
+
+func (q *Queries) ListActiveProducts(ctx context.Context, limit int32) ([]Product, error) {
+	rows, err := q.db.Query(ctx, listActiveProducts, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Product{}
+	for rows.Next() {
+		var i Product
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.PriceCents,
+			&i.Stock,
+			&i.ImageUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ArchivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const restoreProduct = `-- name: RestoreProduct :one
+UPDATE products SET archived_at = NULL, updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at
+`
+
+func (q *Queries) RestoreProduct(ctx context.Context, id int64) (Product, error) {
+	row := q.db.QueryRow(ctx, restoreProduct, id)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.Stock,
+		&i.ImageUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

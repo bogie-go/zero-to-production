@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"ecommerce/app/domain"
 )
@@ -84,6 +85,10 @@ func (s *Store) DeleteProduct(ctx context.Context, id string) error {
 	}
 	n, err := s.q.DeleteProduct(ctx, pk)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return fmt.Errorf("%w: product is still in use", domain.ErrInvalid)
+		}
 		return fmt.Errorf("models: delete product %s: %w", id, err)
 	}
 	if n == 0 {
@@ -100,6 +105,7 @@ func productFromRow(r Product) domain.Product {
 		PriceCents:  r.PriceCents,
 		Stock:       r.Stock,
 		ImageUrl:    r.ImageUrl,
+		ArchivedAt:  timestamptzToTimePtr(r.ArchivedAt),
 		CreatedAt:   r.CreatedAt.Time,
 		UpdatedAt:   r.UpdatedAt.Time,
 	}

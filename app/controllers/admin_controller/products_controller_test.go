@@ -50,6 +50,8 @@ type fakeProductsStore struct {
 	gotID      string
 	gotProduct domain.Product
 	deleted    bool
+	archived   bool
+	restored   bool
 }
 
 func (f *fakeProductsStore) GetProduct(_ context.Context, id string) (domain.Product, error) {
@@ -68,6 +70,18 @@ func (f *fakeProductsStore) CreateProduct(_ context.Context, p domain.Product) (
 
 func (f *fakeProductsStore) UpdateProduct(_ context.Context, p domain.Product) (domain.Product, error) {
 	f.gotProduct = p
+	return f.product, f.err
+}
+
+func (f *fakeProductsStore) ArchiveProduct(_ context.Context, id string) (domain.Product, error) {
+	f.gotID = id
+	f.archived = true
+	return f.product, f.err
+}
+
+func (f *fakeProductsStore) RestoreProduct(_ context.Context, id string) (domain.Product, error) {
+	f.gotID = id
+	f.restored = true
 	return f.product, f.err
 }
 
@@ -108,6 +122,8 @@ func TestAdminProductsRoutesAreMounted(t *testing.T) {
 		{http.MethodPost, "/admin/products"},
 		{http.MethodPatch, "/admin/products/1"},
 		{http.MethodDelete, "/admin/products/1"},
+		{http.MethodPost, "/admin/products/1/archive"},
+		{http.MethodPost, "/admin/products/1/restore"},
 	}
 	for _, r := range routes {
 		rec := adminProductsRequest(t, &fakeProductsStore{}, aStaffUser, r.method, r.path, "", bearerFor(t, "1"))
@@ -191,5 +207,37 @@ func TestAdminProductsDestroyReturns204(t *testing.T) {
 	}
 	if !store.deleted || store.gotID != "5" {
 		t.Errorf("DeleteProduct: deleted=%v gotID=%q, want true %q", store.deleted, store.gotID, "5")
+	}
+}
+
+func TestAdminProductsArchiveAndRestore(t *testing.T) {
+	when := time.Now()
+	store := &fakeProductsStore{product: domain.Product{ID: 5, Name: "Widget", ArchivedAt: &when}}
+	rec := adminProductsRequest(t, store, aStaffUser, http.MethodPost, "/admin/products/5/archive", "", bearerFor(t, "1"))
+
+	if rec.Code != http.StatusOK || !store.archived || store.gotID != "5" {
+		t.Fatalf("archive: status %d archived=%v id=%q: %s", rec.Code, store.archived, store.gotID, rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), `"archived_at":null`) {
+		t.Errorf("body = %s, want an archived_at time", rec.Body)
+	}
+
+	store = &fakeProductsStore{product: domain.Product{ID: 5, Name: "Widget"}}
+	rec = adminProductsRequest(t, store, aStaffUser, http.MethodPost, "/admin/products/5/restore", "", bearerFor(t, "1"))
+	if rec.Code != http.StatusOK || !store.restored {
+		t.Fatalf("restore: status %d restored=%v: %s", rec.Code, store.restored, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"archived_at":null`) {
+		t.Errorf("body = %s, want archived_at null", rec.Body)
+	}
+}
+
+// Archiving is staff-only like every other admin action.
+func TestAdminProductsArchiveRequiresStaff(t *testing.T) {
+	customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
+	store := &fakeProductsStore{}
+	rec := adminProductsRequest(t, store, customer, http.MethodPost, "/admin/products/5/archive", "", bearerFor(t, "9"))
+	if rec.Code != http.StatusForbidden || store.archived {
+		t.Errorf("customer archive: %d archived=%v, want 403 and nothing archived", rec.Code, store.archived)
 	}
 }

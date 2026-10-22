@@ -505,3 +505,12 @@ Verified in real Chrome (puppeteer-core, scratch script, not committed): guest c
 - Links for pages not built yet render as muted "soon" items; building a page means dropping `soon: true` from its entry.
 - The admin area no longer uses the shop's header or `auth.js`; it has its own shell, with "Back to the shop" and Log out in the sidebar.
 - Checked in real Chrome, with screenshots at desktop and phone width.
+
+### Addendum, 2026-10-22: the admin products page, and soft delete
+
+- `public/admin/products.html`: list (with a "show archived" toggle), create, edit, Archive/Restore and permanent Delete, on the sidebar shell. Price is typed in dollars and sent as cents; validation messages from the server show inline.
+- **Soft delete, decided with the user:** deleting a product that a cart or an order names should not be possible (a UI block alone would leave staff no way to retire a sold product). `products.archived_at` (nullable; `g migration` generated it `NOT NULL` with no default, which would fail on a table with rows, so edited by hand). Archived products: gone from `GET /products` and `/products/:id` (`ListActiveProducts`/`GetActiveProduct`), refused by `AddCartItem` and `UpdateCartItemQuantity`, refused at checkout (the decrement query now also requires `archived_at IS NULL`; the cart stays intact), still listed by the admin and still named by old orders. `POST /admin/products/:id/archive` and `/restore`; editing never un-archives. `ProductResponse` gained `archived_at` (additive).
+- **Hard delete stays** for never-used products; once a cart or order names one the database refuses and the response is a 422 with an "archive it instead" hint.
+- **Bogie fix, v0.2.13:** the generated `Delete` returned the raw foreign-key violation as a 500 (the `:uniq` problem again, on the delete side). `g model` now maps SQLSTATE 23503 to `domain.ErrInvalid` ("product is still in use"). `app:update` does not regenerate existing models, so `app/models/products.go` got the same change by hand; the other models' generated `Delete`s still have the old behavior until they need it.
+- Another small generator gap seen: `g migration add_x_to_y x:datetime` writes `NOT NULL` with no default.
+- Checked in real Chrome: create, validation error, edit, archive (gone from the shop API, hidden then shown in admin), restore, delete, and a refused delete of an ordered product.

@@ -27,12 +27,12 @@ type fakeProductsStore struct {
 	gotID string
 }
 
-func (f *fakeProductsStore) GetProduct(_ context.Context, id string) (domain.Product, error) {
+func (f *fakeProductsStore) GetActiveProduct(_ context.Context, id string) (domain.Product, error) {
 	f.gotID = id
 	return f.one, f.err
 }
 
-func (f *fakeProductsStore) ListProducts(context.Context, int32) ([]domain.Product, error) {
+func (f *fakeProductsStore) ListActiveProducts(context.Context, int32) ([]domain.Product, error) {
 	return f.many, f.err
 }
 

@@ -21,6 +21,8 @@ type productsStore interface {
 	CreateProduct(ctx context.Context, p domain.Product) (domain.Product, error)
 	UpdateProduct(ctx context.Context, p domain.Product) (domain.Product, error)
 	DeleteProduct(ctx context.Context, id string) error
+	ArchiveProduct(ctx context.Context, id string) (domain.Product, error)
+	RestoreProduct(ctx context.Context, id string) (domain.Product, error)
 }
 
 // productsListLimit mirrors the public ProductsController's own.
@@ -49,6 +51,8 @@ func (ctl *ProductsController) SetupRoutes(router *gin.RouterGroup) {
 	products.POST("", ctl.Create)
 	products.PATCH("/:id", ctl.Update)
 	products.DELETE("/:id", ctl.Destroy)
+	products.POST("/:id/archive", ctl.Archive)
+	products.POST("/:id/restore", ctl.Restore)
 }
 
 // Index handles GET /admin/products.
@@ -113,13 +117,36 @@ func (ctl *ProductsController) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, productView(product))
 }
 
-// Destroy handles DELETE /admin/products/:id.
+// Destroy handles DELETE /admin/products/:id: a real delete, which the
+// database refuses (422) once a cart or an order names the product — use
+// Archive for those.
 func (ctl *ProductsController) Destroy(c *gin.Context) {
 	if err := ctl.Store.DeleteProduct(c.Request.Context(), c.Param("id")); err != nil {
 		ctl.fail(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// Archive handles POST /admin/products/:id/archive: the soft delete. The
+// product leaves the shop and new carts but stays in every old order.
+func (ctl *ProductsController) Archive(c *gin.Context) {
+	product, err := ctl.Store.ArchiveProduct(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, productView(product))
+}
+
+// Restore handles POST /admin/products/:id/restore: back on sale.
+func (ctl *ProductsController) Restore(c *gin.Context) {
+	product, err := ctl.Store.RestoreProduct(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, productView(product))
 }
 
 // fail maps a domain error to a status, the one place that mapping lives:
@@ -153,6 +180,7 @@ func productView(p domain.Product) views.ProductResponse {
 		PriceCents:  p.PriceCents,
 		Stock:       p.Stock,
 		ImageUrl:    p.ImageUrl,
+		ArchivedAt:  p.ArchivedAt,
 		CreatedAt:   p.CreatedAt,
 		UpdatedAt:   p.UpdatedAt,
 	}

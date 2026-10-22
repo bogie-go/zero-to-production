@@ -26,6 +26,9 @@ func (s *Store) AddCartItem(ctx context.Context, cartID, productID int64, quanti
 	case err != nil:
 		return domain.CartItem{}, fmt.Errorf("models: get product %d: %w", productID, err)
 	}
+	if product.ArchivedAt.Valid {
+		return domain.CartItem{}, fmt.Errorf("%w: %s is no longer available", domain.ErrInvalid, product.Name)
+	}
 
 	existing, err := s.q.GetCartItemByCartAndProduct(ctx, GetCartItemByCartAndProductParams{CartID: cartID, ProductID: productID})
 	switch {
@@ -72,6 +75,9 @@ func (s *Store) UpdateCartItemQuantity(ctx context.Context, cartID int64, id str
 	product, err := s.q.GetProduct(ctx, item.ProductID)
 	if err != nil {
 		return domain.CartItem{}, fmt.Errorf("models: get product %d: %w", item.ProductID, err)
+	}
+	if product.ArchivedAt.Valid {
+		return domain.CartItem{}, fmt.Errorf("%w: %s is no longer available", domain.ErrInvalid, product.Name)
 	}
 	if quantity > product.Stock {
 		return domain.CartItem{}, fmt.Errorf("%w: only %d in stock", domain.ErrInvalid, product.Stock)

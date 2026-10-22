@@ -10,7 +10,7 @@ import (
 )
 
 const createProduct = `-- name: CreateProduct :one
-INSERT INTO products (name, description, price_cents, stock, image_url) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at
+INSERT INTO products (name, description, price_cents, stock, image_url) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at
 `
 
 type CreateProductParams struct {
@@ -39,6 +39,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.ImageUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -57,7 +58,7 @@ func (q *Queries) DeleteProduct(ctx context.Context, id int64) (int64, error) {
 
 const getProduct = `-- name: GetProduct :one
 
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products WHERE id = $1
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE id = $1
 `
 
 // Written by `bogie g model`: overwritten whole on the next run. A
@@ -74,12 +75,13 @@ func (q *Queries) GetProduct(ctx context.Context, id int64) (Product, error) {
 		&i.ImageUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at FROM products ORDER BY created_at DESC, id DESC LIMIT $1
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products ORDER BY created_at DESC, id DESC LIMIT $1
 `
 
 func (q *Queries) ListProducts(ctx context.Context, limit int32) ([]Product, error) {
@@ -100,6 +102,7 @@ func (q *Queries) ListProducts(ctx context.Context, limit int32) ([]Product, err
 			&i.ImageUrl,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -112,7 +115,7 @@ func (q *Queries) ListProducts(ctx context.Context, limit int32) ([]Product, err
 }
 
 const updateProduct = `-- name: UpdateProduct :one
-UPDATE products SET name = $2, description = $3, price_cents = $4, stock = $5, image_url = $6, updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at
+UPDATE products SET name = $2, description = $3, price_cents = $4, stock = $5, image_url = $6, updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at
 `
 
 type UpdateProductParams struct {
@@ -143,6 +146,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.ImageUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

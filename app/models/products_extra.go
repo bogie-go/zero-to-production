@@ -37,3 +37,61 @@ func (s *Store) FindOrCreateProductByName(ctx context.Context, p domain.Product)
 		return domain.Product{}, err
 	}
 }
+
+// ListActiveProducts is the shop's catalog: every product that is not
+// archived, newest first. ListProducts (generated) still returns all of
+// them, archived included, for the admin.
+func (s *Store) ListActiveProducts(ctx context.Context, limit int32) ([]domain.Product, error) {
+	rows, err := s.q.ListActiveProducts(ctx, limit)
+	if err != nil {
+		return nil, fmt.Errorf("models: list active products: %w", err)
+	}
+	out := make([]domain.Product, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, productFromRow(r))
+	}
+	return out, nil
+}
+
+// GetActiveProduct finds one product the shop is still selling. An archived
+// product is not found here, exactly as a nonexistent one is.
+func (s *Store) GetActiveProduct(ctx context.Context, id string) (domain.Product, error) {
+	pk, err := parseID(id)
+	if err != nil {
+		return domain.Product{}, domain.ErrNotFound
+	}
+	row, err := s.q.GetActiveProduct(ctx, pk)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return domain.Product{}, domain.ErrNotFound
+	case err != nil:
+		return domain.Product{}, fmt.Errorf("models: get active product %s: %w", id, err)
+	}
+	return productFromRow(row), nil
+}
+
+// ArchiveProduct retires a product: the soft delete. Archiving one already
+// archived changes nothing.
+func (s *Store) ArchiveProduct(ctx context.Context, id string) (domain.Product, error) {
+	return s.setArchived(ctx, id, s.q.ArchiveProduct)
+}
+
+// RestoreProduct puts an archived product back on sale.
+func (s *Store) RestoreProduct(ctx context.Context, id string) (domain.Product, error) {
+	return s.setArchived(ctx, id, s.q.RestoreProduct)
+}
+
+func (s *Store) setArchived(ctx context.Context, id string, run func(context.Context, int64) (Product, error)) (domain.Product, error) {
+	pk, err := parseID(id)
+	if err != nil {
+		return domain.Product{}, domain.ErrNotFound
+	}
+	row, err := run(ctx, pk)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return domain.Product{}, domain.ErrNotFound
+	case err != nil:
+		return domain.Product{}, fmt.Errorf("models: archive product %s: %w", id, err)
+	}
+	return productFromRow(row), nil
+}

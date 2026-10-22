@@ -8,6 +8,10 @@ import (
 
 // Product is a product. Imports nothing third-party: ids are int64s here and
 // become bigint at the store boundary.
+//
+// ArchivedAt is the soft delete: a product with a time there is retired, not
+// removed — gone from the shop and from new carts, but still named by every
+// old cart line and order.
 type Product struct {
 	ID          int64
 	Name        string
@@ -15,6 +19,7 @@ type Product struct {
 	PriceCents  int32
 	Stock       int32
 	ImageUrl    string
+	ArchivedAt  *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

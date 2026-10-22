@@ -50,7 +50,7 @@ func (s *Store) CreateOrderFromCart(ctx context.Context, userID int64, cartID in
 				return fmt.Errorf("models: decrement stock for product %d: %w", l.ProductID, err)
 			}
 			if n == 0 {
-				return fmt.Errorf("%w: %s no longer has enough stock", domain.ErrInvalid, l.ProductName)
+				return fmt.Errorf("%w: %s is no longer available in that quantity", domain.ErrInvalid, l.ProductName)
 			}
 		}
 
