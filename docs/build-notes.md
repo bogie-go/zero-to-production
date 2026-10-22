@@ -578,3 +578,9 @@ Decided with the user while setting up mail: the credentials file should be grou
 - [ ] A welcome email on signup and a sign-in alert on login, as further jobs (the user raised the login one).
 - [ ] Retries and failures are only visible in `river_job`; a view in the admin, later.
 - [ ] Idempotent delivery (at-least-once means an occasional duplicate).
+
+### Addendum, 2026-10-22: `g config` into `server`/`database`, bare values (Bogie v0.3.2)
+
+- `bogie g config database username=xxx password=yyy` adds keys to the app's own groups (their structs in `config.go` carry a marker now); the groups themselves are never created or removed. While testing it, `d config database` turned out to be mistaken for a flat key named `database` and would have removed the app's `Database` field; it is refused now.
+- Dev credential values are written bare when safe (`username: xxx`) and quoted when YAML would misread them (`yes`, numbers, anything with a colon or space); a `bool` key takes `yes`/`no`.
+- Updated here with `bogie app:update` (clean merge: the two markers in `config/config.go`).
