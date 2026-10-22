@@ -62,3 +62,48 @@ func TestDeleteCartAndItemsRemovesBoth(t *testing.T) {
 		t.Errorf("CartContents after delete = %v, want none", lines)
 	}
 }
+
+// Two first requests for the same token at the same moment still end up with
+// one cart: the unique index plus the single upsert statement, not luck.
+func TestFindOrCreateCartByTokenIsSafeUnderConcurrency(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	const n = 8
+	ids := make(chan int64, n)
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			c, err := store.FindOrCreateCartByToken(ctx, "racing-guest")
+			ids <- c.ID
+			errs <- err
+		}()
+	}
+	first := <-ids
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+		if i > 0 {
+			if id := <-ids; id != first {
+				t.Errorf("got cart %d and %d for one token", first, id)
+			}
+		}
+	}
+	if carts, _ := store.ListCarts(ctx, 100); len(carts) != 1 {
+		t.Errorf("%d carts exist, want 1", len(carts))
+	}
+}
+
+// The index is the guarantee itself: a second cart with a taken token is
+// refused by the database, whoever tries to create it.
+func TestCartTokensAreUnique(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	if _, err := store.CreateCart(ctx, domain.Cart{Token: "same"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateCart(ctx, domain.Cart{Token: "same"}); err == nil {
+		t.Error("a second cart with the same token was created")
+	}
+}

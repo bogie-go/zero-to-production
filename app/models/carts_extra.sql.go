@@ -24,3 +24,24 @@ func (q *Queries) GetCartByToken(ctx context.Context, token string) (Cart, error
 	)
 	return i, err
 }
+
+const upsertCartByToken = `-- name: UpsertCartByToken :one
+INSERT INTO carts (token) VALUES ($1)
+ON CONFLICT (token) DO UPDATE SET token = EXCLUDED.token
+RETURNING id, token, created_at, updated_at
+`
+
+// One statement, so two first requests with the same token cannot make two
+// carts: the unique index sends the loser to the DO UPDATE, which changes
+// nothing but lets RETURNING hand back the winner's row.
+func (q *Queries) UpsertCartByToken(ctx context.Context, token string) (Cart, error) {
+	row := q.db.QueryRow(ctx, upsertCartByToken, token)
+	var i Cart
+	err := row.Scan(
+		&i.ID,
+		&i.Token,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

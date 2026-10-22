@@ -11,23 +11,18 @@ import (
 )
 
 // FindOrCreateCartByToken returns the cart with the given token, creating
-// an empty one if none exists yet. Like Rails's find_or_create_by, this is
-// a plain find then create, not atomic: a race between two callers can
-// still create two carts with the same token.
+// an empty one if none exists yet. Unlike Rails's find_or_create_by this is
+// atomic: one INSERT ... ON CONFLICT against the unique index on token, so
+// two simultaneous first requests end up with the same cart.
 //
-// The token is whatever identifies "this visitor's cart": the empty string
-// for the single shared cart task C starts with, a per-visitor token once
-// one is issued.
+// The token is whatever identifies "this visitor's cart": a guest's id or an
+// account's user id.
 func (s *Store) FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error) {
-	row, err := s.q.GetCartByToken(ctx, token)
-	switch {
-	case err == nil:
-		return cartFromRow(row), nil
-	case errors.Is(err, pgx.ErrNoRows):
-		return s.CreateCart(ctx, domain.Cart{Token: token})
-	default:
-		return domain.Cart{}, fmt.Errorf("models: get cart by token: %w", err)
+	row, err := s.q.UpsertCartByToken(ctx, token)
+	if err != nil {
+		return domain.Cart{}, fmt.Errorf("models: find or create cart by token: %w", err)
 	}
+	return cartFromRow(row), nil
 }
 
 // GetCartByToken finds the cart for token without creating one if there is

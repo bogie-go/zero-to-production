@@ -11,7 +11,6 @@ Last updated: 2026-10-22 (covers through Task G; Task F is complete). Times are 
 Pass 1 has reached the end of Task G. Every checkpoint is a git tag; the table is in `docs/book-plan.md`. The "Still to do" lists below were audited on this date: an item is checked when the code (or a decision) closes it, with the evidence beside it, and what remains open is the list here.
 
 **Real gaps, small enough to just do**
-- A unique index on `carts.token`, and a find-or-create that survives two concurrent first requests.
 - Empty carts piling up: `POST /guest_sessions` makes a cart at mint time.
 - No way to promote a second staff account, or change the seeded password, short of editing the database.
 - The headless-browser checks (real Chrome, via a scratch script) are not part of `bin/ci`.
