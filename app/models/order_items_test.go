@@ -38,7 +38,7 @@ func TestOrderItemRoundTrip(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()
 
-	user, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest"})
+	user, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
 	if err != nil {
 		t.Fatal(err)
 	}

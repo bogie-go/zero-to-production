@@ -28,7 +28,7 @@ func TestUnknownUsersAreNotFound(t *testing.T) {
 	// A valid-looking user, so Validate (unlike every other generated
 	// model's, no longer a no-op) passes and the not-found check is what
 	// actually gets exercised.
-	missing := domain.User{ID: 999999999, Email: "nope@example.com", PasswordDigest: "digest"}
+	missing := domain.User{ID: 999999999, Email: "nope@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer}
 	if _, err := store.UpdateUser(ctx, missing); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("UpdateUser(%d): err = %v, want ErrNotFound", 999999999, err)
 	}
@@ -42,7 +42,7 @@ func TestUserRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: digest})
+	created, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: digest, Role: domain.RoleCustomer})
 	if err != nil {
 		t.Fatal(err)
 	}

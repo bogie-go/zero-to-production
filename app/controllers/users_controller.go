@@ -65,7 +65,12 @@ func (ctl *UsersController) Create(c *gin.Context) {
 		ctl.fail(c, err)
 		return
 	}
-	user, err := ctl.Store.CreateUser(c.Request.Context(), domain.User{Email: req.Email, PasswordDigest: digest})
+	// Role is always customer here, never read from the request: the only
+	// way into the staff role is the seed (db/seeds/users.go) or a direct
+	// UpdateUser, never anything a signup request can reach.
+	user, err := ctl.Store.CreateUser(c.Request.Context(), domain.User{
+		Email: req.Email, PasswordDigest: digest, Role: domain.RoleCustomer,
+	})
 	if err != nil {
 		ctl.fail(c, err)
 		return

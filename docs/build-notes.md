@@ -414,3 +414,54 @@ coverage 31% → 47%.
 - [ ] Payment capture (`status` transitioning `pending` → `paid`/`cancelled` via a webhook) is out of scope here on purpose — `payment-simulator/` doesn't exist yet, and CLAUDE.md already calls out webhook handling as its own hand-written teaching material, later.
 - [ ] `BuyXGetYRule`'s known limitation (metadata only, no actual per-line discount) is unchanged; checkout inherits it from the cart's own pricing calculation rather than introducing a new one.
 - [ ] No git tag exists yet for price rules, Task D, or Task E — only `task-c1`/`task-c2` exist so far. Still an open offer, not yet acted on.
+
+## Pass 1 › Task F (1/3): roles, the admin namespace, and product CRUD
+
+Task B (categories) was never built — skipped from Task A straight to C on
+2026-10-18 — and gets folded into this task instead of a separate pass:
+decided 2026-10-22, since an admin area is exactly where category
+management belongs anyway. This note covers the first of three steps:
+roles and staff-only product management. Categories and price-rule admin
+are still ahead.
+
+### What was done
+
+1. **2026-10-22, `users.role`.** `bogie g migration add_role_to_users role:string`, default `'customer'`. `g migration` only touches the migration and reruns sqlc, as documented (AGENTS.md's "Change a table") — threading the new column through `domain.User`, `UpdateUser`/`CreateUser`'s SQL (hand-added `role` to both in `db/queries/users.sql`), and `userFromRow` was by hand, the same kind of follow-up the nullable `starts_at`/`ends_at` columns needed back in the price rules task. `domain.User.Role` is checked against `UserRoles = []string{"customer", "staff"}` in `Validate`, the same enum-as-a-string-check `Order.Status` already uses. `UsersController.Create` always sets `Role: domain.RoleCustomer` itself, never from the request body — the only way into the staff role is `FindOrCreateUserByEmail` (new, mirrors `FindOrCreatePriceRuleByName`'s idiom) called from a seed.
+2. **2026-10-22, `RequireStaff`.** A new middleware, hand-written beside the generated `RequireUser` (`app/middlewares/require_staff.go`): looks up the caller's role fresh from the store on every request — never trusted from the bearer token's claims, since a demotion has to take effect on the very next request. A guest's token, an unknown subject, and a real customer who isn't staff all answer identically, 403 "staff access required" — the caller is never told which.
+3. **2026-10-22, the admin namespace.** `bogie g controller admin/products index show create update destroy` — Bogie's namespace generator, used for the first time in this app: writes `app/controllers/admin_controller/` (its own `Server`, `routes.go`, one file per controller) and wires it into the root `Server` and `app/application.go`, exactly as documented. Hand-added: `staffStore`/`staffTokens` interfaces and a `WithStaff` method on the namespace's own `Server` (`RequireUser` then `RequireStaff`, chained once, applied to the whole `/admin` group in `routes.go` — "the exposure boundary is visible in one place," per AGENTS.md's own description of what a namespace's shared middleware is for), and the wire line in `app/application.go` passing the shared `*models.Store` and `server.Tokens()` in — staff log in through the exact same `/sessions` a customer does, no parallel login system.
+4. **2026-10-22, admin product CRUD.** `admin_controller.ProductsController` gets the full five actions (the public one still only has Index/Show); `Product.Validate` went from a no-op to real rules (name required, price and stock non-negative) — closing a gap flagged since Task A's own "Still to do". `app/views/products.go` gained `ProductRequest` for the create/update body.
+5. **2026-10-22, one seed, no promotion path yet.** `bogie g seed staff_user`, filled in: hashes a fixed development password and creates `staff@shop.test` with `Role: staff`, idempotent via `FindOrCreateUserByEmail`. There is no admin UI or endpoint yet to promote a second person — see "Still to do".
+
+### Bogie commands used
+
+- `bogie g migration add_role_to_users role:string`
+- `bogie g controller admin/products index show create update destroy` — the namespace generator, first use in this app.
+- `bogie g seed staff_user`
+
+### Generated vs hand-written
+
+- Generated: the migration, the admin namespace's package skeleton (`server.go`, `routes.go`, `products_controller.go` stubs), the seed stub, every registration line (root `Server`, `app/application.go`, `routes.go`, the namespace's own `server.go`/`routes.go`).
+- Hand-written: `role`'s threading through `domain.User`/`users.go`/`users.sql` (as `g migration` always leaves to the reader), `RequireStaff`, the namespace's `staffStore`/`staffTokens`/`WithStaff`, every admin product action's real logic, `Product.Validate`, `ProductRequest`, the seed's body.
+
+### Bogie gaps/bugs found
+
+- None this time — the namespace generator (`g controller admin/products ...`) worked exactly as documented on the first try, markers and all, confirmed by `bogie doctor` ("namespace admin registered", "controller admin/products registered").
+- The same generated-not-found-test-breaks-when-Validate-stops-being-a-no-op pattern hit `products_test.go` (same as `users_test.go` in Task D, `orders_test.go`/`order_items_test.go` in Task E) once `Product.Validate` became real. Fixed the same way, with a full round trip added too.
+
+### Rails comparisons
+
+- `role:string` + an app-level enum check is `enum :role, [:customer, :staff]` without ActiveRecord's enum macro — Rails would store an integer and map it; this app already made that exact "borrow the idea, write the Go way" call for `Order.Status`, so `User.Role` just repeats it.
+- Staff signing in through the same `sessions#create` a customer uses, with a `before_action` doing the role check afterward, is exactly how a Rails app layered with Pundit or CanCanCan separates authentication (`authenticate_user!`) from authorization (`authorize @product`) — this app's split is `RequireUser` / `RequireStaff`, same two concerns, same order.
+- `namespace :admin do resources :products end` with `before_action :require_staff!` on the namespace's own controller is the Rails line Bogie's `g controller admin/products` plus `WithStaff` reproduces.
+
+### Chapter-worthy observations
+
+- **Authentication and authorization are two different middlewares, not one.** `RequireUser` only answers "is this a valid, unexpired token" — cryptographic, no database. `RequireStaff` answers "is this particular person allowed here" — a live lookup, and deliberately never cached in the token, so revoking access is instant. Worth a clear diagram: the C2 guest/user token design answered the first question once and reused it for everyone (`same shape, different stakes`); this task adds the second question only for the one group that needs it.
+- **Live-checking the role instead of trusting a claim is the whole point of a staff gate**, and worth calling out explicitly as a place a tutorial could cut a corner (bake `role` into the JWT at login, skip the DB hit) that would look fine until someone's access needs to be pulled mid-session.
+- **The namespace generator needed nothing fixed**, a quiet contrast with Price Rules, Task D, and Task E, each of which found something. Worth noting in the book as the moment the generator finally meets a shape it was built for exactly as built.
+
+### Still to do
+
+- [ ] No way to promote a second staff account, or change the seeded password, short of editing the database by hand. Likely answer: an admin "manage users" endpoint, itself staff-only — not built yet.
+- [ ] Categories (folded in from Task B) and price-rule admin CRUD are still ahead — this note is step 1 of 3.
+- [ ] The public `GET /products`/`GET /products/:id` are unchanged; only `/admin/products` gained write actions.

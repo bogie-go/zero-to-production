@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 
 	"ecommerce/app/domain"
@@ -23,10 +24,58 @@ func TestUnknownProductsAreNotFound(t *testing.T) {
 		}
 	}
 
-	if _, err := store.UpdateProduct(ctx, domain.Product{ID: 999999999}); !errors.Is(err, domain.ErrNotFound) {
+	// A valid-looking product, so Validate (no longer a no-op, now that
+	// admin can create and update one) passes and the not-found check is
+	// what actually gets exercised.
+	missing := domain.Product{ID: 999999999, Name: "Nonexistent"}
+	if _, err := store.UpdateProduct(ctx, missing); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("UpdateProduct(%d): err = %v, want ErrNotFound", 999999999, err)
 	}
 }
 
-// TODO: a round trip. Create a product with real values, Get it, List it,
-// Update it, Delete it; see posts_test.go for the shape.
+func TestProductRoundTrip(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	created, err := store.CreateProduct(ctx, domain.Product{
+		Name: "Widget", Description: "a widget", PriceCents: 500, Stock: 10, ImageUrl: "/widget.webp",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID == 0 {
+		t.Error("CreateProduct did not assign an id")
+	}
+
+	got, err := store.GetProduct(ctx, strconv.FormatInt(created.ID, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != created {
+		t.Errorf("GetProduct = %+v, want %+v", got, created)
+	}
+
+	all, err := store.ListProducts(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 || all[0].ID != created.ID {
+		t.Errorf("ListProducts = %+v, want just the one created above", all)
+	}
+
+	created.Stock = 7
+	updated, err := store.UpdateProduct(ctx, created)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Stock != 7 {
+		t.Errorf("UpdateProduct: stock = %d, want 7", updated.Stock)
+	}
+
+	if err := store.DeleteProduct(ctx, strconv.FormatInt(created.ID, 10)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetProduct(ctx, strconv.FormatInt(created.ID, 10)); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("GetProduct after delete: err = %v, want ErrNotFound", err)
+	}
+}

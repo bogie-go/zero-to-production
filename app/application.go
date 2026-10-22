@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"ecommerce/app/controllers"
+	"ecommerce/app/controllers/admin_controller"
 	"ecommerce/app/models"
 	"ecommerce/app/services/database"
 	"ecommerce/app/services/migrate"
@@ -74,6 +75,8 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	server.Users = controllers.NewUsersController(store, server.Tokens(), log)
 	server.Sessions = controllers.NewSessionsController(store, server.Tokens(), log)
 	server.Orders = controllers.NewOrdersController(store, log)
+	server.Admin = admin_controller.NewServer(store, server.Tokens(), log)
+	server.Admin.Products = admin_controller.NewProductsController(store, log)
 	// bogie:wire
 	server.SetupRoutes()
 

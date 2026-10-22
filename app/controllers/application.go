@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"ecommerce/app/controllers/admin_controller"
 	"ecommerce/config"
 )
 
@@ -33,6 +34,7 @@ type Server struct {
 	Users         *UsersController
 	Sessions      *SessionsController
 	Orders        *OrdersController
+	Admin         *admin_controller.Server
 	// bogie:controllers
 }
 

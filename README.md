@@ -41,3 +41,11 @@ own URL:
 
 `make up`, `make down`, `make psql` and the database step of `bin/ci` still use
 Docker.
+
+## Admin namespace
+
+`db seed` creates one staff account, `staff@shop.test` /
+`staff-password-please-change` — log in at `POST /sessions` like anyone
+else, then use the token at `/admin/products`. Development-only: there is
+no admin UI yet to promote a second person, or to change this password.
+See `docs/bogie-gaps.md`.

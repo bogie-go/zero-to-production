@@ -13,7 +13,7 @@ func checkoutFixtures(t *testing.T, store *Store, stock int32) (user domain.User
 	t.Helper()
 	ctx := context.Background()
 
-	user, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest"})
+	user, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestGetOrderForUserIsScopedToItsOwner(t *testing.T) {
 	ctx := context.Background()
 
 	user, cart, product := checkoutFixtures(t, store, 10)
-	otherUser, err := store.CreateUser(ctx, domain.User{Email: "b@example.com", PasswordDigest: "digest"})
+	otherUser, err := store.CreateUser(ctx, domain.User{Email: "b@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
 	if err != nil {
 		t.Fatal(err)
 	}

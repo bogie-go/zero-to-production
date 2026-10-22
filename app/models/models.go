@@ -75,4 +75,5 @@ type User struct {
 	PasswordDigest string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	Role           string
 }

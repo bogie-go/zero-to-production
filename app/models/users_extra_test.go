@@ -12,10 +12,10 @@ func TestCreateUserRejectsADuplicateEmail(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()
 
-	if _, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest"}); err != nil {
+	if _, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "another-digest"}); !errors.Is(err, domain.ErrInvalid) {
+	if _, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "another-digest", Role: domain.RoleCustomer}); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("CreateUser(duplicate email): err = %v, want ErrInvalid", err)
 	}
 }
@@ -24,7 +24,7 @@ func TestGetUserByEmail(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()
 
-	created, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest"})
+	created, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
 	if err != nil {
 		t.Fatal(err)
 	}
