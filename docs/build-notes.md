@@ -535,3 +535,7 @@ Decided 2026-10-22, with the user: develop against a fake SMTP server (Mailpit) 
 
 - [ ] Jobs (`bogie g job ...` enables River; a worker role; an `--jobs` app). Then the order-confirmation email as the first job, with welcome and login-alert emails as follow-ups.
 - [ ] `bin/ci` now also starts Mailpit (it runs `docker compose up --wait`); harmless, but the image has to be pulled once.
+
+### Addendum, 2026-10-22: mail keys in the credentials file
+
+The mail settings first existed only as defaults in `config/config.go`, so `make credentials` showed none of them. Now the shared development file lists them (`smtp_addr`, `mail_from`, and commented `smtp_user`/`smtp_password`), inside the `ecommerce:` section like every other key; production gets its own file with `make credentials ENV=production`. Verified with a scratch copy of the config directory: a `mail_from` written in the file is what a test email carries, and `ECOMMERCE_MAIL_FROM` still overrides it. (An earlier explanation of mine showed these keys at the top level of the file; they belong under `ecommerce:`.) Lesson for the next generated-by-hand setting: put it in the credentials file when it is added, not just in the code defaults.
