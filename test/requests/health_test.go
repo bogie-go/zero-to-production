@@ -2,17 +2,14 @@ package requests_test
 
 import (
 	"net/http"
-	"testing"
 
-	"ecommerce/test/testapp"
+	. "github.com/onsi/ginkgo/v2"
 )
 
 // A request test sends HTTP through the real router to the real application
-// and the test database, and checks what comes back. Start every feature
-// with one; the store, domain and service tests below it cover the edge
-// cases. `bogie g controller` writes the next one beside this.
-func TestHealthz(t *testing.T) {
-	app := testapp.New(t)
-
-	app.Get("/healthz").Do().Status(http.StatusOK).Contains("ok")
-}
+// and the test database, and checks what comes back.
+var _ = Describe("GET /healthz", func() {
+	It("answers ok", func() {
+		app.Get("/healthz").Do().Status(http.StatusOK).Contains("ok")
+	})
+})

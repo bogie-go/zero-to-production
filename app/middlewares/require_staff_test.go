@@ -1,15 +1,17 @@
-package middlewares
+package middlewares_test
 
 import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/middlewares"
 )
 
 type fakeStaffStore struct {
@@ -21,12 +23,11 @@ func (f fakeStaffStore) GetUser(_ context.Context, id string) (domain.User, erro
 	return f.user, f.err
 }
 
-func staffRequest(t *testing.T, store staffStore, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func staffRequest(store fakeStaffStore, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/admin/me", RequireUser(testTokens), RequireStaff(store), func(c *gin.Context) {
-		c.String(http.StatusOK, Subject(c))
+	router.GET("/admin/me", middlewares.RequireUser(testTokens), middlewares.RequireStaff(store), func(c *gin.Context) {
+		c.String(http.StatusOK, middlewares.Subject(c))
 	})
 	req := httptest.NewRequest(http.MethodGet, "/admin/me", nil)
 	if authorization != "" {
@@ -37,41 +38,35 @@ func staffRequest(t *testing.T, store staffStore, authorization string) *httptes
 	return rec
 }
 
-func TestRequireStaffAllowsAStaffUser(t *testing.T) {
-	good, _ := testTokens.Mint("7", time.Minute)
-	store := fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleStaff}}
-
-	rec := staffRequest(t, store, "Bearer "+good)
-	if rec.Code != http.StatusOK || rec.Body.String() != "7" {
-		t.Errorf("staff user: %d %q", rec.Code, rec.Body.String())
+var _ = Describe("RequireStaff", func() {
+	mint := func(subject string) string {
+		good, err := testTokens.Mint(subject, time.Minute)
+		Expect(err).NotTo(HaveOccurred())
+		return "Bearer " + good
 	}
-}
 
-func TestRequireStaffRejectsACustomer(t *testing.T) {
-	good, _ := testTokens.Mint("7", time.Minute)
-	store := fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleCustomer}}
+	It("allows a staff user", func() {
+		store := fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleStaff}}
+		rec := staffRequest(store, mint("7"))
+		Expect(rec.Code).To(Equal(http.StatusOK))
+		Expect(rec.Body.String()).To(Equal("7"))
+	})
 
-	if rec := staffRequest(t, store, "Bearer "+good); rec.Code != http.StatusForbidden {
-		t.Errorf("customer: %d, want 403", rec.Code)
-	}
-}
+	It("rejects a customer with 403", func() {
+		store := fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleCustomer}}
+		Expect(staffRequest(store, mint("7")).Code).To(Equal(http.StatusForbidden))
+	})
 
-// A guest's subject is a bare uuid, so the store answers not-found exactly
-// as an unknown or malformed subject would.
-func TestRequireStaffRejectsAGuestToken(t *testing.T) {
-	good, _ := testTokens.Mint("a-guest-uuid", time.Minute)
-	store := fakeStaffStore{err: domain.ErrNotFound}
+	// A guest's subject is a bare uuid, so the store answers not-found exactly
+	// as an unknown or malformed subject would.
+	It("rejects a guest token with 403", func() {
+		store := fakeStaffStore{err: domain.ErrNotFound}
+		Expect(staffRequest(store, mint("a-guest-uuid")).Code).To(Equal(http.StatusForbidden))
+	})
 
-	if rec := staffRequest(t, store, "Bearer "+good); rec.Code != http.StatusForbidden {
-		t.Errorf("guest token: %d, want 403", rec.Code)
-	}
-}
-
-// No token at all never reaches RequireStaff; RequireUser answers first.
-func TestRequireStaffNeedsRequireUserFirst(t *testing.T) {
-	store := fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleStaff}}
-
-	if rec := staffRequest(t, store, ""); rec.Code != http.StatusUnauthorized {
-		t.Errorf("no token: %d, want 401", rec.Code)
-	}
-}
+	// No token at all never reaches RequireStaff; RequireUser answers first.
+	It("needs RequireUser first: no token is 401", func() {
+		store := fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleStaff}}
+		Expect(staffRequest(store, "").Code).To(Equal(http.StatusUnauthorized))
+	})
+})

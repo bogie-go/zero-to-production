@@ -1,4 +1,4 @@
-package controllers
+package controllers_test
 
 import (
 	"context"
@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/controllers"
 	"ecommerce/app/domain"
 )
 
@@ -47,16 +50,14 @@ func (f *fakeMerger) FromAuthorization(_ context.Context, authorization, newSubj
 	return f.err
 }
 
-func usersRequest(t *testing.T, store *fakeUsersStore, body string) *httptest.ResponseRecorder {
-	t.Helper()
-	return usersRequestWithMerger(t, store, &fakeMerger{}, body, "")
+func usersRequest(store *fakeUsersStore, body string) *httptest.ResponseRecorder {
+	return usersRequestWithMerger(store, &fakeMerger{}, body, "")
 }
 
-func usersRequestWithMerger(t *testing.T, store *fakeUsersStore, merger *fakeMerger, body, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func usersRequestWithMerger(store *fakeUsersStore, merger *fakeMerger, body, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewUsersController(store, testTokens, merger, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
+	controllers.NewUsersController(store, testTokens, merger, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(body))
@@ -68,96 +69,91 @@ func usersRequestWithMerger(t *testing.T, store *fakeUsersStore, merger *fakeMer
 	return rec
 }
 
-func TestUsersRoutesAreMounted(t *testing.T) {
-	rec := usersRequest(t, &fakeUsersStore{}, `{"email":"a@example.com","password":"at-least-8"}`)
-	if rec.Code == http.StatusNotFound {
-		t.Error("POST /users is not mounted")
-	}
-}
+var _ = Describe("POST /users", func() {
+	const validBody = `{"email":"a@example.com","password":"at-least-8"}`
 
-// A signup hashes the password (never stores it plain), creates the
-// account, and mints a bearer token immediately — no separate login needed
-// right after registering.
-func TestUsersCreateHashesPasswordAndMintsAToken(t *testing.T) {
-	store := &fakeUsersStore{user: domain.User{ID: 7, Email: "a@example.com"}}
-	rec := usersRequest(t, store, `{"email":"a@example.com","password":"at-least-8"}`)
+	var store *fakeUsersStore
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"token":"`) {
-		t.Errorf("body = %s, want a token", rec.Body)
-	}
-	if store.gotUser.Email != "a@example.com" {
-		t.Errorf("store got email %q", store.gotUser.Email)
-	}
-	if store.gotUser.PasswordDigest == "" || store.gotUser.PasswordDigest == "at-least-8" {
-		t.Errorf("store got password digest %q, want a bcrypt digest, not the plain password", store.gotUser.PasswordDigest)
-	}
-}
+	BeforeEach(func() {
+		store = &fakeUsersStore{}
+	})
 
-// A password too short to hash never reaches the store at all.
-func TestUsersCreateShortPasswordIs422(t *testing.T) {
-	store := &fakeUsersStore{}
-	rec := usersRequest(t, store, `{"email":"a@example.com","password":"short"}`)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status = %d, want 422: %s", rec.Code, rec.Body)
-	}
-	if store.gotUser.Email != "" {
-		t.Error("the store was called even though the password was invalid")
-	}
-}
+	It("is mounted", func() {
+		Expect(usersRequest(store, validBody).Code).NotTo(Equal(http.StatusNotFound))
+	})
 
-// An email already taken (the store's :uniq violation, mapped to
-// ErrInvalid) is 422, same as any other validation failure.
-func TestUsersCreateDuplicateEmailIs422(t *testing.T) {
-	store := &fakeUsersStore{err: errors.Join(domain.ErrInvalid, errors.New("email is already taken"))}
-	rec := usersRequest(t, store, `{"email":"a@example.com","password":"at-least-8"}`)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status = %d, want 422: %s", rec.Code, rec.Body)
-	}
-}
+	// A signup hashes the password (never stores it plain), creates the
+	// account, and mints a bearer token immediately — no separate login needed
+	// right after registering.
+	It("hashes the password and mints a token", func() {
+		store.user = domain.User{ID: 7, Email: "a@example.com"}
 
-func TestUsersCreateMalformedJSONIs400(t *testing.T) {
-	rec := usersRequest(t, &fakeUsersStore{}, `{"nope":`)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", rec.Code)
-	}
-}
+		rec := usersRequest(store, validBody)
 
-// An unexpected error is a 500 that says nothing about its cause.
-func TestUsersCreateUnexpectedErrorIs500WithoutDetail(t *testing.T) {
-	store := &fakeUsersStore{err: errors.New("connection refused to db-1")}
-	rec := usersRequest(t, store, `{"email":"a@example.com","password":"at-least-8"}`)
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", rec.Code)
-	}
-	if strings.Contains(rec.Body.String(), "db-1") {
-		t.Errorf("body leaks the internal error: %s", rec.Body)
-	}
-}
+		Expect(rec.Code).To(Equal(http.StatusCreated), rec.Body.String())
+		Expect(rec.Body.String()).To(ContainSubstring(`"token":"`))
+		Expect(store.gotUser.Email).To(Equal("a@example.com"))
+		Expect(store.gotUser.PasswordDigest).NotTo(BeEmpty())
+		Expect(store.gotUser.PasswordDigest).NotTo(Equal("at-least-8"), "a bcrypt digest, not the plain password")
+	})
 
-// Signing up as a guest with a cart keeps the cart: the request's own
-// Authorization header goes to the merge, for the new account.
-func TestUsersCreateMergesTheGuestCart(t *testing.T) {
-	store := &fakeUsersStore{user: domain.User{ID: 7, Email: "a@example.com"}}
-	merger := &fakeMerger{}
-	rec := usersRequestWithMerger(t, store, merger, `{"email":"a@example.com","password":"at-least-8"}`, "Bearer guest-token")
+	// A password too short to hash never reaches the store at all.
+	It("answers 422 for a short password, without calling the store", func() {
+		rec := usersRequest(store, `{"email":"a@example.com","password":"short"}`)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !merger.called || merger.gotAuthHeader != "Bearer guest-token" || merger.gotNewSubject != "7" {
-		t.Errorf("merge: called=%v header=%q subject=%q; want the guest's header and the new account's id", merger.called, merger.gotAuthHeader, merger.gotNewSubject)
-	}
-}
+		Expect(rec.Code).To(Equal(http.StatusUnprocessableEntity), rec.Body.String())
+		Expect(store.gotUser.Email).To(BeEmpty(), "the store was called even though the password was invalid")
+	})
 
-// The account exists by then, so a merge that fails does not turn a signup
-// that worked into an error.
-func TestUsersCreateStillSucceedsWhenTheMergeFails(t *testing.T) {
-	store := &fakeUsersStore{user: domain.User{ID: 7, Email: "a@example.com"}}
-	rec := usersRequestWithMerger(t, store, &fakeMerger{err: errors.New("db hiccup")}, `{"email":"a@example.com","password":"at-least-8"}`, "")
-	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"token"`) {
-		t.Errorf("status %d: %s; want 201 with a token", rec.Code, rec.Body)
-	}
-}
+	// An email already taken (the store's :uniq violation, mapped to
+	// ErrInvalid) is 422, same as any other validation failure.
+	It("answers 422 for a duplicate email", func() {
+		store.err = errors.Join(domain.ErrInvalid, errors.New("email is already taken"))
+
+		rec := usersRequest(store, validBody)
+
+		Expect(rec.Code).To(Equal(http.StatusUnprocessableEntity), rec.Body.String())
+	})
+
+	It("answers 400 for malformed JSON", func() {
+		Expect(usersRequest(store, `{"nope":`).Code).To(Equal(http.StatusBadRequest))
+	})
+
+	// An unexpected error is a 500 that says nothing about its cause.
+	It("answers 500 without detail for an unexpected error", func() {
+		store.err = errors.New("connection refused to db-1")
+
+		rec := usersRequest(store, validBody)
+
+		Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+		Expect(rec.Body.String()).NotTo(ContainSubstring("db-1"))
+	})
+
+	Describe("the guest cart", func() {
+		BeforeEach(func() {
+			store.user = domain.User{ID: 7, Email: "a@example.com"}
+		})
+
+		// Signing up as a guest with a cart keeps the cart: the request's own
+		// Authorization header goes to the merge, for the new account.
+		It("is merged into the new account", func() {
+			merger := &fakeMerger{}
+
+			rec := usersRequestWithMerger(store, merger, validBody, "Bearer guest-token")
+
+			Expect(rec.Code).To(Equal(http.StatusCreated), rec.Body.String())
+			Expect(merger.called).To(BeTrue())
+			Expect(merger.gotAuthHeader).To(Equal("Bearer guest-token"))
+			Expect(merger.gotNewSubject).To(Equal("7"))
+		})
+
+		// The account exists by then, so a merge that fails does not turn a
+		// signup that worked into an error.
+		It("does not fail the signup when the merge fails", func() {
+			rec := usersRequestWithMerger(store, &fakeMerger{err: errors.New("db hiccup")}, validBody, "")
+
+			Expect(rec.Code).To(Equal(http.StatusCreated))
+			Expect(rec.Body.String()).To(ContainSubstring(`"token"`))
+		})
+	})
+})

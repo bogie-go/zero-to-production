@@ -1,26 +1,25 @@
-package mailers
+package mailers_test
 
 import (
-	"strings"
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/mailers"
 )
 
-func TestWelcomeLinksToTheShop(t *testing.T) {
-	m := Welcome(domain.User{Email: "ann@example.com"}, "https://shop.example.com/")
-	if m.To != "ann@example.com" || m.Subject != "Welcome to Ecommerce" {
-		t.Errorf("To = %q, Subject = %q", m.To, m.Subject)
-	}
-	// A trailing slash on the configured address does not double up.
-	if !strings.Contains(m.Text, "Start shopping: https://shop.example.com\n") || !strings.Contains(m.HTML, `href="https://shop.example.com"`) {
-		t.Errorf("link wrong:\n%s\n%s", m.Text, m.HTML)
-	}
-}
+var _ = Describe("Welcome", func() {
+	It("links to the shop", func() {
+		m := mailers.Welcome(domain.User{Email: "ann@example.com"}, "https://shop.example.com/")
+		Expect(m.To).To(Equal("ann@example.com"))
+		Expect(m.Subject).To(Equal("Welcome to Ecommerce"))
+		// A trailing slash on the configured address does not double up.
+		Expect(m.Text).To(ContainSubstring("Start shopping: https://shop.example.com\n"))
+		Expect(m.HTML).To(ContainSubstring(`href="https://shop.example.com"`))
+	})
 
-func TestWelcomeEscapesTheEmailInHTML(t *testing.T) {
-	m := Welcome(domain.User{Email: `a"<b>@example.com`}, "http://x")
-	if strings.Contains(m.HTML, "<b>") {
-		t.Errorf("email not escaped: %s", m.HTML)
-	}
-}
+	It("escapes the email in HTML", func() {
+		m := mailers.Welcome(domain.User{Email: `a"<b>@example.com`}, "http://x")
+		Expect(m.HTML).NotTo(ContainSubstring("<b>"))
+	})
+})

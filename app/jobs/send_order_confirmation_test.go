@@ -1,17 +1,18 @@
-package jobs
+package jobs_test
 
 import (
 	"context"
 	"errors"
 	"io"
 	"log/slog"
-	"strings"
-	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/jobs"
 	"ecommerce/app/services/mailer"
 )
 
@@ -48,12 +49,11 @@ func (f *fakeSender) Send(_ context.Context, msg mailer.Message) error {
 	return nil
 }
 
-func work(t *testing.T, store *fakeConfirmationStore, mail *fakeSender) error {
-	t.Helper()
-	w := &SendOrderConfirmationWorker{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Store: store, Mail: mail}
-	job := &river.Job[SendOrderConfirmationArgs]{
+func work(store *fakeConfirmationStore, mail *fakeSender) error {
+	w := &jobs.SendOrderConfirmationWorker{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Store: store, Mail: mail}
+	job := &river.Job[jobs.SendOrderConfirmationArgs]{
 		JobRow: &rivertype.JobRow{ID: 1},
-		Args:   SendOrderConfirmationArgs{UserID: 3, OrderID: 7},
+		Args:   jobs.SendOrderConfirmationArgs{UserID: 3, OrderID: 7},
 	}
 	return w.Work(context.Background(), job)
 }
@@ -66,57 +66,53 @@ func goodStore() *fakeConfirmationStore {
 	}
 }
 
-func TestWorkSendsTheConfirmation(t *testing.T) {
-	store, mail := goodStore(), &fakeSender{}
-	if err := work(t, store, mail); err != nil {
-		t.Fatal(err)
-	}
-	if len(mail.sent) != 1 || mail.sent[0].To != "ann@example.com" || !strings.Contains(mail.sent[0].Subject, "#7") {
-		t.Errorf("sent = %+v, want one email to ann about order 7", mail.sent)
-	}
-	if store.gotUserID != 3 || store.gotOrderID != "7" {
-		t.Errorf("order loaded for user %d, id %q; want user 3, order 7", store.gotUserID, store.gotOrderID)
-	}
-}
+var _ = Describe("SendOrderConfirmationWorker", func() {
+	var (
+		store  *fakeConfirmationStore
+		mail   *fakeSender
+		cancel *rivertype.JobCancelError
+	)
 
-// A mail server that is down is River's to retry: the error comes back as is.
-func TestWorkReturnsASendFailureSoRiverRetries(t *testing.T) {
-	boom := errors.New("connection refused")
-	err := work(t, goodStore(), &fakeSender{err: boom})
-	if !errors.Is(err, boom) {
-		t.Fatalf("err = %v, want the send error", err)
-	}
-	var cancel *rivertype.JobCancelError
-	if errors.As(err, &cancel) {
-		t.Error("a send failure cancelled the job; it should be retried")
-	}
-}
+	BeforeEach(func() {
+		store, mail = goodStore(), &fakeSender{}
+		cancel = nil
+	})
 
-// An order that is gone can never be emailed: cancel, do not retry 25 times.
-func TestWorkCancelsWhenTheOrderOrUserIsGone(t *testing.T) {
-	for name, store := range map[string]*fakeConfirmationStore{
-		"order gone": func() *fakeConfirmationStore { s := goodStore(); s.orderErr = domain.ErrNotFound; return s }(),
-		"user gone":  func() *fakeConfirmationStore { s := goodStore(); s.userErr = domain.ErrNotFound; return s }(),
-	} {
-		mail := &fakeSender{}
-		err := work(t, store, mail)
-		var cancel *rivertype.JobCancelError
-		if !errors.As(err, &cancel) {
-			t.Errorf("%s: err = %v, want a cancel", name, err)
-		}
-		if len(mail.sent) != 0 {
-			t.Errorf("%s: an email was sent", name)
-		}
-	}
-}
+	It("sends the confirmation", func() {
+		Expect(work(store, mail)).To(Succeed())
+		Expect(mail.sent).To(HaveLen(1))
+		Expect(mail.sent[0].To).To(Equal("ann@example.com"))
+		Expect(mail.sent[0].Subject).To(ContainSubstring("#7"))
+		Expect(store.gotUserID).To(BeEquivalentTo(3))
+		Expect(store.gotOrderID).To(Equal("7"))
+	})
 
-// Any other store error is transient: retried, not cancelled.
-func TestWorkRetriesOnADatabaseError(t *testing.T) {
-	store := goodStore()
-	store.userErr = errors.New("database is restarting")
-	err := work(t, store, &fakeSender{})
-	var cancel *rivertype.JobCancelError
-	if err == nil || errors.As(err, &cancel) {
-		t.Errorf("err = %v, want a plain error River will retry", err)
-	}
-}
+	// A mail server that is down is River's to retry: the error comes back as is.
+	It("returns a send failure so River retries", func() {
+		boom := errors.New("connection refused")
+		mail.err = boom
+		err := work(store, mail)
+		Expect(err).To(MatchError(boom))
+		Expect(errors.As(err, &cancel)).To(BeFalse(), "a send failure cancelled the job; it should be retried")
+	})
+
+	// An order that is gone can never be emailed: cancel, do not retry 25 times.
+	DescribeTable("cancels when the order or user is gone",
+		func(break_ func(*fakeConfirmationStore)) {
+			break_(store)
+			err := work(store, mail)
+			Expect(errors.As(err, &cancel)).To(BeTrue(), "err = %v, want a cancel", err)
+			Expect(mail.sent).To(BeEmpty())
+		},
+		Entry("order gone", func(s *fakeConfirmationStore) { s.orderErr = domain.ErrNotFound }),
+		Entry("user gone", func(s *fakeConfirmationStore) { s.userErr = domain.ErrNotFound }),
+	)
+
+	// Any other store error is transient: retried, not cancelled.
+	It("retries on a database error", func() {
+		store.userErr = errors.New("database is restarting")
+		err := work(store, mail)
+		Expect(err).To(HaveOccurred())
+		Expect(errors.As(err, &cancel)).To(BeFalse())
+	})
+})

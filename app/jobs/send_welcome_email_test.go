@@ -1,17 +1,18 @@
-package jobs
+package jobs_test
 
 import (
 	"context"
 	"errors"
 	"io"
 	"log/slog"
-	"strings"
-	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/jobs"
 )
 
 type fakeWelcomeStore struct {
@@ -21,37 +22,43 @@ type fakeWelcomeStore struct {
 
 func (f fakeWelcomeStore) GetUser(context.Context, string) (domain.User, error) { return f.user, f.err }
 
-func welcome(t *testing.T, store fakeWelcomeStore, mail *fakeSender) error {
-	t.Helper()
-	w := &SendWelcomeEmailWorker{
+func welcome(store fakeWelcomeStore, mail *fakeSender) error {
+	w := &jobs.SendWelcomeEmailWorker{
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Store: store, Mail: mail, SiteURL: "https://shop.example.com",
 	}
-	job := &river.Job[SendWelcomeEmailArgs]{JobRow: &rivertype.JobRow{ID: 1}, Args: SendWelcomeEmailArgs{UserID: 3}}
+	job := &river.Job[jobs.SendWelcomeEmailArgs]{JobRow: &rivertype.JobRow{ID: 1}, Args: jobs.SendWelcomeEmailArgs{UserID: 3}}
 	return w.Work(context.Background(), job)
 }
 
-func TestWelcomeWorkSendsTheEmailWithTheShopLink(t *testing.T) {
-	mail := &fakeSender{}
-	if err := welcome(t, fakeWelcomeStore{user: domain.User{ID: 3, Email: "ann@example.com"}}, mail); err != nil {
-		t.Fatal(err)
-	}
-	if len(mail.sent) != 1 || mail.sent[0].To != "ann@example.com" || !strings.Contains(mail.sent[0].Text, "https://shop.example.com") {
-		t.Errorf("sent = %+v, want one welcome with the shop's address", mail.sent)
-	}
-}
+var _ = Describe("SendWelcomeEmailWorker", func() {
+	var (
+		mail   *fakeSender
+		cancel *rivertype.JobCancelError
+	)
 
-func TestWelcomeWorkRetriesASendFailureAndCancelsAGoneUser(t *testing.T) {
-	boom := errors.New("connection refused")
-	var cancel *rivertype.JobCancelError
+	BeforeEach(func() {
+		mail = &fakeSender{}
+		cancel = nil
+	})
 
-	err := welcome(t, fakeWelcomeStore{user: domain.User{ID: 3, Email: "a@example.com"}}, &fakeSender{err: boom})
-	if !errors.Is(err, boom) || errors.As(err, &cancel) {
-		t.Errorf("send failure: err = %v, want the plain error River retries", err)
-	}
+	It("sends the email with the shop link", func() {
+		Expect(welcome(fakeWelcomeStore{user: domain.User{ID: 3, Email: "ann@example.com"}}, mail)).To(Succeed())
+		Expect(mail.sent).To(HaveLen(1))
+		Expect(mail.sent[0].To).To(Equal("ann@example.com"))
+		Expect(mail.sent[0].Text).To(ContainSubstring("https://shop.example.com"))
+	})
 
-	mail := &fakeSender{}
-	err = welcome(t, fakeWelcomeStore{err: domain.ErrNotFound}, mail)
-	if !errors.As(err, &cancel) || len(mail.sent) != 0 {
-		t.Errorf("gone user: err = %v, sent %d; want a cancel and no email", err, len(mail.sent))
-	}
-}
+	It("retries a send failure", func() {
+		boom := errors.New("connection refused")
+		mail.err = boom
+		err := welcome(fakeWelcomeStore{user: domain.User{ID: 3, Email: "a@example.com"}}, mail)
+		Expect(err).To(MatchError(boom))
+		Expect(errors.As(err, &cancel)).To(BeFalse())
+	})
+
+	It("cancels for a gone user", func() {
+		err := welcome(fakeWelcomeStore{err: domain.ErrNotFound}, mail)
+		Expect(errors.As(err, &cancel)).To(BeTrue())
+		Expect(mail.sent).To(BeEmpty())
+	})
+})

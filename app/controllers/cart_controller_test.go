@@ -1,4 +1,4 @@
-package controllers
+package controllers_test
 
 import (
 	"context"
@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/controllers"
 	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
 	"ecommerce/app/pricing"
@@ -26,11 +29,10 @@ import (
 var testTokens = token.Maker{Secret: []byte("a-test-secret-of-at-least-thirty-two-bytes"), Issuer: "ecommerce-test"}
 
 // bearerFor mints a short-lived token for subject, for a test to present.
-func bearerFor(t *testing.T, subject string) string {
-	t.Helper()
+func bearerFor(subject string) string {
 	signed, err := testTokens.Mint(subject, time.Hour)
 	if err != nil {
-		t.Fatal(err)
+		Expect(err).NotTo(HaveOccurred())
 	}
 	return "Bearer " + signed
 }
@@ -65,12 +67,11 @@ func (f *fakeCartStore) ListActivePriceRules(_ context.Context) ([]domain.PriceR
 // real request would: no token, no access. authorization, if not "", is
 // sent as the request's Authorization header verbatim — use bearerFor for a
 // valid one.
-func cartRequest(t *testing.T, store *fakeCartStore, method, path, body, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func cartRequest(store *fakeCartStore, method, path, body, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	guarded := router.Group("", middlewares.RequireUser(testTokens))
-	NewCartController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(guarded)
+	controllers.NewCartController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(guarded)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -82,96 +83,78 @@ func cartRequest(t *testing.T, store *fakeCartStore, method, path, body, authori
 	return rec
 }
 
-// Every action is mounted: a route that answers 404 was never registered.
-func TestCartRoutesAreMounted(t *testing.T) {
-	rec := cartRequest(t, &fakeCartStore{}, http.MethodGet, "/cart", "", bearerFor(t, "visitor-1"))
-	if rec.Code == http.StatusNotFound {
-		t.Errorf("GET /cart is not mounted")
-	}
-}
+var _ = Describe("GET /cart", func() {
+	var store *fakeCartStore
 
-// Index returns the current cart's contents, with each line's subtotal and
-// the cart's total computed, not stored.
-func TestCartIndexReturnsContentsWithComputedTotals(t *testing.T) {
-	store := &fakeCartStore{
-		cart: domain.Cart{ID: 1},
-		lines: []domain.CartLine{
-			{ID: 1, ProductID: 10, ProductName: "Widget", UnitPriceCents: 500, Quantity: 2},
-		},
-	}
-	rec := cartRequest(t, store, http.MethodGet, "/cart", "", bearerFor(t, "visitor-1"))
+	BeforeEach(func() {
+		store = &fakeCartStore{}
+	})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"subtotal_cents":1000`) {
-		t.Errorf("body = %s, want a line subtotal of 1000", rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"total_cents":1000`) {
-		t.Errorf("body = %s, want a cart total of 1000", rec.Body)
-	}
-}
+	// Every action is mounted: a route that answers 404 was never registered.
+	It("is mounted", func() {
+		rec := cartRequest(store, http.MethodGet, "/cart", "", bearerFor("visitor-1"))
+		Expect(rec.Code).NotTo(Equal(http.StatusNotFound))
+	})
 
-// An active price rule discounts the cart's total, and the response says
-// which rule did it and by how much — the pricing engine wired in, not just
-// unit-tested in isolation.
-func TestCartIndexAppliesActivePriceRules(t *testing.T) {
-	percentage, err := json.Marshal(pricing.PercentageDiscountRule{Percentage: 20})
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := &fakeCartStore{
-		cart:  domain.Cart{ID: 1},
-		lines: []domain.CartLine{{ID: 1, ProductID: 10, ProductName: "Widget", UnitPriceCents: 500, Quantity: 2}},
-		rules: []domain.PriceRule{{ID: 1, Name: "Flash Sale", Kind: "percentage_discount", Properties: percentage, Active: true}},
-	}
-	rec := cartRequest(t, store, http.MethodGet, "/cart", "", bearerFor(t, "visitor-1"))
+	Context("with a cart of lines", func() {
+		BeforeEach(func() {
+			store.cart = domain.Cart{ID: 1}
+			store.lines = []domain.CartLine{
+				{ID: 1, ProductID: 10, ProductName: "Widget", UnitPriceCents: 500, Quantity: 2},
+			}
+		})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"subtotal_cents":1000`) {
-		t.Errorf("body = %s, want a subtotal of 1000", rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"discount_cents":200`) {
-		t.Errorf("body = %s, want a discount of 200", rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"total_cents":800`) {
-		t.Errorf("body = %s, want a total of 800 after the discount", rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"name":"Flash Sale"`) {
-		t.Errorf("body = %s, want the applied rule's name", rec.Body)
-	}
-}
+		// Index returns the current cart's contents, with each line's subtotal and
+		// the cart's total computed, not stored.
+		It("returns the contents with computed totals", func() {
+			rec := cartRequest(store, http.MethodGet, "/cart", "", bearerFor("visitor-1"))
 
-// The cart is resolved by the token's subject: whichever visitor the
-// bearer token names is whose cart comes back.
-func TestCartIndexResolvesByTokenSubject(t *testing.T) {
-	store := &fakeCartStore{}
-	cartRequest(t, store, http.MethodGet, "/cart", "", bearerFor(t, "visitor-42"))
-	if store.gotToken != "visitor-42" {
-		t.Errorf("store got token %q, want %q", store.gotToken, "visitor-42")
-	}
-}
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(rec.Body.String()).To(ContainSubstring(`"subtotal_cents":1000`), "a line subtotal of 1000")
+			Expect(rec.Body.String()).To(ContainSubstring(`"total_cents":1000`), "a cart total of 1000")
+		})
 
-// No bearer token at all is 401 — the detailed cases (expired, garbage,
-// wrong scheme) are already covered by
-// app/middlewares/require_user_test.go; this just proves /cart is actually
-// mounted behind that guard, not bypassing it.
-func TestCartRequiresABearerToken(t *testing.T) {
-	rec := cartRequest(t, &fakeCartStore{}, http.MethodGet, "/cart", "", "")
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401", rec.Code)
-	}
-}
+		// An active price rule discounts the cart's total, and the response says
+		// which rule did it and by how much — the pricing engine wired in, not just
+		// unit-tested in isolation.
+		It("applies active price rules", func() {
+			percentage, err := json.Marshal(pricing.PercentageDiscountRule{Percentage: 20})
+			Expect(err).NotTo(HaveOccurred())
+			store.rules = []domain.PriceRule{{ID: 1, Name: "Flash Sale", Kind: "percentage_discount", Properties: percentage, Active: true}}
 
-// An unexpected error is a 500 that says nothing about its cause.
-func TestCartUnexpectedErrorIs500WithoutDetail(t *testing.T) {
-	rec := cartRequest(t, &fakeCartStore{err: errors.New("connection refused to db-1")}, http.MethodGet, "/cart", "", bearerFor(t, "visitor-1"))
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", rec.Code)
-	}
-	if strings.Contains(rec.Body.String(), "db-1") {
-		t.Errorf("body leaks the internal error: %s", rec.Body)
-	}
-}
+			rec := cartRequest(store, http.MethodGet, "/cart", "", bearerFor("visitor-1"))
+
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(rec.Body.String()).To(ContainSubstring(`"subtotal_cents":1000`))
+			Expect(rec.Body.String()).To(ContainSubstring(`"discount_cents":200`))
+			Expect(rec.Body.String()).To(ContainSubstring(`"total_cents":800`), "a total of 800 after the discount")
+			Expect(rec.Body.String()).To(ContainSubstring(`"name":"Flash Sale"`))
+		})
+	})
+
+	// The cart is resolved by the token's subject: whichever visitor the
+	// bearer token names is whose cart comes back.
+	It("resolves the cart by the token's subject", func() {
+		cartRequest(store, http.MethodGet, "/cart", "", bearerFor("visitor-42"))
+		Expect(store.gotToken).To(Equal("visitor-42"))
+	})
+
+	// No bearer token at all is 401 — the detailed cases (expired, garbage,
+	// wrong scheme) are already covered by
+	// app/middlewares/require_user_test.go; this just proves /cart is actually
+	// mounted behind that guard, not bypassing it.
+	It("requires a bearer token", func() {
+		rec := cartRequest(store, http.MethodGet, "/cart", "", "")
+		Expect(rec.Code).To(Equal(http.StatusUnauthorized))
+	})
+
+	// An unexpected error is a 500 that says nothing about its cause.
+	It("answers 500 without detail for an unexpected error", func() {
+		store.err = errors.New("connection refused to db-1")
+
+		rec := cartRequest(store, http.MethodGet, "/cart", "", bearerFor("visitor-1"))
+
+		Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+		Expect(rec.Body.String()).NotTo(ContainSubstring("db-1"))
+	})
+})

@@ -1,4 +1,4 @@
-package controllers
+package controllers_test
 
 import (
 	"context"
@@ -9,10 +9,13 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/controllers"
 	"ecommerce/app/domain"
 	"ecommerce/app/services/cartmerge"
 	"ecommerce/app/services/password"
@@ -72,11 +75,10 @@ func (f *fakeSessionsStore) DeleteCartAndItems(_ context.Context, cartID int64) 
 }
 
 // userWithPassword builds a user whose digest checks out against plain.
-func userWithPassword(t *testing.T, id int64, plain string) domain.User {
-	t.Helper()
+func userWithPassword(id int64, plain string) domain.User {
 	digest, err := password.Hash(plain)
 	if err != nil {
-		t.Fatal(err)
+		Expect(err).NotTo(HaveOccurred())
 	}
 	return domain.User{ID: id, Email: "a@example.com", PasswordDigest: digest}
 }
@@ -92,20 +94,18 @@ func (f *fakeAlerts) SignedIn(_ context.Context, s domain.SignIn) error {
 	return f.err
 }
 
-func sessionsRequest(t *testing.T, store *fakeSessionsStore, body, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
-	return sessionsRequestWithAlerts(t, store, &fakeAlerts{}, body, authorization)
+func sessionsRequest(store *fakeSessionsStore, body, authorization string) *httptest.ResponseRecorder {
+	return sessionsRequestWithAlerts(store, &fakeAlerts{}, body, authorization)
 }
 
 // sessionsRequestWithAlerts runs the real cart merge over the fake store, so
 // the merge behaviors below are tested through the controller as before.
-func sessionsRequestWithAlerts(t *testing.T, store *fakeSessionsStore, alerts *fakeAlerts, body, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func sessionsRequestWithAlerts(store *fakeSessionsStore, alerts *fakeAlerts, body, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	merger := cartmerge.Merger{Store: store, Tokens: testTokens, Log: log}
-	NewSessionsController(store, testTokens, merger, alerts, log).SetupRoutes(&router.RouterGroup)
+	controllers.NewSessionsController(store, testTokens, merger, alerts, log).SetupRoutes(&router.RouterGroup)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/sessions", strings.NewReader(body))
@@ -119,201 +119,174 @@ func sessionsRequestWithAlerts(t *testing.T, store *fakeSessionsStore, alerts *f
 	return rec
 }
 
-func TestSessionsRoutesAreMounted(t *testing.T) {
-	rec := sessionsRequest(t, &fakeSessionsStore{}, `{"email":"a@example.com","password":"wrong"}`, "")
-	if rec.Code == http.StatusNotFound {
-		t.Error("POST /sessions is not mounted")
-	}
-}
+var _ = Describe("POST /sessions", func() {
+	const loginBody = `{"email":"a@example.com","password":"correct-password"}`
 
-func TestSessionsCreateMintsATokenOnSuccess(t *testing.T) {
-	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}
-	rec := sessionsRequest(t, store, `{"email":"a@example.com","password":"correct-password"}`, "")
+	var store *fakeSessionsStore
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"token":"`) {
-		t.Errorf("body = %s, want a token", rec.Body)
-	}
-}
+	BeforeEach(func() {
+		store = &fakeSessionsStore{}
+	})
 
-// A wrong password and an unknown email answer identically: a caller can't
-// tell the two apart.
-func TestSessionsCreateWrongPasswordIs401(t *testing.T) {
-	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}
-	rec := sessionsRequest(t, store, `{"email":"a@example.com","password":"wrong-password"}`, "")
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401: %s", rec.Code, rec.Body)
-	}
-}
+	It("is mounted", func() {
+		rec := sessionsRequest(store, `{"email":"a@example.com","password":"wrong"}`, "")
+		Expect(rec.Code).NotTo(Equal(http.StatusNotFound))
+	})
 
-func TestSessionsCreateUnknownEmailIs401(t *testing.T) {
-	store := &fakeSessionsStore{userErr: domain.ErrNotFound}
-	rec := sessionsRequest(t, store, `{"email":"nobody@example.com","password":"whatever1"}`, "")
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401: %s", rec.Code, rec.Body)
-	}
-}
+	It("answers 400 for malformed JSON", func() {
+		Expect(sessionsRequest(store, `{"nope":`, "").Code).To(Equal(http.StatusBadRequest))
+	})
 
-func TestSessionsCreateMalformedJSONIs400(t *testing.T) {
-	rec := sessionsRequest(t, &fakeSessionsStore{}, `{"nope":`, "")
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", rec.Code)
-	}
-}
+	Context("with a known user", func() {
+		BeforeEach(func() {
+			store.user = userWithPassword(7, "correct-password")
+		})
 
-// No bearer token sent with the login: nothing to merge, and the store is
-// never even asked about an old cart.
-func TestSessionsCreateSkipsMergeWithNoExistingToken(t *testing.T) {
-	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}
-	rec := sessionsRequest(t, store, `{"email":"a@example.com","password":"correct-password"}`, "")
+		It("mints a token on success", func() {
+			rec := sessionsRequest(store, loginBody, "")
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.gotCartByTokenCalled {
-		t.Error("GetCartByToken was called with no existing token sent")
-	}
-}
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(rec.Body.String()).To(ContainSubstring(`"token":"`))
+		})
 
-// A garbage or expired bearer token just means nothing to merge, not a
-// failed login.
-func TestSessionsCreateSkipsMergeWithAnInvalidExistingToken(t *testing.T) {
-	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}
-	rec := sessionsRequest(t, store, `{"email":"a@example.com","password":"correct-password"}`, "Bearer garbage")
+		// A wrong password and an unknown email answer identically: a caller can't
+		// tell the two apart.
+		It("answers 401 for a wrong password", func() {
+			rec := sessionsRequest(store, `{"email":"a@example.com","password":"wrong-password"}`, "")
+			Expect(rec.Code).To(Equal(http.StatusUnauthorized), rec.Body.String())
+		})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.gotCartByTokenCalled {
-		t.Error("GetCartByToken was called even though the old token didn't verify")
-	}
-}
+		Describe("merging a guest cart", func() {
+			// No bearer token sent with the login: nothing to merge, and the store is
+			// never even asked about an old cart.
+			It("is skipped with no existing token", func() {
+				rec := sessionsRequest(store, loginBody, "")
 
-// A valid old token naming a cart that doesn't exist: still nothing to
-// merge or delete.
-func TestSessionsCreateSkipsMergeWhenNoGuestCartExists(t *testing.T) {
-	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password"), oldCartErr: domain.ErrNotFound}
-	auth := bearerFor(t, "guest-abc")
-	rec := sessionsRequest(t, store, `{"email":"a@example.com","password":"correct-password"}`, auth)
+				Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+				Expect(store.gotCartByTokenCalled).To(BeFalse(), "GetCartByToken was called with no existing token sent")
+			})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.deleteCalled {
-		t.Error("DeleteCartAndItems was called even though there was no cart to delete")
-	}
-}
+			// A garbage or expired bearer token just means nothing to merge, not a
+			// failed login.
+			It("is skipped with an invalid existing token", func() {
+				rec := sessionsRequest(store, loginBody, "Bearer garbage")
 
-// The real case: a guest cart with lines in it is folded into the newly
-// logged-in user's cart, then removed.
-func TestSessionsCreateMergesTheGuestCart(t *testing.T) {
-	store := &fakeSessionsStore{
-		user:    userWithPassword(t, 7, "correct-password"),
-		oldCart: domain.Cart{ID: 5},
-		lines: []domain.CartLine{
-			{ProductID: 10, Quantity: 2},
-			{ProductID: 11, Quantity: 1},
-		},
-		newCart: domain.Cart{ID: 99},
-	}
-	auth := bearerFor(t, "guest-abc")
-	rec := sessionsRequest(t, store, `{"email":"a@example.com","password":"correct-password"}`, auth)
+				Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+				Expect(store.gotCartByTokenCalled).To(BeFalse(), "the old token didn't verify")
+			})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.gotOldCartToken != "guest-abc" {
-		t.Errorf("store looked up cart by token %q, want guest-abc", store.gotOldCartToken)
-	}
-	if store.gotNewCartSubject != strconv.FormatInt(7, 10) {
-		t.Errorf("store resolved the new cart by subject %q, want \"7\"", store.gotNewCartSubject)
-	}
-	if len(store.addedProductIDs) != 2 || store.addedProductIDs[0] != 10 || store.addedProductIDs[1] != 11 {
-		t.Errorf("store got product ids %v, want [10 11]", store.addedProductIDs)
-	}
-	if len(store.addedQuantities) != 2 || store.addedQuantities[0] != 2 || store.addedQuantities[1] != 1 {
-		t.Errorf("store got quantities %v, want [2 1]", store.addedQuantities)
-	}
-	if !store.deleteCalled || store.deletedCartID != 5 {
-		t.Errorf("deleteCalled = %v, deletedCartID = %d, want true and 5", store.deleteCalled, store.deletedCartID)
-	}
-}
+			// A valid old token naming a cart that doesn't exist: still nothing to
+			// merge or delete.
+			It("is skipped when no guest cart exists", func() {
+				store.oldCartErr = domain.ErrNotFound
 
-// One line failing to merge (out of stock, say) doesn't fail the login, and
-// the guest cart is still cleaned up afterward.
-func TestSessionsCreateContinuesMergeAfterALineFails(t *testing.T) {
-	store := &fakeSessionsStore{
-		user:    userWithPassword(t, 7, "correct-password"),
-		oldCart: domain.Cart{ID: 5},
-		lines:   []domain.CartLine{{ProductID: 10, Quantity: 999}},
-		newCart: domain.Cart{ID: 99},
-		addErr:  errors.Join(domain.ErrInvalid, errors.New("only 1 in stock")),
-	}
-	auth := bearerFor(t, "guest-abc")
-	rec := sessionsRequest(t, store, `{"email":"a@example.com","password":"correct-password"}`, auth)
+				rec := sessionsRequest(store, loginBody, bearerFor("guest-abc"))
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !store.deleteCalled {
-		t.Error("the guest cart should still be cleaned up even though its one line couldn't merge")
-	}
-}
+				Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+				Expect(store.deleteCalled).To(BeFalse(), "there was no cart to delete")
+			})
 
-// A real store error during the merge (not just "nothing to merge") is a
-// 500 that says nothing about its cause.
-func TestSessionsCreateUnexpectedMergeErrorIs500WithoutDetail(t *testing.T) {
-	store := &fakeSessionsStore{
-		user:       userWithPassword(t, 7, "correct-password"),
-		oldCartErr: errors.New("connection refused to db-1"),
-	}
-	auth := bearerFor(t, "guest-abc")
-	rec := sessionsRequest(t, store, `{"email":"a@example.com","password":"correct-password"}`, auth)
+			Context("with a guest cart that has lines", func() {
+				BeforeEach(func() {
+					store.oldCart = domain.Cart{ID: 5}
+					store.newCart = domain.Cart{ID: 99}
+				})
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500: %s", rec.Code, rec.Body)
-	}
-	if strings.Contains(rec.Body.String(), "db-1") {
-		t.Errorf("body leaks the internal error: %s", rec.Body)
-	}
-}
+				// The real case: a guest cart with lines in it is folded into the newly
+				// logged-in user's cart, then removed.
+				It("folds the lines into the user's cart, then removes the guest cart", func() {
+					store.lines = []domain.CartLine{
+						{ProductID: 10, Quantity: 2},
+						{ProductID: 11, Quantity: 1},
+					}
 
-// A correct login queues one alert, with who, when and from where, taken from
-// the request itself.
-func TestSessionsCreateQueuesASignInAlert(t *testing.T) {
-	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}
-	alerts := &fakeAlerts{}
-	rec := sessionsRequestWithAlerts(t, store, alerts, `{"email":"a@example.com","password":"correct-password"}`, "")
+					rec := sessionsRequest(store, loginBody, bearerFor("guest-abc"))
 
-	if rec.Code != http.StatusOK || len(alerts.sent) != 1 {
-		t.Fatalf("status %d, %d alerts; want 200 and one alert", rec.Code, len(alerts.sent))
-	}
-	got := alerts.sent[0]
-	if got.UserID != 7 || got.IP != "203.0.113.9" || got.UserAgent != "TestBrowser/1.0" || got.At.IsZero() {
-		t.Errorf("alert = %+v, want user 7 from 203.0.113.9 with the request's browser and a time", got)
-	}
-}
+					Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+					Expect(store.gotOldCartToken).To(Equal("guest-abc"))
+					Expect(store.gotNewCartSubject).To(Equal(strconv.FormatInt(7, 10)))
+					Expect(store.addedProductIDs).To(Equal([]int64{10, 11}))
+					Expect(store.addedQuantities).To(Equal([]int32{2, 1}))
+					Expect(store.deleteCalled).To(BeTrue())
+					Expect(store.deletedCartID).To(Equal(int64(5)))
+				})
 
-// Only a login that worked is announced: a wrong password, an unknown email
-// and a bad body say nothing to anyone.
-func TestSessionsCreateAlertsOnlyOnSuccess(t *testing.T) {
-	alerts := &fakeAlerts{}
-	sessionsRequestWithAlerts(t, &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}, alerts, `{"email":"a@example.com","password":"wrong"}`, "")
-	sessionsRequestWithAlerts(t, &fakeSessionsStore{userErr: domain.ErrNotFound}, alerts, `{"email":"x@example.com","password":"whatever1"}`, "")
-	sessionsRequestWithAlerts(t, &fakeSessionsStore{}, alerts, `{"nope":`, "")
-	if len(alerts.sent) != 0 {
-		t.Errorf("alerts = %+v, want none", alerts.sent)
-	}
-}
+				// One line failing to merge (out of stock, say) doesn't fail the login, and
+				// the guest cart is still cleaned up afterward.
+				It("continues after a line fails to merge", func() {
+					store.lines = []domain.CartLine{{ProductID: 10, Quantity: 999}}
+					store.addErr = errors.Join(domain.ErrInvalid, errors.New("only 1 in stock"))
 
-// A correct password is never refused because the queue is down.
-func TestSessionsCreateStillLogsInWhenTheAlertCannotBeQueued(t *testing.T) {
-	store := &fakeSessionsStore{user: userWithPassword(t, 7, "correct-password")}
-	alerts := &fakeAlerts{err: errors.New("queue is down")}
-	rec := sessionsRequestWithAlerts(t, store, alerts, `{"email":"a@example.com","password":"correct-password"}`, "")
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"token"`) {
-		t.Errorf("status %d: %s; want a login despite the failed alert", rec.Code, rec.Body)
-	}
-}
+					rec := sessionsRequest(store, loginBody, bearerFor("guest-abc"))
+
+					Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+					Expect(store.deleteCalled).To(BeTrue(), "the guest cart is still cleaned up even though its one line couldn't merge")
+				})
+			})
+
+			// A real store error during the merge (not just "nothing to merge") is a
+			// 500 that says nothing about its cause.
+			It("answers 500 without detail for an unexpected merge error", func() {
+				store.oldCartErr = errors.New("connection refused to db-1")
+
+				rec := sessionsRequest(store, loginBody, bearerFor("guest-abc"))
+
+				Expect(rec.Code).To(Equal(http.StatusInternalServerError), rec.Body.String())
+				Expect(rec.Body.String()).NotTo(ContainSubstring("db-1"))
+			})
+		})
+
+		Describe("sign-in alerts", func() {
+			var alerts *fakeAlerts
+
+			BeforeEach(func() {
+				alerts = &fakeAlerts{}
+			})
+
+			// A correct login queues one alert, with who, when and from where, taken from
+			// the request itself.
+			It("queues one alert for a correct login, taken from the request", func() {
+				rec := sessionsRequestWithAlerts(store, alerts, loginBody, "")
+
+				Expect(rec.Code).To(Equal(http.StatusOK))
+				Expect(alerts.sent).To(HaveLen(1))
+				got := alerts.sent[0]
+				Expect(got.UserID).To(Equal(int64(7)))
+				Expect(got.IP).To(Equal("203.0.113.9"))
+				Expect(got.UserAgent).To(Equal("TestBrowser/1.0"))
+				Expect(got.At).NotTo(BeZero())
+			})
+
+			// A correct password is never refused because the queue is down.
+			It("still logs in when the alert cannot be queued", func() {
+				alerts.err = errors.New("queue is down")
+
+				rec := sessionsRequestWithAlerts(store, alerts, loginBody, "")
+
+				Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+				Expect(rec.Body.String()).To(ContainSubstring(`"token"`))
+			})
+		})
+	})
+
+	Context("with an unknown email", func() {
+		BeforeEach(func() {
+			store.userErr = domain.ErrNotFound
+		})
+
+		It("answers 401", func() {
+			rec := sessionsRequest(store, `{"email":"nobody@example.com","password":"whatever1"}`, "")
+			Expect(rec.Code).To(Equal(http.StatusUnauthorized), rec.Body.String())
+		})
+	})
+
+	// Only a login that worked is announced: a wrong password, an unknown email
+	// and a bad body say nothing to anyone.
+	It("alerts only on success", func() {
+		alerts := &fakeAlerts{}
+		sessionsRequestWithAlerts(&fakeSessionsStore{user: userWithPassword(7, "correct-password")}, alerts, `{"email":"a@example.com","password":"wrong"}`, "")
+		sessionsRequestWithAlerts(&fakeSessionsStore{userErr: domain.ErrNotFound}, alerts, `{"email":"x@example.com","password":"whatever1"}`, "")
+		sessionsRequestWithAlerts(&fakeSessionsStore{}, alerts, `{"nope":`, "")
+		Expect(alerts.sent).To(BeEmpty())
+	})
+})

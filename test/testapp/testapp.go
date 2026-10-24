@@ -21,7 +21,6 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
-	"testing"
 	"time"
 
 	"ecommerce/app"
@@ -29,15 +28,25 @@ import (
 	"ecommerce/test/testdb"
 )
 
+// T is the part of *testing.T the helpers need, so they also work with
+// Ginkgo's GinkgoT().
+type T interface {
+	Helper()
+	Fatal(args ...any)
+	Fatalf(format string, args ...any)
+	Cleanup(func())
+	Setenv(key, value string)
+}
+
 // App is a running application and the helpers around it.
 type App struct {
 	*app.Application
-	t *testing.T
+	t T
 }
 
 // New builds the application against an emptied test database. The
 // environment is forced to test by testdb, so development data is safe.
-func New(t *testing.T) *App {
+func New(t T) *App {
 	t.Helper()
 	// The request log is noise in a test; failures still print.
 	t.Setenv("SERVER_LOG_LEVEL", "error")
@@ -136,7 +145,7 @@ func (r *Request) Do() *Response {
 
 // Response is what came back.
 type Response struct {
-	t    *testing.T
+	t    T
 	Code int
 	Body []byte
 }

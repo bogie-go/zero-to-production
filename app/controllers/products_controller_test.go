@@ -1,4 +1,4 @@
-package controllers
+package controllers_test
 
 import (
 	"context"
@@ -9,10 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/controllers"
 	"ecommerce/app/domain"
 )
 
@@ -49,11 +52,10 @@ func (f *fakeProductsStore) CountActiveProducts(_ context.Context, _ *int64) (in
 
 // productsRequest mounts the controller alone on a bare router, so these
 // tests see the controller and nothing else: no middleware, no other routes.
-func productsRequest(t *testing.T, store *fakeProductsStore, method, path, body string) *httptest.ResponseRecorder {
-	t.Helper()
+func productsRequest(store *fakeProductsStore, method, path, body string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewProductsController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
+	controllers.NewProductsController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -62,145 +64,142 @@ func productsRequest(t *testing.T, store *fakeProductsStore, method, path, body 
 	return rec
 }
 
-// Every action is mounted: a route that answers 404 was never registered.
-func TestProductsRoutesAreMounted(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	NewProductsController(&fakeProductsStore{}, log).SetupRoutes(&router.RouterGroup)
+var _ = Describe("products", func() {
+	var store *fakeProductsStore
 
-	routes := []struct{ method, path string }{
-		{http.MethodGet, "/products"},
-		{http.MethodGet, "/products/1"},
-	}
-	for _, r := range routes {
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, httptest.NewRequest(r.method, r.path, nil))
-		if rec.Code == http.StatusNotFound {
-			t.Errorf("%s %s is not mounted", r.method, r.path)
-		}
-	}
-}
+	BeforeEach(func() {
+		store = &fakeProductsStore{}
+	})
 
-func TestProductsIndexLists(t *testing.T) {
-	store := &fakeProductsStore{many: []domain.Product{{ID: 1}, {ID: 2}}}
-	rec := productsRequest(t, store, http.MethodGet, "/products", "")
+	// Every action is mounted: a route that answers 404 was never registered.
+	DescribeTable("routes",
+		func(method, path string) {
+			rec := productsRequest(store, method, path, "")
+			Expect(rec.Code).NotTo(Equal(http.StatusNotFound))
+		},
+		Entry("GET /products", http.MethodGet, "/products"),
+		Entry("GET /products/:id", http.MethodGet, "/products/1"),
+	)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	var body struct {
-		Products []struct{ ID int64 } `json:"products"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if len(body.Products) != 2 || body.Products[1].ID != 2 {
-		t.Errorf("body = %+v", body)
-	}
-}
+	Describe("GET /products", func() {
+		It("lists", func() {
+			store.many = []domain.Product{{ID: 1}, {ID: 2}}
 
-func TestProductsShowUnknownIs404(t *testing.T) {
-	rec := productsRequest(t, &fakeProductsStore{err: domain.ErrNotFound}, http.MethodGet, "/products/nope", "")
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", rec.Code)
-	}
-}
+			rec := productsRequest(store, http.MethodGet, "/products", "")
 
-func TestProductsShowFindsByID(t *testing.T) {
-	store := &fakeProductsStore{one: domain.Product{ID: 1, Name: "Widget"}}
-	rec := productsRequest(t, store, http.MethodGet, "/products/1", "")
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			var body struct {
+				Products []struct{ ID int64 } `json:"products"`
+			}
+			Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
+			Expect(body.Products).To(HaveLen(2))
+			Expect(body.Products[1].ID).To(Equal(int64(2)))
+		})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.gotID != "1" {
-		t.Errorf("store got id = %q, want %q", store.gotID, "1")
-	}
-	if !strings.Contains(rec.Body.String(), `"name":"Widget"`) {
-		t.Errorf("body = %s", rec.Body)
-	}
-}
+		// An unexpected error is a 500 that says nothing about its cause.
+		It("answers 500 without detail for an unexpected error", func() {
+			store.err = errors.New("connection refused to db-1")
 
-// An unexpected error is a 500 that says nothing about its cause.
-func TestProductsUnexpectedErrorIs500WithoutDetail(t *testing.T) {
-	rec := productsRequest(t, &fakeProductsStore{err: errors.New("connection refused to db-1")}, http.MethodGet, "/products", "")
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", rec.Code)
-	}
-	if strings.Contains(rec.Body.String(), "db-1") {
-		t.Errorf("body leaks the internal error: %s", rec.Body)
-	}
-}
+			rec := productsRequest(store, http.MethodGet, "/products", "")
 
-// ?category_id=N is handed to the store as a number; without it the store is
-// asked for every category (nil).
-func TestProductsIndexFiltersByCategory(t *testing.T) {
-	store := &fakeProductsStore{many: []domain.Product{{ID: 1, Name: "Mouse", CategoryName: "Peripherals"}}}
-	rec := productsRequest(t, store, http.MethodGet, "/products?category_id=4", "")
-	if rec.Code != http.StatusOK || store.gotCategoryID == nil || *store.gotCategoryID != 4 {
-		t.Fatalf("status %d, category %v; want 200 and 4", rec.Code, store.gotCategoryID)
-	}
-	if !strings.Contains(rec.Body.String(), `"category_name":"Peripherals"`) {
-		t.Errorf("body = %s, want the category's name in the response", rec.Body)
-	}
+			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+			Expect(rec.Body.String()).NotTo(ContainSubstring("db-1"))
+		})
 
-	store = &fakeProductsStore{}
-	productsRequest(t, store, http.MethodGet, "/products", "")
-	if store.gotCategoryID != nil {
-		t.Errorf("no filter asked for category %v, want nil (all)", *store.gotCategoryID)
-	}
-}
+		// ?category_id=N is handed to the store as a number; without it the store is
+		// asked for every category (nil).
+		Describe("filtering by category", func() {
+			It("hands the category id to the store", func() {
+				store.many = []domain.Product{{ID: 1, Name: "Mouse", CategoryName: "Peripherals"}}
 
-func TestProductsIndexRefusesANonNumericCategory(t *testing.T) {
-	rec := productsRequest(t, &fakeProductsStore{}, http.MethodGet, "/products?category_id=audio", "")
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status = %d, want 422: %s", rec.Code, rec.Body)
-	}
-}
+				rec := productsRequest(store, http.MethodGet, "/products?category_id=4", "")
 
-// With no query the first page of twelve is asked for, and the answer says
-// where the client is in the whole list.
-func TestProductsIndexDefaultsToTheFirstPage(t *testing.T) {
-	store := &fakeProductsStore{many: []domain.Product{{ID: 1}}, total: 30}
-	rec := productsRequest(t, store, http.MethodGet, "/products", "")
+				Expect(rec.Code).To(Equal(http.StatusOK))
+				Expect(store.gotCategoryID).NotTo(BeNil())
+				Expect(*store.gotCategoryID).To(Equal(int64(4)))
+				Expect(rec.Body.String()).To(ContainSubstring(`"category_name":"Peripherals"`), "the category's name in the response")
+			})
 
-	if store.gotLimit != 12 || store.gotOffset != 0 {
-		t.Errorf("asked for limit %d offset %d, want 12 and 0", store.gotLimit, store.gotOffset)
-	}
-	var body struct {
-		Pagination struct {
-			Page       int   `json:"page"`
-			PerPage    int   `json:"per_page"`
-			Total      int64 `json:"total"`
-			TotalPages int   `json:"total_pages"`
-		} `json:"pagination"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if p := body.Pagination; p.Page != 1 || p.PerPage != 12 || p.Total != 30 || p.TotalPages != 3 {
-		t.Errorf("pagination = %+v", p)
-	}
-}
+			It("asks for every category (nil) without a filter", func() {
+				productsRequest(store, http.MethodGet, "/products", "")
+				Expect(store.gotCategoryID).To(BeNil())
+			})
 
-func TestProductsIndexPassesThePageAndClampsPerPage(t *testing.T) {
-	store := &fakeProductsStore{}
-	productsRequest(t, store, http.MethodGet, "/products?page=3&per_page=5", "")
-	if store.gotLimit != 5 || store.gotOffset != 10 {
-		t.Errorf("page 3 of 5: limit %d offset %d, want 5 and 10", store.gotLimit, store.gotOffset)
-	}
-	productsRequest(t, store, http.MethodGet, "/products?per_page=5000", "")
-	if store.gotLimit != 50 {
-		t.Errorf("per_page=5000: limit %d, want it clamped to 50", store.gotLimit)
-	}
-}
+			It("refuses a non-numeric category with 422", func() {
+				rec := productsRequest(store, http.MethodGet, "/products?category_id=audio", "")
+				Expect(rec.Code).To(Equal(http.StatusUnprocessableEntity), rec.Body.String())
+			})
+		})
 
-func TestProductsIndexRefusesABadPage(t *testing.T) {
-	for _, q := range []string{"page=0", "page=-1", "page=abc", "per_page=0", "per_page=x", "page=99999999999"} {
-		rec := productsRequest(t, &fakeProductsStore{}, http.MethodGet, "/products?"+q, "")
-		if rec.Code != http.StatusUnprocessableEntity {
-			t.Errorf("?%s: status = %d, want 422", q, rec.Code)
-		}
-	}
-}
+		Describe("pagination", func() {
+			// With no query the first page of twelve is asked for, and the answer says
+			// where the client is in the whole list.
+			It("defaults to the first page", func() {
+				store.many = []domain.Product{{ID: 1}}
+				store.total = 30
+
+				rec := productsRequest(store, http.MethodGet, "/products", "")
+
+				Expect(store.gotLimit).To(Equal(int32(12)))
+				Expect(store.gotOffset).To(Equal(int32(0)))
+				var body struct {
+					Pagination struct {
+						Page       int   `json:"page"`
+						PerPage    int   `json:"per_page"`
+						Total      int64 `json:"total"`
+						TotalPages int   `json:"total_pages"`
+					} `json:"pagination"`
+				}
+				Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
+				Expect(body.Pagination.Page).To(Equal(1))
+				Expect(body.Pagination.PerPage).To(Equal(12))
+				Expect(body.Pagination.Total).To(Equal(int64(30)))
+				Expect(body.Pagination.TotalPages).To(Equal(3))
+			})
+
+			It("passes the page through", func() {
+				productsRequest(store, http.MethodGet, "/products?page=3&per_page=5", "")
+				Expect(store.gotLimit).To(Equal(int32(5)))
+				Expect(store.gotOffset).To(Equal(int32(10)))
+			})
+
+			It("clamps per_page to 50", func() {
+				productsRequest(store, http.MethodGet, "/products?per_page=5000", "")
+				Expect(store.gotLimit).To(Equal(int32(50)))
+			})
+
+			DescribeTable("refuses a bad page with 422",
+				func(query string) {
+					rec := productsRequest(store, http.MethodGet, "/products?"+query, "")
+					Expect(rec.Code).To(Equal(http.StatusUnprocessableEntity))
+				},
+				Entry("page=0", "page=0"),
+				Entry("page=-1", "page=-1"),
+				Entry("page=abc", "page=abc"),
+				Entry("per_page=0", "per_page=0"),
+				Entry("per_page=x", "per_page=x"),
+				Entry("page=99999999999", "page=99999999999"),
+			)
+		})
+	})
+
+	Describe("GET /products/:id", func() {
+		It("answers 404 for an unknown product", func() {
+			store.err = domain.ErrNotFound
+
+			rec := productsRequest(store, http.MethodGet, "/products/nope", "")
+
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("finds by id", func() {
+			store.one = domain.Product{ID: 1, Name: "Widget"}
+
+			rec := productsRequest(store, http.MethodGet, "/products/1", "")
+
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(store.gotID).To(Equal("1"))
+			Expect(rec.Body.String()).To(ContainSubstring(`"name":"Widget"`))
+		})
+	})
+})

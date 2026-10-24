@@ -1,4 +1,4 @@
-package controllers
+package controllers_test
 
 import (
 	"context"
@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/controllers"
 	"ecommerce/app/domain"
 )
 
@@ -24,40 +26,35 @@ func (f fakeCategoriesStore) ListCategoriesWithCounts(context.Context) ([]domain
 	return f.list, f.err
 }
 
-func categoriesRequest(t *testing.T, store fakeCategoriesStore) *httptest.ResponseRecorder {
-	t.Helper()
+func categoriesRequest(store fakeCategoriesStore) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	NewCategoriesController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
+	controllers.NewCategoriesController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(&router.RouterGroup)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/categories", nil))
 	return rec
 }
 
-func TestCategoriesIndexListsEachWithItsCount(t *testing.T) {
-	rec := categoriesRequest(t, fakeCategoriesStore{list: []domain.Category{
-		{ID: 1, Name: "Audio", ProductCount: 3}, {ID: 2, Name: "Empty"},
-	}})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	for _, want := range []string{`"name":"Audio","product_count":3`, `"name":"Empty","product_count":0`} {
-		if !strings.Contains(rec.Body.String(), want) {
-			t.Errorf("body = %s, want %s", rec.Body, want)
-		}
-	}
-}
+var _ = Describe("GET /categories", func() {
+	It("lists each category with its product count", func() {
+		rec := categoriesRequest(fakeCategoriesStore{list: []domain.Category{
+			{ID: 1, Name: "Audio", ProductCount: 3}, {ID: 2, Name: "Empty"},
+		}})
 
-// No categories is an empty list, not null: the UI iterates it.
-func TestCategoriesIndexIsAnEmptyListNotNull(t *testing.T) {
-	if body := categoriesRequest(t, fakeCategoriesStore{}).Body.String(); !strings.Contains(body, `"categories":[]`) {
-		t.Errorf("body = %s, want an empty array", body)
-	}
-}
+		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+		Expect(rec.Body.String()).To(ContainSubstring(`"name":"Audio","product_count":3`))
+		Expect(rec.Body.String()).To(ContainSubstring(`"name":"Empty","product_count":0`))
+	})
 
-func TestCategoriesIndexAnswers500WithoutLeaking(t *testing.T) {
-	rec := categoriesRequest(t, fakeCategoriesStore{err: errors.New("connection refused to db-1")})
-	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "db-1") {
-		t.Errorf("status %d, body %s; want 500 without the cause", rec.Code, rec.Body)
-	}
-}
+	// No categories is an empty list, not null: the UI iterates it.
+	It("is an empty list, not null, with no categories", func() {
+		Expect(categoriesRequest(fakeCategoriesStore{}).Body.String()).To(ContainSubstring(`"categories":[]`))
+	})
+
+	It("answers 500 without leaking the cause", func() {
+		rec := categoriesRequest(fakeCategoriesStore{err: errors.New("connection refused to db-1")})
+
+		Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+		Expect(rec.Body.String()).NotTo(ContainSubstring("db-1"))
+	})
+})

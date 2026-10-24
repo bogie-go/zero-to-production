@@ -1,67 +1,56 @@
 package models_test
 
 import (
-	"context"
-	"errors"
 	"strconv"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
-	"ecommerce/test/testdb"
+	"ecommerce/test/factories"
 )
 
-// The cross-cart bug from task C2: UpdateCartItemQuantity and
-// DeleteCartItemForCart must refuse a line that doesn't belong to the cart
-// id they were given, the same way a caller can never update or delete
-// another visitor's line by guessing a bigint id.
-func TestUpdateAndDeleteCartItemAreScopedToTheirCart(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
+// The cross-cart bug from task C2: a caller can never update or delete another
+// visitor's line by guessing a bigint id.
+var _ = Describe("A cart line", func() {
+	var cartA, cartB domain.Cart
+	var id string
 
-	cartA, err := store.FindOrCreateCartByToken(ctx, "visitor-a")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cartB, err := store.FindOrCreateCartByToken(ctx, "visitor-b")
-	if err != nil {
-		t.Fatal(err)
-	}
-	product, err := store.CreateProduct(ctx, domain.Product{
-		Name: "Widget", Description: "a widget", PriceCents: 500, Stock: 100, ImageUrl: "/widget.webp",
+	BeforeEach(func() {
+		ctx := GinkgoT().Context()
+		var err error
+		cartA, err = store.FindOrCreateCartByToken(ctx, "visitor-a")
+		Expect(err).NotTo(HaveOccurred())
+		cartB, err = store.FindOrCreateCartByToken(ctx, "visitor-b")
+		Expect(err).NotTo(HaveOccurred())
+		product := factories.Product(GinkgoT(), store, func(p *domain.Product) { p.Stock = 100 })
+		item, err := store.AddCartItem(ctx, cartA.ID, product.ID, 2)
+		Expect(err).NotTo(HaveOccurred())
+		id = strconv.FormatInt(item.ID, 10)
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	itemA, err := store.AddCartItem(ctx, cartA.ID, product.ID, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id := strconv.FormatInt(itemA.ID, 10)
 
-	if _, err := store.UpdateCartItemQuantity(ctx, cartB.ID, id, 5); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("UpdateCartItemQuantity(cartB, itemA): err = %v, want ErrNotFound", err)
-	}
-	if err := store.DeleteCartItemForCart(ctx, cartB.ID, id); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("DeleteCartItemForCart(cartB, itemA): err = %v, want ErrNotFound", err)
-	}
+	Context("asked for through another cart", func() {
+		It("cannot be updated or deleted, and is left untouched", func() {
+			ctx := GinkgoT().Context()
+			_, err := store.UpdateCartItemQuantity(ctx, cartB.ID, id, 5)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(store.DeleteCartItemForCart(ctx, cartB.ID, id)).To(MatchError(domain.ErrNotFound))
 
-	// Neither wrong-cart call touched the line: it's still there, unchanged.
-	still, err := store.GetCartItem(ctx, id)
-	if err != nil {
-		t.Fatalf("line should still exist after both wrong-cart calls: %v", err)
-	}
-	if still.Quantity != 2 {
-		t.Errorf("quantity = %d, want unchanged at 2", still.Quantity)
-	}
+			still, err := store.GetCartItem(ctx, id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(still.Quantity).To(BeEquivalentTo(2))
+		})
+	})
 
-	// The owning cart can do both.
-	if _, err := store.UpdateCartItemQuantity(ctx, cartA.ID, id, 5); err != nil {
-		t.Errorf("UpdateCartItemQuantity(cartA, itemA): %v", err)
-	}
-	if err := store.DeleteCartItemForCart(ctx, cartA.ID, id); err != nil {
-		t.Errorf("DeleteCartItemForCart(cartA, itemA): %v", err)
-	}
-	if _, err := store.GetCartItem(ctx, id); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("line should be gone after its own cart deletes it: err = %v", err)
-	}
-}
+	Context("asked for through its own cart", func() {
+		It("can be updated and deleted", func() {
+			ctx := GinkgoT().Context()
+			_, err := store.UpdateCartItemQuantity(ctx, cartA.ID, id, 5)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(store.DeleteCartItemForCart(ctx, cartA.ID, id)).To(Succeed())
+
+			_, err = store.GetCartItem(ctx, id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+		})
+	})
+})

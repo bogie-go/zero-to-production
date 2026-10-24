@@ -1,4 +1,4 @@
-package admin_controller
+package admin_controller_test
 
 import (
 	"context"
@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
+	"ecommerce/app/controllers/admin_controller"
 	"ecommerce/app/domain"
 )
 
@@ -57,15 +59,14 @@ func (f *fakePriceRulesStore) SetPriceRuleActive(_ context.Context, id string, a
 
 var noon = time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 
-func adminPriceRulesRequest(t *testing.T, store *fakePriceRulesStore, staff fakeStaffStore, method, path, body, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func adminPriceRulesRequest(store *fakePriceRulesStore, staff fakeStaffStore, method, path, body, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ns := NewServer(staff, testTokens, log)
-	ns.Products = NewProductsController(&fakeProductsStore{}, log)
-	ns.Categories = NewCategoriesController(&fakeCategoriesStore{}, log)
-	ns.PriceRules = NewPriceRulesController(store, log)
+	ns := admin_controller.NewServer(staff, testTokens, log)
+	ns.Products = admin_controller.NewProductsController(&fakeProductsStore{}, log)
+	ns.Categories = admin_controller.NewCategoriesController(&fakeCategoriesStore{}, log)
+	ns.PriceRules = admin_controller.NewPriceRulesController(store, log)
 	ns.PriceRules.Now = func() time.Time { return noon }
 	ns.SetupRoutes(&router.RouterGroup)
 
@@ -79,146 +80,154 @@ func adminPriceRulesRequest(t *testing.T, store *fakePriceRulesStore, staff fake
 	return rec
 }
 
-func TestAdminPriceRulesRequireStaff(t *testing.T) {
-	store := &fakePriceRulesStore{}
-	if rec := adminPriceRulesRequest(t, store, aStaffUser, http.MethodGet, "/admin/price_rules", "", ""); rec.Code != http.StatusUnauthorized {
-		t.Errorf("no token: %d, want 401", rec.Code)
-	}
-	customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
-	rec := adminPriceRulesRequest(t, store, customer, http.MethodPost, "/admin/price_rules/3/deactivate", "", bearerFor(t, "9"))
-	if rec.Code != http.StatusForbidden || store.gotOn != nil {
-		t.Errorf("customer: %d (toggled %v), want 403 and nothing changed", rec.Code, store.gotOn)
-	}
-}
+var _ = Describe("admin price rules", func() {
+	var store *fakePriceRulesStore
+	var staff string
 
-// The form is built from this: every registered kind with its fields.
-func TestAdminPriceRuleKindsDescribeEveryKind(t *testing.T) {
-	rec := adminPriceRulesRequest(t, &fakePriceRulesStore{}, aStaffUser, http.MethodGet, "/admin/price_rules/kinds", "", bearerFor(t, "1"))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	for _, want := range []string{`"kind":"fixed_discount"`, `"kind":"percentage_discount"`, `"kind":"minimum_purchase"`, `"kind":"buy_x_get_y"`,
-		`"name":"amount_cents"`, `"type":"cents"`, `"type":"percent"`, `"note":"For now this only records`} {
-		if !strings.Contains(rec.Body.String(), want) {
-			t.Errorf("kinds lacks %s:\n%s", want, rec.Body)
-		}
-	}
-}
+	BeforeEach(func() {
+		store = &fakePriceRulesStore{}
+		staff = bearerFor("1")
+	})
 
-func TestAdminPriceRulesIndexSummarizesEachAndSaysWhereItStands(t *testing.T) {
-	past, future := noon.Add(-time.Hour), noon.Add(time.Hour)
-	store := &fakePriceRulesStore{list: []domain.PriceRule{
-		{ID: 1, Name: "Sale", Kind: "percentage_discount", Properties: json.RawMessage(`{"percentage":20}`), Active: true, Priority: 10},
-		{ID: 2, Name: "Paused", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":5000}`), Active: false},
-		{ID: 3, Name: "Soon", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":100}`), Active: true, StartsAt: &future},
-		{ID: 4, Name: "Over", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":100}`), Active: true, EndsAt: &past},
-	}}
-	rec := adminPriceRulesRequest(t, store, aStaffUser, http.MethodGet, "/admin/price_rules", "", bearerFor(t, "1"))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	var got struct {
-		PriceRules []struct {
-			Name      string
-			Summary   string
-			Status    string
-			KindLabel string `json:"kind_label"`
-		} `json:"price_rules"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"Sale|20% off|active|Percentage off", "Paused|$50.00 off|off|Fixed amount off", "Soon|$1.00 off|scheduled|Fixed amount off", "Over|$1.00 off|ended|Fixed amount off"}
-	for i, r := range got.PriceRules {
-		if line := r.Name + "|" + r.Summary + "|" + r.Status + "|" + r.KindLabel; line != want[i] {
-			t.Errorf("rule %d = %q, want %q", i, line, want[i])
-		}
-	}
-}
+	Describe("staff gate", func() {
+		It("answers 401 with no token", func() {
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodGet, "/admin/price_rules", "", "")
+			Expect(rec.Code).To(Equal(http.StatusUnauthorized))
+		})
 
-// What is stored is the rule decoded by its own kind and written back out:
-// unknown keys the client sent never reach the database.
-func TestAdminPriceRulesCreateStoresTheKindsOwnJSON(t *testing.T) {
-	store := &fakePriceRulesStore{}
-	body := `{"name":"Spring","kind":"percentage_discount","properties":{"percentage":15,"evil":"x"},"active":true,"priority":5}`
-	rec := adminPriceRulesRequest(t, store, aStaffUser, http.MethodPost, "/admin/price_rules", body, bearerFor(t, "1"))
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if string(store.saved.Properties) != `{"percentage":15}` || store.saved.Name != "Spring" || !store.saved.Active || store.saved.Priority != 5 {
-		t.Errorf("saved = %+v (properties %s), want only the kind's own keys", store.saved, store.saved.Properties)
-	}
-}
+		It("answers 403 for a customer and changes nothing", func() {
+			customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
+			rec := adminPriceRulesRequest(store, customer, http.MethodPost, "/admin/price_rules/3/deactivate", "", bearerFor("9"))
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+			Expect(store.gotOn).To(BeNil())
+		})
+	})
 
-// Each kind's own validation answers 422 with its message: nothing here knows
-// the rules.
-func TestAdminPriceRulesRefuseWhatTheKindRefuses(t *testing.T) {
-	staff := bearerFor(t, "1")
-	for name, body := range map[string]string{
-		"percentage over 100":      `{"name":"x","kind":"percentage_discount","properties":{"percentage":500}}`,
-		"negative amount":          `{"name":"x","kind":"fixed_discount","properties":{"amount_cents":-5}}`,
-		"buy needs quantities":     `{"name":"x","kind":"buy_x_get_y","properties":{}}`,
-		"unknown kind":             `{"name":"x","kind":"nope","properties":{}}`,
-		"properties not an object": `{"name":"x","kind":"fixed_discount","properties":[1]}`,
-		"no name":                  `{"name":" ","kind":"fixed_discount","properties":{"amount_cents":5}}`,
-	} {
-		store := &fakePriceRulesStore{}
-		store.err = nil
-		rec := adminPriceRulesRequest(t, store, aStaffUser, http.MethodPost, "/admin/price_rules", body, staff)
-		// The blank name is caught by the store's Validate in production; the
-		// fake has none, so check the rest here and the name at the model.
-		if name == "no name" {
-			continue
-		}
-		if rec.Code != http.StatusUnprocessableEntity {
-			t.Errorf("%s: status %d, want 422: %s", name, rec.Code, rec.Body)
-		}
-		if store.saved.Name != "" {
-			t.Errorf("%s: something was saved", name)
-		}
-	}
-	if rec := adminPriceRulesRequest(t, &fakePriceRulesStore{}, aStaffUser, http.MethodPost, "/admin/price_rules", `{"nope":`, staff); rec.Code != http.StatusBadRequest {
-		t.Errorf("malformed JSON: %d, want 400", rec.Code)
-	}
-}
+	// The form is built from this: every registered kind with its fields.
+	Describe("GET /admin/price_rules/kinds", func() {
+		It("describes every kind", func() {
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodGet, "/admin/price_rules/kinds", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			for _, want := range []string{`"kind":"fixed_discount"`, `"kind":"percentage_discount"`, `"kind":"minimum_purchase"`, `"kind":"buy_x_get_y"`,
+				`"name":"amount_cents"`, `"type":"cents"`, `"type":"percent"`, `"note":"For now this only records`} {
+				Expect(rec.Body.String()).To(ContainSubstring(want))
+			}
+		})
+	})
 
-func TestAdminPriceRulesUpdateCarriesTheIDOver(t *testing.T) {
-	store := &fakePriceRulesStore{rule: domain.PriceRule{ID: 4, Name: "Old", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":1}`)}}
-	body := `{"name":"New","kind":"fixed_discount","properties":{"amount_cents":700},"active":false,"priority":3}`
-	rec := adminPriceRulesRequest(t, store, aStaffUser, http.MethodPatch, "/admin/price_rules/4", body, bearerFor(t, "1"))
-	if rec.Code != http.StatusOK || store.saved.ID != 4 || store.saved.Name != "New" || store.saved.Active {
-		t.Errorf("status %d, saved %+v; want id 4 kept with the new fields", rec.Code, store.saved)
-	}
-}
+	Describe("GET /admin/price_rules", func() {
+		It("summarizes each rule and says where it stands", func() {
+			past, future := noon.Add(-time.Hour), noon.Add(time.Hour)
+			store.list = []domain.PriceRule{
+				{ID: 1, Name: "Sale", Kind: "percentage_discount", Properties: json.RawMessage(`{"percentage":20}`), Active: true, Priority: 10},
+				{ID: 2, Name: "Paused", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":5000}`), Active: false},
+				{ID: 3, Name: "Soon", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":100}`), Active: true, StartsAt: &future},
+				{ID: 4, Name: "Over", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":100}`), Active: true, EndsAt: &past},
+			}
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodGet, "/admin/price_rules", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
 
-func TestAdminPriceRulesTurnOnAndOff(t *testing.T) {
-	store := &fakePriceRulesStore{rule: domain.PriceRule{ID: 4, Name: "Sale", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":1}`)}}
-	staff := bearerFor(t, "1")
+			var got struct {
+				PriceRules []struct {
+					Name      string
+					Summary   string
+					Status    string
+					KindLabel string `json:"kind_label"`
+				} `json:"price_rules"`
+			}
+			Expect(json.Unmarshal(rec.Body.Bytes(), &got)).To(Succeed())
 
-	rec := adminPriceRulesRequest(t, store, aStaffUser, http.MethodPost, "/admin/price_rules/4/activate", "", staff)
-	if rec.Code != http.StatusOK || store.gotOn == nil || !*store.gotOn || store.gotID != "4" || !strings.Contains(rec.Body.String(), `"status":"active"`) {
-		t.Errorf("activate: %d %s", rec.Code, rec.Body)
-	}
-	rec = adminPriceRulesRequest(t, store, aStaffUser, http.MethodPost, "/admin/price_rules/4/deactivate", "", staff)
-	if rec.Code != http.StatusOK || *store.gotOn || !strings.Contains(rec.Body.String(), `"status":"off"`) {
-		t.Errorf("deactivate: %d %s", rec.Code, rec.Body)
-	}
-}
+			var lines []string
+			for _, r := range got.PriceRules {
+				lines = append(lines, r.Name+"|"+r.Summary+"|"+r.Status+"|"+r.KindLabel)
+			}
+			Expect(lines).To(Equal([]string{"Sale|20% off|active|Percentage off", "Paused|$50.00 off|off|Fixed amount off", "Soon|$1.00 off|scheduled|Fixed amount off", "Over|$1.00 off|ended|Fixed amount off"}))
+		})
 
-func TestAdminPriceRulesShowAndDeleteAndErrors(t *testing.T) {
-	staff := bearerFor(t, "1")
-	store := &fakePriceRulesStore{rule: domain.PriceRule{ID: 4, Name: "Sale", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":1}`)}}
-	if rec := adminPriceRulesRequest(t, store, aStaffUser, http.MethodGet, "/admin/price_rules/4", "", staff); rec.Code != http.StatusOK {
-		t.Errorf("show: %d", rec.Code)
-	}
-	if rec := adminPriceRulesRequest(t, store, aStaffUser, http.MethodDelete, "/admin/price_rules/4", "", staff); rec.Code != http.StatusNoContent || !store.deleted {
-		t.Errorf("delete: %d deleted=%v", rec.Code, store.deleted)
-	}
-	if rec := adminPriceRulesRequest(t, &fakePriceRulesStore{err: domain.ErrNotFound}, aStaffUser, http.MethodGet, "/admin/price_rules/9", "", staff); rec.Code != http.StatusNotFound {
-		t.Errorf("unknown id: %d, want 404", rec.Code)
-	}
-	rec := adminPriceRulesRequest(t, &fakePriceRulesStore{err: errors.New("db down")}, aStaffUser, http.MethodGet, "/admin/price_rules", "", staff)
-	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "db down") {
-		t.Errorf("store error: %d %s, want 500 without the cause", rec.Code, rec.Body)
-	}
-}
+		It("answers 500 without the cause when the store fails", func() {
+			rec := adminPriceRulesRequest(&fakePriceRulesStore{err: errors.New("db down")}, aStaffUser, http.MethodGet, "/admin/price_rules", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+			Expect(rec.Body.String()).NotTo(ContainSubstring("db down"))
+		})
+	})
+
+	Describe("POST /admin/price_rules", func() {
+		// What is stored is the rule decoded by its own kind and written back
+		// out: unknown keys the client sent never reach the database.
+		It("stores the kind's own JSON", func() {
+			body := `{"name":"Spring","kind":"percentage_discount","properties":{"percentage":15,"evil":"x"},"active":true,"priority":5}`
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodPost, "/admin/price_rules", body, staff)
+			Expect(rec.Code).To(Equal(http.StatusCreated), rec.Body.String())
+			Expect(string(store.saved.Properties)).To(Equal(`{"percentage":15}`))
+			Expect(store.saved.Name).To(Equal("Spring"))
+			Expect(store.saved.Active).To(BeTrue())
+			Expect(store.saved.Priority).To(BeEquivalentTo(5))
+		})
+
+		// Each kind's own validation answers 422 with its message: nothing here
+		// knows the rules. (A blank name is caught by the store's Validate in
+		// production; the fake has none, so it is checked at the model.)
+		DescribeTable("refuses what the kind refuses",
+			func(body string) {
+				rec := adminPriceRulesRequest(store, aStaffUser, http.MethodPost, "/admin/price_rules", body, staff)
+				Expect(rec.Code).To(Equal(http.StatusUnprocessableEntity), rec.Body.String())
+				Expect(store.saved.Name).To(BeEmpty(), "something was saved")
+			},
+			Entry("percentage over 100", `{"name":"x","kind":"percentage_discount","properties":{"percentage":500}}`),
+			Entry("negative amount", `{"name":"x","kind":"fixed_discount","properties":{"amount_cents":-5}}`),
+			Entry("buy needs quantities", `{"name":"x","kind":"buy_x_get_y","properties":{}}`),
+			Entry("unknown kind", `{"name":"x","kind":"nope","properties":{}}`),
+			Entry("properties not an object", `{"name":"x","kind":"fixed_discount","properties":[1]}`),
+		)
+
+		It("answers 400 for malformed JSON", func() {
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodPost, "/admin/price_rules", `{"nope":`, staff)
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	Describe("GET, PATCH, DELETE /admin/price_rules/:id", func() {
+		BeforeEach(func() {
+			store.rule = domain.PriceRule{ID: 4, Name: "Sale", Kind: "fixed_discount", Properties: json.RawMessage(`{"amount_cents":1}`)}
+		})
+
+		It("shows", func() {
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodGet, "/admin/price_rules/4", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusOK))
+		})
+
+		It("updates, carrying the id over", func() {
+			body := `{"name":"New","kind":"fixed_discount","properties":{"amount_cents":700},"active":false,"priority":3}`
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodPatch, "/admin/price_rules/4", body, staff)
+			Expect(rec.Code).To(Equal(http.StatusOK))
+			Expect(store.saved.ID).To(BeEquivalentTo(4))
+			Expect(store.saved.Name).To(Equal("New"))
+			Expect(store.saved.Active).To(BeFalse())
+		})
+
+		It("deletes", func() {
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodDelete, "/admin/price_rules/4", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusNoContent))
+			Expect(store.deleted).To(BeTrue())
+		})
+
+		It("answers 404 for an unknown id", func() {
+			rec := adminPriceRulesRequest(&fakePriceRulesStore{err: domain.ErrNotFound}, aStaffUser, http.MethodGet, "/admin/price_rules/9", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+
+		It("turns on and off", func() {
+			rec := adminPriceRulesRequest(store, aStaffUser, http.MethodPost, "/admin/price_rules/4/activate", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusOK))
+			Expect(store.gotOn).NotTo(BeNil())
+			Expect(*store.gotOn).To(BeTrue())
+			Expect(store.gotID).To(Equal("4"))
+			Expect(rec.Body.String()).To(ContainSubstring(`"status":"active"`))
+
+			rec = adminPriceRulesRequest(store, aStaffUser, http.MethodPost, "/admin/price_rules/4/deactivate", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusOK))
+			Expect(*store.gotOn).To(BeFalse())
+			Expect(rec.Body.String()).To(ContainSubstring(`"status":"off"`))
+		})
+	})
+})

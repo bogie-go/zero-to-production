@@ -1,98 +1,62 @@
 package models_test
 
 import (
-	"context"
-	"errors"
 	"strconv"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
-	"ecommerce/test/testdb"
+	"ecommerce/test/factories"
 )
 
-// Whatever the id looks like, a order_item that is not there is ErrNotFound, and a
-// caller cannot tell a malformed id from a well-formed one that names nothing.
-func TestUnknownOrderItemsAreNotFound(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
+var _ = Describe("Order items", func() {
 
-	for _, id := range []string{"nope", "", "999999999"} {
-		if _, err := store.GetOrderItem(ctx, id); !errors.Is(err, domain.ErrNotFound) {
-			t.Errorf("GetOrderItem(%q): err = %v, want ErrNotFound", id, err)
-		}
-		if err := store.DeleteOrderItem(ctx, id); !errors.Is(err, domain.ErrNotFound) {
-			t.Errorf("DeleteOrderItem(%q): err = %v, want ErrNotFound", id, err)
-		}
-	}
+	DescribeTable("an unknown order item is not found",
+		func(id string) {
+			_, err := store.GetOrderItem(GinkgoT().Context(), id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(store.DeleteOrderItem(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
+		},
+		Entry("a malformed id", "nope"),
+		Entry("an empty id", ""),
+		Entry("a well-formed id that names nothing", "999999999"),
+	)
 
-	// A valid-looking order_item (OrderID and ProductID need not name real
-	// rows: zero rows match id 999999999, so neither foreign key is ever
-	// actually checked), so Validate passes and the not-found check is
-	// what actually gets exercised.
-	missing := domain.OrderItem{ID: 999999999, OrderID: 1, ProductID: 1, Quantity: 1, UnitPriceCents: 100}
-	if _, err := store.UpdateOrderItem(ctx, missing); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("UpdateOrderItem(%d): err = %v, want ErrNotFound", 999999999, err)
-	}
-}
-
-func TestOrderItemRoundTrip(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
-
-	user, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
-	if err != nil {
-		t.Fatal(err)
-	}
-	order, err := store.CreateOrder(ctx, domain.Order{UserID: user.ID, Status: "pending"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	product, err := store.CreateProduct(ctx, domain.Product{
-		Name: "Widget", Description: "a widget", PriceCents: 500, Stock: 10, ImageUrl: "/widget.webp",
+	It("cannot update one that is not there", func() {
+		// OrderID and ProductID need not name real rows: no row matches, so
+		// neither foreign key is checked; Validate passes.
+		_, err := store.UpdateOrderItem(GinkgoT().Context(), domain.OrderItem{ID: 999999999, OrderID: 1, ProductID: 1, Quantity: 1, UnitPriceCents: 100})
+		Expect(err).To(MatchError(domain.ErrNotFound))
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	created, err := store.CreateOrderItem(ctx, domain.OrderItem{
-		OrderID: order.ID, ProductID: product.ID, Quantity: 2, UnitPriceCents: 500,
+	It("is created, read, listed, updated and deleted", func() {
+		ctx := GinkgoT().Context()
+		user := factories.User(GinkgoT(), store)
+		order, err := store.CreateOrder(ctx, domain.Order{UserID: user.ID, Status: "pending"})
+		Expect(err).NotTo(HaveOccurred())
+		product := factories.Product(GinkgoT(), store)
+
+		created, err := store.CreateOrderItem(ctx, domain.OrderItem{
+			OrderID: order.ID, ProductID: product.ID, Quantity: 2, UnitPriceCents: 500,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(created.ID).NotTo(BeZero())
+		id := strconv.FormatInt(created.ID, 10)
+
+		Expect(store.GetOrderItem(ctx, id)).To(Equal(created))
+		all, err := store.ListOrderItems(ctx, 10)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(all).To(HaveLen(1))
+		Expect(all[0].ID).To(Equal(created.ID))
+
+		created.Quantity = 3
+		updated, err := store.UpdateOrderItem(ctx, created)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated.Quantity).To(BeEquivalentTo(3))
+
+		Expect(store.DeleteOrderItem(ctx, id)).To(Succeed())
+		_, err = store.GetOrderItem(ctx, id)
+		Expect(err).To(MatchError(domain.ErrNotFound))
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if created.ID == 0 {
-		t.Error("CreateOrderItem did not assign an id")
-	}
-
-	got, err := store.GetOrderItem(ctx, strconv.FormatInt(created.ID, 10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != created {
-		t.Errorf("GetOrderItem = %+v, want %+v", got, created)
-	}
-
-	all, err := store.ListOrderItems(ctx, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(all) != 1 || all[0].ID != created.ID {
-		t.Errorf("ListOrderItems = %+v, want just the one created above", all)
-	}
-
-	created.Quantity = 3
-	updated, err := store.UpdateOrderItem(ctx, created)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if updated.Quantity != 3 {
-		t.Errorf("UpdateOrderItem: quantity = %d, want 3", updated.Quantity)
-	}
-
-	if err := store.DeleteOrderItem(ctx, strconv.FormatInt(created.ID, 10)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.GetOrderItem(ctx, strconv.FormatInt(created.ID, 10)); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("GetOrderItem after delete: err = %v, want ErrNotFound", err)
-	}
-}
+})

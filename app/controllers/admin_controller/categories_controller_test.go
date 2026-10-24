@@ -1,4 +1,4 @@
-package admin_controller
+package admin_controller_test
 
 import (
 	"context"
@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"testing"
 
 	"github.com/gin-gonic/gin"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
+	"ecommerce/app/controllers/admin_controller"
 	"ecommerce/app/domain"
 )
 
@@ -46,14 +48,13 @@ func (f *fakeCategoriesStore) DeleteCategory(_ context.Context, id string) error
 }
 
 // adminCategoriesRequest mounts the whole namespace, staff gate included.
-func adminCategoriesRequest(t *testing.T, categories *fakeCategoriesStore, staff fakeStaffStore, method, path, body, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func adminCategoriesRequest(categories *fakeCategoriesStore, staff fakeStaffStore, method, path, body, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ns := NewServer(staff, testTokens, log)
-	ns.Products = NewProductsController(&fakeProductsStore{}, log)
-	ns.Categories = NewCategoriesController(categories, log)
+	ns := admin_controller.NewServer(staff, testTokens, log)
+	ns.Products = admin_controller.NewProductsController(&fakeProductsStore{}, log)
+	ns.Categories = admin_controller.NewCategoriesController(categories, log)
 	ns.SetupRoutes(&router.RouterGroup)
 
 	rec := httptest.NewRecorder()
@@ -66,49 +67,70 @@ func adminCategoriesRequest(t *testing.T, categories *fakeCategoriesStore, staff
 	return rec
 }
 
-func TestAdminCategoriesRequiresStaff(t *testing.T) {
-	store := &fakeCategoriesStore{}
-	if rec := adminCategoriesRequest(t, store, aStaffUser, http.MethodGet, "/admin/categories", "", ""); rec.Code != http.StatusUnauthorized {
-		t.Errorf("no token: %d, want 401", rec.Code)
-	}
-	customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
-	if rec := adminCategoriesRequest(t, store, customer, http.MethodPost, "/admin/categories", `{"name":"x"}`, bearerFor(t, "9")); rec.Code != http.StatusForbidden || store.gotCategory.Name != "" {
-		t.Errorf("customer: %d (created %q), want 403 and nothing created", rec.Code, store.gotCategory.Name)
-	}
-}
+var _ = Describe("admin categories", func() {
+	var store *fakeCategoriesStore
+	var staff string
 
-func TestAdminCategoriesCRUD(t *testing.T) {
-	store := &fakeCategoriesStore{category: domain.Category{ID: 4, Name: "Audio"}, list: []domain.Category{{ID: 4, Name: "Audio", ProductCount: 2}}}
-	staff := bearerFor(t, "1")
+	BeforeEach(func() {
+		store = &fakeCategoriesStore{}
+		staff = bearerFor("1")
+	})
 
-	if rec := adminCategoriesRequest(t, store, aStaffUser, http.MethodGet, "/admin/categories", "", staff); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"product_count":2`) {
-		t.Errorf("index: %d %s", rec.Code, rec.Body)
-	}
-	if rec := adminCategoriesRequest(t, store, aStaffUser, http.MethodPost, "/admin/categories", `{"name":"Audio"}`, staff); rec.Code != http.StatusCreated || store.gotCategory.Name != "Audio" {
-		t.Errorf("create: %d, got %+v", rec.Code, store.gotCategory)
-	}
-	if rec := adminCategoriesRequest(t, store, aStaffUser, http.MethodPatch, "/admin/categories/4", `{"name":"Sound"}`, staff); rec.Code != http.StatusOK || store.gotCategory.ID != 4 || store.gotCategory.Name != "Sound" {
-		t.Errorf("update: %d, got %+v; want id 4 carried over with the new name", rec.Code, store.gotCategory)
-	}
-	if rec := adminCategoriesRequest(t, store, aStaffUser, http.MethodDelete, "/admin/categories/4", "", staff); rec.Code != http.StatusNoContent || !store.deleted || store.gotID != "4" {
-		t.Errorf("destroy: %d deleted=%v id=%q", rec.Code, store.deleted, store.gotID)
-	}
-}
+	Describe("staff gate", func() {
+		It("answers 401 with no token", func() {
+			rec := adminCategoriesRequest(store, aStaffUser, http.MethodGet, "/admin/categories", "", "")
+			Expect(rec.Code).To(Equal(http.StatusUnauthorized))
+		})
 
-func TestAdminCategoriesMapsErrors(t *testing.T) {
-	staff := bearerFor(t, "1")
-	cases := map[string]struct {
-		err  error
-		want int
-	}{
-		"invalid (blank or duplicate name)": {domain.ErrInvalid, http.StatusUnprocessableEntity},
-		"not found":                         {domain.ErrNotFound, http.StatusNotFound},
-		"anything else":                     {errors.New("db down"), http.StatusInternalServerError},
-	}
-	for name, tc := range cases {
-		rec := adminCategoriesRequest(t, &fakeCategoriesStore{err: tc.err}, aStaffUser, http.MethodPost, "/admin/categories", `{"name":"x"}`, staff)
-		if rec.Code != tc.want || strings.Contains(rec.Body.String(), "db down") {
-			t.Errorf("%s: %d %s, want %d without leaking", name, rec.Code, rec.Body, tc.want)
-		}
-	}
-}
+		It("answers 403 for a customer and creates nothing", func() {
+			customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
+			rec := adminCategoriesRequest(store, customer, http.MethodPost, "/admin/categories", `{"name":"x"}`, bearerFor("9"))
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+			Expect(store.gotCategory.Name).To(BeEmpty())
+		})
+	})
+
+	Context("CRUD", func() {
+		BeforeEach(func() {
+			store.category = domain.Category{ID: 4, Name: "Audio"}
+			store.list = []domain.Category{{ID: 4, Name: "Audio", ProductCount: 2}}
+		})
+
+		It("GET /admin/categories lists with product counts", func() {
+			rec := adminCategoriesRequest(store, aStaffUser, http.MethodGet, "/admin/categories", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusOK))
+			Expect(rec.Body.String()).To(ContainSubstring(`"product_count":2`))
+		})
+
+		It("POST /admin/categories creates", func() {
+			rec := adminCategoriesRequest(store, aStaffUser, http.MethodPost, "/admin/categories", `{"name":"Audio"}`, staff)
+			Expect(rec.Code).To(Equal(http.StatusCreated))
+			Expect(store.gotCategory.Name).To(Equal("Audio"))
+		})
+
+		It("PATCH /admin/categories/:id carries the id over with the new name", func() {
+			rec := adminCategoriesRequest(store, aStaffUser, http.MethodPatch, "/admin/categories/4", `{"name":"Sound"}`, staff)
+			Expect(rec.Code).To(Equal(http.StatusOK))
+			Expect(store.gotCategory.ID).To(BeEquivalentTo(4))
+			Expect(store.gotCategory.Name).To(Equal("Sound"))
+		})
+
+		It("DELETE /admin/categories/:id destroys", func() {
+			rec := adminCategoriesRequest(store, aStaffUser, http.MethodDelete, "/admin/categories/4", "", staff)
+			Expect(rec.Code).To(Equal(http.StatusNoContent))
+			Expect(store.deleted).To(BeTrue())
+			Expect(store.gotID).To(Equal("4"))
+		})
+	})
+
+	DescribeTable("maps store errors without leaking the cause",
+		func(err error, want int) {
+			rec := adminCategoriesRequest(&fakeCategoriesStore{err: err}, aStaffUser, http.MethodPost, "/admin/categories", `{"name":"x"}`, staff)
+			Expect(rec.Code).To(Equal(want))
+			Expect(rec.Body.String()).NotTo(ContainSubstring("db down"))
+		},
+		Entry("invalid (blank or duplicate name)", domain.ErrInvalid, http.StatusUnprocessableEntity),
+		Entry("not found", domain.ErrNotFound, http.StatusNotFound),
+		Entry("anything else", errors.New("db down"), http.StatusInternalServerError),
+	)
+})

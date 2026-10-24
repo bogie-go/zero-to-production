@@ -1,33 +1,29 @@
-package domain
+package domain_test
 
 import (
-	"errors"
-	"testing"
+	"ecommerce/app/domain"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestUserValidate(t *testing.T) {
-	tests := []struct {
-		name    string
-		user    User
-		wantErr bool
-	}{
-		{"valid", User{Email: "a@example.com", PasswordDigest: "digest", Role: RoleCustomer}, false},
-		{"valid staff", User{Email: "a@example.com", PasswordDigest: "digest", Role: RoleStaff}, false},
-		{"empty email", User{Email: "", PasswordDigest: "digest", Role: RoleCustomer}, true},
-		{"blank email", User{Email: "   ", PasswordDigest: "digest", Role: RoleCustomer}, true},
-		{"email with no @", User{Email: "not-an-email", PasswordDigest: "digest", Role: RoleCustomer}, true},
-		{"empty password digest", User{Email: "a@example.com", PasswordDigest: "", Role: RoleCustomer}, true},
-		{"unknown role", User{Email: "a@example.com", PasswordDigest: "digest", Role: "owner"}, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.user.Validate()
-			if tt.wantErr && !errors.Is(err, ErrInvalid) {
-				t.Errorf("Validate() = %v, want ErrInvalid", err)
-			}
-			if !tt.wantErr && err != nil {
-				t.Errorf("Validate() = %v, want nil", err)
-			}
-		})
-	}
-}
+var _ = Describe("User.Validate", func() {
+	DescribeTable("accepts",
+		func(user domain.User) {
+			Expect(user.Validate()).To(Succeed())
+		},
+		Entry("a customer", domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer}),
+		Entry("a staff member", domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleStaff}),
+	)
+
+	DescribeTable("rejects",
+		func(user domain.User) {
+			Expect(user.Validate()).To(MatchError(domain.ErrInvalid))
+		},
+		Entry("an empty email", domain.User{Email: "", PasswordDigest: "digest", Role: domain.RoleCustomer}),
+		Entry("a blank email", domain.User{Email: "   ", PasswordDigest: "digest", Role: domain.RoleCustomer}),
+		Entry("an email with no @", domain.User{Email: "not-an-email", PasswordDigest: "digest", Role: domain.RoleCustomer}),
+		Entry("an empty password digest", domain.User{Email: "a@example.com", PasswordDigest: "", Role: domain.RoleCustomer}),
+		Entry("an unknown role", domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: "owner"}),
+	)
+})

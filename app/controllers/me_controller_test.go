@@ -1,4 +1,4 @@
-package controllers
+package controllers_test
 
 import (
 	"context"
@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/controllers"
 	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
 )
@@ -24,12 +26,11 @@ func (f fakeMeStore) GetUser(_ context.Context, id string) (domain.User, error) 
 	return f.user, f.err
 }
 
-func meRequest(t *testing.T, store fakeMeStore, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func meRequest(store fakeMeStore, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	guarded := router.Group("", middlewares.RequireUser(testTokens))
-	NewMeController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(guarded)
+	controllers.NewMeController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(guarded)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
 	if authorization != "" {
@@ -39,27 +40,21 @@ func meRequest(t *testing.T, store fakeMeStore, authorization string) *httptest.
 	return rec
 }
 
-func TestMeReturnsTheAccount(t *testing.T) {
-	store := fakeMeStore{user: domain.User{ID: 3, Email: "a@example.com", Role: domain.RoleCustomer}}
-	rec := meRequest(t, store, bearerFor(t, "3"))
+var _ = Describe("GET /me", func() {
+	It("returns the account", func() {
+		store := fakeMeStore{user: domain.User{ID: 3, Email: "a@example.com", Role: domain.RoleCustomer}}
+		rec := meRequest(store, bearerFor("3"))
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"email":"a@example.com"`) {
-		t.Errorf("body = %s", rec.Body)
-	}
-}
+		Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+		Expect(rec.Body.String()).To(ContainSubstring(`"email":"a@example.com"`))
+	})
 
-func TestMeRejectsAGuestToken(t *testing.T) {
-	rec := meRequest(t, fakeMeStore{err: domain.ErrNotFound}, bearerFor(t, "a-guest-uuid"))
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("guest: %d, want 403", rec.Code)
-	}
-}
+	It("rejects a guest token with 403", func() {
+		rec := meRequest(fakeMeStore{err: domain.ErrNotFound}, bearerFor("a-guest-uuid"))
+		Expect(rec.Code).To(Equal(http.StatusForbidden))
+	})
 
-func TestMeNeedsAToken(t *testing.T) {
-	if rec := meRequest(t, fakeMeStore{}, ""); rec.Code != http.StatusUnauthorized {
-		t.Errorf("no token: %d, want 401", rec.Code)
-	}
-}
+	It("needs a token", func() {
+		Expect(meRequest(fakeMeStore{}, "").Code).To(Equal(http.StatusUnauthorized))
+	})
+})

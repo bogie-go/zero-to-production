@@ -1,73 +1,61 @@
 package models_test
 
 import (
-	"context"
-	"errors"
 	"strconv"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
-	"ecommerce/test/testdb"
 )
 
-// Whatever the id looks like, a category that is not there is ErrNotFound, and a
-// caller cannot tell a malformed id from a well-formed one that names nothing.
-func TestUnknownCategoriesAreNotFound(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
+var _ = Describe("Categories", func() {
 
-	for _, id := range []string{"nope", "", "999999999"} {
-		if _, err := store.GetCategory(ctx, id); !errors.Is(err, domain.ErrNotFound) {
-			t.Errorf("GetCategory(%q): err = %v, want ErrNotFound", id, err)
-		}
-		if err := store.DeleteCategory(ctx, id); !errors.Is(err, domain.ErrNotFound) {
-			t.Errorf("DeleteCategory(%q): err = %v, want ErrNotFound", id, err)
-		}
-	}
+	DescribeTable("an unknown category is not found",
+		func(id string) {
+			_, err := store.GetCategory(GinkgoT().Context(), id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(store.DeleteCategory(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
+		},
+		Entry("a malformed id", "nope"),
+		Entry("an empty id", ""),
+		Entry("a well-formed id that names nothing", "999999999"),
+	)
 
-	// A valid-looking category, so Validate (no longer a no-op) passes and the
-	// not-found check is what actually gets exercised.
-	if _, err := store.UpdateCategory(ctx, domain.Category{ID: 999999999, Name: "Nope"}); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("UpdateCategory(%d): err = %v, want ErrNotFound", 999999999, err)
-	}
-}
+	It("cannot update one that is not there", func() {
+		_, err := store.UpdateCategory(GinkgoT().Context(), domain.Category{ID: 999999999, Name: "Nope"})
+		Expect(err).To(MatchError(domain.ErrNotFound))
+	})
 
-func TestCategoryRoundTrip(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
+	It("is created, read, renamed and deleted", func() {
+		ctx := GinkgoT().Context()
 
-	created, err := store.CreateCategory(ctx, domain.Category{Name: "Audio"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := store.GetCategory(ctx, strconv.FormatInt(created.ID, 10))
-	if err != nil || got != created {
-		t.Fatalf("GetCategory = %+v, %v; want %+v", got, err, created)
-	}
-	created.Name = "Sound"
-	updated, err := store.UpdateCategory(ctx, created)
-	if err != nil || updated.Name != "Sound" {
-		t.Fatalf("UpdateCategory = %+v, %v", updated, err)
-	}
-	if err := store.DeleteCategory(ctx, strconv.FormatInt(created.ID, 10)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.GetCategory(ctx, strconv.FormatInt(created.ID, 10)); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("GetCategory after delete: err = %v, want ErrNotFound", err)
-	}
-}
+		created, err := store.CreateCategory(ctx, domain.Category{Name: "Audio"})
+		Expect(err).NotTo(HaveOccurred())
+		id := strconv.FormatInt(created.ID, 10)
+		Expect(store.GetCategory(ctx, id)).To(Equal(created))
 
-// The name is required and unique, and both are the caller's 422.
-func TestCategoryNamesAreRequiredAndUnique(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
-	if _, err := store.CreateCategory(ctx, domain.Category{Name: "  "}); !errors.Is(err, domain.ErrInvalid) {
-		t.Errorf("blank name: err = %v, want ErrInvalid", err)
-	}
-	if _, err := store.CreateCategory(ctx, domain.Category{Name: "Audio"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.CreateCategory(ctx, domain.Category{Name: "Audio"}); !errors.Is(err, domain.ErrInvalid) {
-		t.Errorf("duplicate name: err = %v, want ErrInvalid", err)
-	}
-}
+		created.Name = "Sound"
+		updated, err := store.UpdateCategory(ctx, created)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated.Name).To(Equal("Sound"))
+
+		Expect(store.DeleteCategory(ctx, id)).To(Succeed())
+		_, err = store.GetCategory(ctx, id)
+		Expect(err).To(MatchError(domain.ErrNotFound))
+	})
+
+	Describe("the name", func() {
+		It("is required", func() {
+			_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "  "})
+			Expect(err).To(MatchError(domain.ErrInvalid))
+		})
+
+		It("is unique", func() {
+			_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
+			Expect(err).To(MatchError(domain.ErrInvalid))
+		})
+	})
+})

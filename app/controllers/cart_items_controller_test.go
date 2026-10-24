@@ -1,4 +1,4 @@
-package controllers
+package controllers_test
 
 import (
 	"context"
@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"testing"
 
 	"github.com/gin-gonic/gin"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/controllers"
 	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
 )
@@ -64,12 +67,11 @@ func (f *fakeCartItemsStore) ListActivePriceRules(_ context.Context) ([]domain.P
 // exactly what a real request would: no token, no access. authorization,
 // if not "", is sent as the request's Authorization header verbatim — use
 // bearerFor for a valid one.
-func cartItemsRequest(t *testing.T, store *fakeCartItemsStore, method, path, body, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func cartItemsRequest(store *fakeCartItemsStore, method, path, body, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	guarded := router.Group("", middlewares.RequireUser(testTokens))
-	NewCartItemsController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(guarded)
+	controllers.NewCartItemsController(store, slog.New(slog.NewTextHandler(io.Discard, nil))).SetupRoutes(guarded)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -81,121 +83,119 @@ func cartItemsRequest(t *testing.T, store *fakeCartItemsStore, method, path, bod
 	return rec
 }
 
-// Every action is mounted: a route that answers 404 was never registered.
-func TestCartItemsRoutesAreMounted(t *testing.T) {
-	store := &fakeCartItemsStore{}
-	auth := bearerFor(t, "visitor-1")
-	routes := []struct{ method, path, body string }{
-		{http.MethodPost, "/cart_items", "{}"},
-		{http.MethodPatch, "/cart_items/1", "{}"},
-		{http.MethodDelete, "/cart_items/1", ""},
-	}
-	for _, r := range routes {
-		rec := cartItemsRequest(t, store, r.method, r.path, r.body, auth)
-		if rec.Code == http.StatusNotFound {
-			t.Errorf("%s %s is not mounted", r.method, r.path)
-		}
-	}
-}
+var _ = Describe("cart_items", func() {
+	var (
+		store *fakeCartItemsStore
+		auth  string
+	)
 
-// No bearer token at all is 401 — the detailed cases are already covered
-// by app/middlewares/require_user_test.go; this just proves cart_items is
-// actually mounted behind that guard.
-func TestCartItemsRequiresABearerToken(t *testing.T) {
-	rec := cartItemsRequest(t, &fakeCartItemsStore{}, http.MethodPost, "/cart_items", "{}", "")
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401", rec.Code)
-	}
-}
+	BeforeEach(func() {
+		store = &fakeCartItemsStore{}
+		auth = bearerFor("visitor-1")
+	})
 
-// Create passes the body through to AddCartItem and answers with the
-// cart's contents, not just the one line.
-func TestCartItemsCreatePassesTheBodyThroughAndReturnsTheCart(t *testing.T) {
-	store := &fakeCartItemsStore{
-		cart:  domain.Cart{ID: 1},
-		lines: []domain.CartLine{{ID: 5, ProductID: 10, ProductName: "Widget", UnitPriceCents: 500, Quantity: 2}},
-	}
-	rec := cartItemsRequest(t, store, http.MethodPost, "/cart_items", `{"product_id":10,"quantity":2}`, bearerFor(t, "visitor-1"))
+	// Every action is mounted: a route that answers 404 was never registered.
+	DescribeTable("routes",
+		func(method, path, body string) {
+			rec := cartItemsRequest(store, method, path, body, auth)
+			Expect(rec.Code).NotTo(Equal(http.StatusNotFound))
+		},
+		Entry("POST /cart_items", http.MethodPost, "/cart_items", "{}"),
+		Entry("PATCH /cart_items/:id", http.MethodPatch, "/cart_items/1", "{}"),
+		Entry("DELETE /cart_items/:id", http.MethodDelete, "/cart_items/1", ""),
+	)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.gotProductID != 10 || store.gotQuantity != 2 {
-		t.Errorf("store got product_id=%d quantity=%d", store.gotProductID, store.gotQuantity)
-	}
-	if !strings.Contains(rec.Body.String(), `"total_cents":1000`) {
-		t.Errorf("body = %s", rec.Body)
-	}
-}
+	// No bearer token at all is 401 — the detailed cases are already covered
+	// by app/middlewares/require_user_test.go; this just proves cart_items is
+	// actually mounted behind that guard.
+	It("requires a bearer token", func() {
+		rec := cartItemsRequest(store, http.MethodPost, "/cart_items", "{}", "")
+		Expect(rec.Code).To(Equal(http.StatusUnauthorized))
+	})
 
-// Validation (quantity <= 0, more than stock, no such product) is the
-// store's; the controller's only job is to say 422.
-func TestCartItemsCreateInvalidIs422(t *testing.T) {
-	store := &fakeCartItemsStore{err: errors.Join(domain.ErrInvalid, errors.New("only 1 in stock"))}
-	rec := cartItemsRequest(t, store, http.MethodPost, "/cart_items", `{"product_id":10,"quantity":99}`, bearerFor(t, "visitor-1"))
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status = %d, want 422: %s", rec.Code, rec.Body)
-	}
-}
+	Describe("POST /cart_items", func() {
+		// Create passes the body through to AddCartItem and answers with the
+		// cart's contents, not just the one line.
+		It("passes the body through and returns the cart", func() {
+			store.cart = domain.Cart{ID: 1}
+			store.lines = []domain.CartLine{{ID: 5, ProductID: 10, ProductName: "Widget", UnitPriceCents: 500, Quantity: 2}}
 
-func TestCartItemsCreateMalformedJSONIs400(t *testing.T) {
-	rec := cartItemsRequest(t, &fakeCartItemsStore{}, http.MethodPost, "/cart_items", `{"nope":`, bearerFor(t, "visitor-1"))
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", rec.Code)
-	}
-}
+			rec := cartItemsRequest(store, http.MethodPost, "/cart_items", `{"product_id":10,"quantity":2}`, auth)
 
-func TestCartItemsUpdateChangesQuantityAndReturnsTheCart(t *testing.T) {
-	store := &fakeCartItemsStore{cart: domain.Cart{ID: 1}, item: domain.CartItem{ID: 5, CartID: 1}}
-	rec := cartItemsRequest(t, store, http.MethodPatch, "/cart_items/5", `{"quantity":3}`, bearerFor(t, "visitor-1"))
+			Expect(rec.Code).To(Equal(http.StatusCreated), rec.Body.String())
+			Expect(store.gotProductID).To(Equal(int64(10)))
+			Expect(store.gotQuantity).To(Equal(int32(2)))
+			Expect(rec.Body.String()).To(ContainSubstring(`"total_cents":1000`))
+		})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.gotID != "5" || store.gotQuantity != 3 {
-		t.Errorf("store got id=%q quantity=%d", store.gotID, store.gotQuantity)
-	}
-}
+		// Validation (quantity <= 0, more than stock, no such product) is the
+		// store's; the controller's only job is to say 422.
+		It("answers 422 when the store says invalid", func() {
+			store.err = errors.Join(domain.ErrInvalid, errors.New("only 1 in stock"))
 
-// Update resolves the cart from the caller's own token before touching the
-// line, so the store is always asked "is this line in cart X", never
-// "update this line" with no cart attached — the fix for the cross-cart
-// ownership bug found in task C2.
-func TestCartItemsUpdateScopesToTheCallersCart(t *testing.T) {
-	store := &fakeCartItemsStore{cart: domain.Cart{ID: 42}}
-	cartItemsRequest(t, store, http.MethodPatch, "/cart_items/5", `{"quantity":3}`, bearerFor(t, "visitor-1"))
-	if store.gotCartID != 42 {
-		t.Errorf("store got cart id = %d, want 42", store.gotCartID)
-	}
-}
+			rec := cartItemsRequest(store, http.MethodPost, "/cart_items", `{"product_id":10,"quantity":99}`, auth)
 
-func TestCartItemsUpdateUnknownIs404(t *testing.T) {
-	rec := cartItemsRequest(t, &fakeCartItemsStore{err: domain.ErrNotFound}, http.MethodPatch, "/cart_items/nope", `{"quantity":1}`, bearerFor(t, "visitor-1"))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", rec.Code)
-	}
-}
+			Expect(rec.Code).To(Equal(http.StatusUnprocessableEntity), rec.Body.String())
+		})
 
-func TestCartItemsDestroyRemovesTheLineAndReturnsTheCart(t *testing.T) {
-	store := &fakeCartItemsStore{cart: domain.Cart{ID: 1}}
-	rec := cartItemsRequest(t, store, http.MethodDelete, "/cart_items/5", "", bearerFor(t, "visitor-1"))
+		It("answers 400 for malformed JSON", func() {
+			rec := cartItemsRequest(store, http.MethodPost, "/cart_items", `{"nope":`, auth)
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		})
 
-	if rec.Code != http.StatusOK || store.gotID != "5" {
-		t.Errorf("status = %d, id = %q", rec.Code, store.gotID)
-	}
-	if store.gotCartID != 1 {
-		t.Errorf("store got cart id = %d, want 1", store.gotCartID)
-	}
-}
+		// An unexpected error is a 500 that says nothing about its cause.
+		It("answers 500 without detail for an unexpected error", func() {
+			store.err = errors.New("connection refused to db-1")
 
-// An unexpected error is a 500 that says nothing about its cause.
-func TestCartItemsUnexpectedErrorIs500WithoutDetail(t *testing.T) {
-	store := &fakeCartItemsStore{err: errors.New("connection refused to db-1")}
-	rec := cartItemsRequest(t, store, http.MethodPost, "/cart_items", `{"product_id":1,"quantity":1}`, bearerFor(t, "visitor-1"))
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", rec.Code)
-	}
-	if strings.Contains(rec.Body.String(), "db-1") {
-		t.Errorf("body leaks the internal error: %s", rec.Body)
-	}
-}
+			rec := cartItemsRequest(store, http.MethodPost, "/cart_items", `{"product_id":1,"quantity":1}`, auth)
+
+			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+			Expect(rec.Body.String()).NotTo(ContainSubstring("db-1"))
+		})
+	})
+
+	Describe("PATCH /cart_items/:id", func() {
+		It("changes the quantity and returns the cart", func() {
+			store.cart = domain.Cart{ID: 1}
+			store.item = domain.CartItem{ID: 5, CartID: 1}
+
+			rec := cartItemsRequest(store, http.MethodPatch, "/cart_items/5", `{"quantity":3}`, auth)
+
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(store.gotID).To(Equal("5"))
+			Expect(store.gotQuantity).To(Equal(int32(3)))
+		})
+
+		// Update resolves the cart from the caller's own token before touching the
+		// line, so the store is always asked "is this line in cart X", never
+		// "update this line" with no cart attached — the fix for the cross-cart
+		// ownership bug found in task C2.
+		It("scopes to the caller's cart", func() {
+			store.cart = domain.Cart{ID: 42}
+
+			cartItemsRequest(store, http.MethodPatch, "/cart_items/5", `{"quantity":3}`, auth)
+
+			Expect(store.gotCartID).To(Equal(int64(42)))
+		})
+
+		It("answers 404 for an unknown line", func() {
+			store.err = domain.ErrNotFound
+
+			rec := cartItemsRequest(store, http.MethodPatch, "/cart_items/nope", `{"quantity":1}`, auth)
+
+			Expect(rec.Code).To(Equal(http.StatusNotFound))
+		})
+	})
+
+	Describe("DELETE /cart_items/:id", func() {
+		It("removes the line and returns the cart", func() {
+			store.cart = domain.Cart{ID: 1}
+
+			rec := cartItemsRequest(store, http.MethodDelete, "/cart_items/5", "", auth)
+
+			Expect(rec.Code).To(Equal(http.StatusOK))
+			Expect(store.gotID).To(Equal("5"))
+			Expect(store.gotCartID).To(Equal(int64(1)))
+		})
+	})
+})

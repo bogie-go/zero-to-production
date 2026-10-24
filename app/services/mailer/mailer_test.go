@@ -1,4 +1,4 @@
-package mailer
+package mailer_test
 
 import (
 	"bufio"
@@ -10,8 +10,12 @@ import (
 	"net"
 	"net/mail"
 	"strings"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/services/mailer"
 )
 
 // fakeSMTP is just enough of an SMTP server to accept one message and keep
@@ -25,13 +29,10 @@ type fakeSMTP struct {
 	done     chan struct{}
 }
 
-func startFakeSMTP(t *testing.T, rejectTo string) *fakeSMTP {
-	t.Helper()
+func startFakeSMTP(rejectTo string) *fakeSMTP {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
+	Expect(err).NotTo(HaveOccurred())
+	DeferCleanup(func() { _ = ln.Close() })
 	f := &fakeSMTP{addr: ln.Addr().String(), rejectTo: rejectTo, done: make(chan struct{})}
 	go func() {
 		conn, err := ln.Accept()
@@ -88,114 +89,104 @@ func startFakeSMTP(t *testing.T, rejectTo string) *fakeSMTP {
 	return f
 }
 
-func newTestMailer(addr string) *Mailer {
-	m := New(Config{Addr: addr, From: "Shop <shop@example.com>"})
-	m.now = func() time.Time { return time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC) }
+func newTestMailer(addr string) *mailer.Mailer {
+	m := mailer.New(mailer.Config{Addr: addr, From: "Shop <shop@example.com>"})
+	mailer.SetClock(m, func() time.Time { return time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC) })
 	return m
 }
 
-func parse(t *testing.T, raw string) *mail.Message {
-	t.Helper()
+func parse(raw string) *mail.Message {
 	msg, err := mail.ReadMessage(strings.NewReader(raw))
-	if err != nil {
-		t.Fatalf("message does not parse: %v\n%s", err, raw)
-	}
+	Expect(err).NotTo(HaveOccurred(), "message does not parse:\n%s", raw)
 	return msg
 }
 
-func TestSendDeliversATextMessage(t *testing.T) {
-	srv := startFakeSMTP(t, "")
-	err := newTestMailer(srv.addr).Send(context.Background(), Message{
-		To: "Ann <ann@example.com>", Subject: "Order #7 — thanks", Text: "Hello Ann,\nYour order is placed. ฿100\n",
+var _ = Describe("Mailer.Send", func() {
+	var srv *fakeSMTP
+
+	When("the server accepts the message", func() {
+		BeforeEach(func() {
+			srv = startFakeSMTP("")
+		})
+
+		It("delivers a text message", func() {
+			err := newTestMailer(srv.addr).Send(context.Background(), mailer.Message{
+				To: "Ann <ann@example.com>", Subject: "Order #7 — thanks", Text: "Hello Ann,\nYour order is placed. ฿100\n",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(srv.done).Should(BeClosed())
+
+			Expect(srv.from).To(Equal("shop@example.com"), "bare envelope sender")
+			Expect(srv.to).To(Equal("ann@example.com"), "bare envelope recipient")
+
+			msg := parse(srv.data)
+			subject, _ := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
+			Expect(subject).To(Equal("Order #7 — thanks"))
+			Expect(msg.Header.Get("To")).To(BeElementOf(`"Ann" <ann@example.com>`, "Ann <ann@example.com>"))
+			Expect(msg.Header.Get("Message-ID")).NotTo(BeEmpty())
+			Expect(msg.Header.Get("Date")).NotTo(BeEmpty())
+
+			body, _ := io.ReadAll(quotedprintable.NewReader(msg.Body))
+			Expect(string(body)).To(ContainSubstring("฿100"), "the UTF-8 text is intact")
+		})
+
+		It("delivers an HTML alternative after the plain text", func() {
+			err := newTestMailer(srv.addr).Send(context.Background(), mailer.Message{
+				To: "ann@example.com", Subject: "Hi", Text: "plain version", HTML: "<p>html version</p>",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(srv.done).Should(BeClosed())
+
+			msg := parse(srv.data)
+			typ, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(typ).To(Equal("multipart/alternative"))
+
+			mr := multipart.NewReader(msg.Body, params["boundary"])
+			var kinds []string
+			for {
+				p, err := mr.NextPart()
+				if err != nil {
+					break
+				}
+				kinds = append(kinds, strings.SplitN(p.Header.Get("Content-Type"), ";", 2)[0])
+			}
+			Expect(kinds).To(Equal([]string{"text/plain", "text/html"}))
+		})
+
+		// Nothing in a Message may add a header or a recipient of its own.
+		DescribeTable("refuses injection and bad input",
+			func(msg mailer.Message) {
+				Expect(newTestMailer(srv.addr).Send(context.Background(), msg)).NotTo(Succeed())
+				Expect(srv.data).To(BeEmpty(), "the server received nothing")
+			},
+			Entry("subject with a line break", mailer.Message{To: "a@example.com", Subject: "Hi\r\nBcc: evil@example.com", Text: "x"}),
+			Entry("recipient with a header", mailer.Message{To: "a@example.com\r\nBcc: evil@example.com", Subject: "Hi", Text: "x"}),
+			Entry("not an address", mailer.Message{To: "not an address", Subject: "Hi", Text: "x"}),
+			Entry("no text", mailer.Message{To: "a@example.com", Subject: "Hi"}),
+		)
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	<-srv.done
 
-	if srv.from != "shop@example.com" || srv.to != "ann@example.com" {
-		t.Errorf("envelope = %q -> %q, want bare addresses", srv.from, srv.to)
-	}
-	msg := parse(t, srv.data)
-	if got, _ := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject")); got != "Order #7 — thanks" {
-		t.Errorf("Subject = %q", got)
-	}
-	if msg.Header.Get("To") != `"Ann" <ann@example.com>` && msg.Header.Get("To") != "Ann <ann@example.com>" {
-		t.Errorf("To = %q", msg.Header.Get("To"))
-	}
-	if msg.Header.Get("Message-ID") == "" || msg.Header.Get("Date") == "" {
-		t.Error("missing Message-ID or Date")
-	}
-	body, _ := io.ReadAll(quotedprintable.NewReader(msg.Body))
-	if !strings.Contains(string(body), "฿100") {
-		t.Errorf("body = %q, want the UTF-8 text intact", body)
-	}
-}
+	When("the server rejects the recipient", func() {
+		BeforeEach(func() {
+			srv = startFakeSMTP("gone@example.com")
+		})
 
-func TestSendDeliversAnHTMLAlternative(t *testing.T) {
-	srv := startFakeSMTP(t, "")
-	err := newTestMailer(srv.addr).Send(context.Background(), Message{
-		To: "ann@example.com", Subject: "Hi", Text: "plain version", HTML: "<p>html version</p>",
+		It("surfaces the server's 550", func() {
+			err := newTestMailer(srv.addr).Send(context.Background(), mailer.Message{To: "gone@example.com", Subject: "Hi", Text: "x"})
+			Expect(err).To(MatchError(ContainSubstring("550")))
+		})
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	<-srv.done
 
-	msg := parse(t, srv.data)
-	typ, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
-	if err != nil || typ != "multipart/alternative" {
-		t.Fatalf("Content-Type = %q, %v", msg.Header.Get("Content-Type"), err)
-	}
-	mr := multipart.NewReader(msg.Body, params["boundary"])
-	var kinds []string
-	for {
-		p, err := mr.NextPart()
-		if err != nil {
-			break
-		}
-		kinds = append(kinds, strings.SplitN(p.Header.Get("Content-Type"), ";", 2)[0])
-	}
-	if strings.Join(kinds, ",") != "text/plain,text/html" {
-		t.Errorf("parts = %v, want plain first, html last", kinds)
-	}
-}
+	When("the server is unreachable", func() {
+		It("reports a connect error", func() {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			Expect(err).NotTo(HaveOccurred())
+			addr := ln.Addr().String()
+			Expect(ln.Close()).To(Succeed()) // nothing listens here now
 
-// Nothing in a Message may add a header or a recipient of its own.
-func TestSendRefusesInjectionAndBadInput(t *testing.T) {
-	srv := startFakeSMTP(t, "")
-	m := newTestMailer(srv.addr)
-	cases := map[string]Message{
-		"subject with a line break": {To: "a@example.com", Subject: "Hi\r\nBcc: evil@example.com", Text: "x"},
-		"recipient with a header":   {To: "a@example.com\r\nBcc: evil@example.com", Subject: "Hi", Text: "x"},
-		"not an address":            {To: "not an address", Subject: "Hi", Text: "x"},
-		"no text":                   {To: "a@example.com", Subject: "Hi"},
-	}
-	for name, msg := range cases {
-		if err := m.Send(context.Background(), msg); err == nil {
-			t.Errorf("%s: Send succeeded, want an error", name)
-		}
-	}
-	if srv.data != "" {
-		t.Errorf("server received %q, want nothing", srv.data)
-	}
-}
-
-func TestSendReportsARejectedRecipient(t *testing.T) {
-	srv := startFakeSMTP(t, "gone@example.com")
-	err := newTestMailer(srv.addr).Send(context.Background(), Message{To: "gone@example.com", Subject: "Hi", Text: "x"})
-	if err == nil || !strings.Contains(err.Error(), "550") {
-		t.Errorf("err = %v, want the server's 550 surfaced", err)
-	}
-}
-
-func TestSendReportsAnUnreachableServer(t *testing.T) {
-	ln, _ := net.Listen("tcp", "127.0.0.1:0")
-	addr := ln.Addr().String()
-	_ = ln.Close() // nothing listens here now
-
-	err := newTestMailer(addr).Send(context.Background(), Message{To: "a@example.com", Subject: "Hi", Text: "x"})
-	if err == nil || !strings.Contains(err.Error(), "connect") {
-		t.Errorf("err = %v, want a connect error", err)
-	}
-}
+			err = newTestMailer(addr).Send(context.Background(), mailer.Message{To: "a@example.com", Subject: "Hi", Text: "x"})
+			Expect(err).To(MatchError(ContainSubstring("connect")))
+		})
+	})
+})

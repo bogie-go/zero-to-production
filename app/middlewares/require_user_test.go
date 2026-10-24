@@ -1,23 +1,24 @@
-package middlewares
+package middlewares_test
 
 import (
 	"net/http"
 	"net/http/httptest"
-	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
+	"ecommerce/app/middlewares"
 	"ecommerce/app/services/token"
 )
 
 var testTokens = token.Maker{Secret: []byte("a-test-secret-of-at-least-thirty-two-bytes"), Issuer: "test"}
 
-func userRequest(t *testing.T, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func userRequest(authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/me", RequireUser(testTokens), func(c *gin.Context) { c.String(http.StatusOK, Subject(c)) })
+	router.GET("/me", middlewares.RequireUser(testTokens), func(c *gin.Context) { c.String(http.StatusOK, middlewares.Subject(c)) })
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
@@ -27,18 +28,30 @@ func userRequest(t *testing.T, authorization string) *httptest.ResponseRecorder 
 	return rec
 }
 
-func TestRequireUser(t *testing.T) {
-	good, _ := testTokens.Mint("user-42", time.Minute)
-	expired, _ := testTokens.Mint("user-42", -time.Minute)
+var _ = Describe("RequireUser", func() {
+	var good, expired string
 
-	if rec := userRequest(t, "Bearer "+good); rec.Code != http.StatusOK || rec.Body.String() != "user-42" {
-		t.Errorf("good token: %d %q", rec.Code, rec.Body.String())
-	}
-	for name, header := range map[string]string{
-		"none": "", "expired": "Bearer " + expired, "garbage": "Bearer nope", "wrong scheme": "Basic " + good,
-	} {
-		if rec := userRequest(t, header); rec.Code != http.StatusUnauthorized {
-			t.Errorf("%s: %d, want 401", name, rec.Code)
-		}
-	}
-}
+	BeforeEach(func() {
+		var err error
+		good, err = testTokens.Mint("user-42", time.Minute)
+		Expect(err).NotTo(HaveOccurred())
+		expired, err = testTokens.Mint("user-42", -time.Minute)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("lets a good token through with its subject", func() {
+		rec := userRequest("Bearer " + good)
+		Expect(rec.Code).To(Equal(http.StatusOK))
+		Expect(rec.Body.String()).To(Equal("user-42"))
+	})
+
+	DescribeTable("answers 401",
+		func(header func() string) {
+			Expect(userRequest(header()).Code).To(Equal(http.StatusUnauthorized))
+		},
+		Entry("with no token", func() string { return "" }),
+		Entry("with an expired token", func() string { return "Bearer " + expired }),
+		Entry("with garbage", func() string { return "Bearer nope" }),
+		Entry("with the wrong scheme", func() string { return "Basic " + good }),
+	)
+})

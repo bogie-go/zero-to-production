@@ -1,4 +1,4 @@
-package admin_controller
+package admin_controller_test
 
 import (
 	"context"
@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
+	"ecommerce/app/controllers/admin_controller"
 	"ecommerce/app/domain"
 	"ecommerce/app/services/token"
 )
@@ -20,12 +22,9 @@ import (
 // package, the same Maker a real RequireUser checks against in production.
 var testTokens = token.Maker{Secret: []byte("a-test-secret-of-at-least-thirty-two-bytes"), Issuer: "ecommerce-test"}
 
-func bearerFor(t *testing.T, subject string) string {
-	t.Helper()
+func bearerFor(subject string) string {
 	signed, err := testTokens.Mint(subject, time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	return "Bearer " + signed
 }
 
@@ -104,13 +103,12 @@ func (f *fakeProductsStore) DeleteProduct(_ context.Context, id string) error {
 
 // adminProductsRequest mounts the whole namespace, staff gate included, so
 // these tests see exactly what a real request would.
-func adminProductsRequest(t *testing.T, products *fakeProductsStore, staff fakeStaffStore, method, path, body, authorization string) *httptest.ResponseRecorder {
-	t.Helper()
+func adminProductsRequest(products *fakeProductsStore, staff fakeStaffStore, method, path, body, authorization string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ns := NewServer(staff, testTokens, log)
-	ns.Products = NewProductsController(products, log)
+	ns := admin_controller.NewServer(staff, testTokens, log)
+	ns.Products = admin_controller.NewProductsController(products, log)
 	ns.SetupRoutes(&router.RouterGroup)
 
 	rec := httptest.NewRecorder()
@@ -125,152 +123,157 @@ func adminProductsRequest(t *testing.T, products *fakeProductsStore, staff fakeS
 
 var aStaffUser = fakeStaffStore{user: domain.User{ID: 1, Role: domain.RoleStaff}}
 
-// Every action is mounted: a route that answers 404 was never registered.
-func TestAdminProductsRoutesAreMounted(t *testing.T) {
-	routes := []struct{ method, path string }{
-		{http.MethodGet, "/admin/products"},
-		{http.MethodGet, "/admin/products/1"},
-		{http.MethodPost, "/admin/products"},
-		{http.MethodPatch, "/admin/products/1"},
-		{http.MethodDelete, "/admin/products/1"},
-		{http.MethodPost, "/admin/products/1/archive"},
-		{http.MethodPost, "/admin/products/1/restore"},
-	}
-	for _, r := range routes {
-		rec := adminProductsRequest(t, &fakeProductsStore{}, aStaffUser, r.method, r.path, "", bearerFor(t, "1"))
-		if rec.Code == http.StatusNotFound {
-			t.Errorf("%s %s is not mounted", r.method, r.path)
-		}
-	}
-}
+var _ = Describe("admin products", func() {
+	var store *fakeProductsStore
 
-// The whole namespace sits behind the staff gate: no token is 401, a
-// customer's token is 403, before any controller action runs.
-func TestAdminProductsRequiresStaff(t *testing.T) {
-	store := &fakeProductsStore{list: []domain.Product{{ID: 1, Name: "Widget"}}}
+	BeforeEach(func() {
+		store = &fakeProductsStore{}
+	})
 
-	if rec := adminProductsRequest(t, store, aStaffUser, http.MethodGet, "/admin/products", "", ""); rec.Code != http.StatusUnauthorized {
-		t.Errorf("no token: %d, want 401", rec.Code)
-	}
-	customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
-	if rec := adminProductsRequest(t, store, customer, http.MethodGet, "/admin/products", "", bearerFor(t, "9")); rec.Code != http.StatusForbidden {
-		t.Errorf("customer token: %d, want 403", rec.Code)
-	}
-}
+	// Every action is mounted: a route that answers 404 was never registered.
+	DescribeTable("routes are mounted",
+		func(method, path string) {
+			rec := adminProductsRequest(store, aStaffUser, method, path, "", bearerFor("1"))
+			Expect(rec.Code).NotTo(Equal(http.StatusNotFound), "%s %s is not mounted", method, path)
+		},
+		Entry(nil, http.MethodGet, "/admin/products"),
+		Entry(nil, http.MethodGet, "/admin/products/1"),
+		Entry(nil, http.MethodPost, "/admin/products"),
+		Entry(nil, http.MethodPatch, "/admin/products/1"),
+		Entry(nil, http.MethodDelete, "/admin/products/1"),
+		Entry(nil, http.MethodPost, "/admin/products/1/archive"),
+		Entry(nil, http.MethodPost, "/admin/products/1/restore"),
+	)
 
-func TestAdminProductsIndexReturnsTheListing(t *testing.T) {
-	store := &fakeProductsStore{list: []domain.Product{{ID: 1, Name: "Widget"}}}
-	rec := adminProductsRequest(t, store, aStaffUser, http.MethodGet, "/admin/products", "", bearerFor(t, "1"))
+	// The whole namespace sits behind the staff gate: no token is 401, a
+	// customer's token is 403, before any controller action runs.
+	Describe("staff gate", func() {
+		BeforeEach(func() {
+			store.list = []domain.Product{{ID: 1, Name: "Widget"}}
+		})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"name":"Widget"`) {
-		t.Errorf("body = %s, want Widget listed", rec.Body)
-	}
-}
+		It("answers 401 with no token", func() {
+			rec := adminProductsRequest(store, aStaffUser, http.MethodGet, "/admin/products", "", "")
+			Expect(rec.Code).To(Equal(http.StatusUnauthorized))
+		})
 
-func TestAdminProductsCreateReturns201(t *testing.T) {
-	store := &fakeProductsStore{product: domain.Product{ID: 5, Name: "Widget", PriceCents: 500, Stock: 10}}
-	body := `{"name":"Widget","description":"a widget","price_cents":500,"stock":10,"image_url":"/w.webp"}`
-	rec := adminProductsRequest(t, store, aStaffUser, http.MethodPost, "/admin/products", body, bearerFor(t, "1"))
+		It("answers 403 for a customer token", func() {
+			customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
+			rec := adminProductsRequest(store, customer, http.MethodGet, "/admin/products", "", bearerFor("9"))
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+		})
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.gotProduct.Name != "Widget" || store.gotProduct.PriceCents != 500 {
-		t.Errorf("CreateProduct got %+v", store.gotProduct)
-	}
-}
+		// Archiving is staff-only like every other admin action.
+		It("refuses a customer archiving a product", func() {
+			customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
+			rec := adminProductsRequest(store, customer, http.MethodPost, "/admin/products/5/archive", "", bearerFor("9"))
+			Expect(rec.Code).To(Equal(http.StatusForbidden))
+			Expect(store.archived).To(BeFalse())
+		})
+	})
 
-// A validation failure (the store's Validate, run on create) is a 422, not
-// a 500 — the store reports domain.ErrInvalid, as a blank name would.
-func TestAdminProductsCreateReports422OnValidationFailure(t *testing.T) {
-	store := &fakeProductsStore{err: domain.ErrInvalid}
-	rec := adminProductsRequest(t, store, aStaffUser, http.MethodPost, "/admin/products", `{"name":""}`, bearerFor(t, "1"))
+	Describe("GET /admin/products", func() {
+		It("returns the listing", func() {
+			store.list = []domain.Product{{ID: 1, Name: "Widget"}}
+			rec := adminProductsRequest(store, aStaffUser, http.MethodGet, "/admin/products", "", bearerFor("1"))
 
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422: %s", rec.Code, rec.Body)
-	}
-}
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(rec.Body.String()).To(ContainSubstring(`"name":"Widget"`))
+		})
 
-func TestAdminProductsUpdateMergesOntoTheExisting(t *testing.T) {
-	store := &fakeProductsStore{
-		product: domain.Product{ID: 5, Name: "Widget", PriceCents: 500, Stock: 10, ImageUrl: "/w.webp"},
-	}
-	body := `{"name":"Widget v2","description":"updated","price_cents":600,"stock":8,"image_url":"/w2.webp"}`
-	rec := adminProductsRequest(t, store, aStaffUser, http.MethodPatch, "/admin/products/5", body, bearerFor(t, "1"))
+		// The admin list includes archived products unless told not to, and pages.
+		Context("paging and the archived filter", func() {
+			BeforeEach(func() {
+				store.total = 45
+			})
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if store.gotProduct.ID != 5 || store.gotProduct.Name != "Widget v2" || store.gotProduct.PriceCents != 600 {
-		t.Errorf("UpdateProduct got %+v, want id 5 carried over with the new fields", store.gotProduct)
-	}
-}
+			It("includes archived and pages by 20 by default", func() {
+				rec := adminProductsRequest(store, aStaffUser, http.MethodGet, "/admin/products", "", bearerFor("1"))
+				Expect(store.gotArchived).To(BeTrue())
+				Expect(store.gotLimit).To(Equal(int32(20)))
+				Expect(store.gotOffset).To(Equal(int32(0)))
+				Expect(rec.Body.String()).To(ContainSubstring(`"total_pages":3`))
+			})
 
-func TestAdminProductsDestroyReturns204(t *testing.T) {
-	store := &fakeProductsStore{}
-	rec := adminProductsRequest(t, store, aStaffUser, http.MethodDelete, "/admin/products/5", "", bearerFor(t, "1"))
+			It("honours include_archived, page and per_page", func() {
+				adminProductsRequest(store, aStaffUser, http.MethodGet, "/admin/products?include_archived=false&page=2&per_page=10", "", bearerFor("1"))
+				Expect(store.gotArchived).To(BeFalse())
+				Expect(store.gotLimit).To(Equal(int32(10)))
+				Expect(store.gotOffset).To(Equal(int32(10)))
+			})
 
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if !store.deleted || store.gotID != "5" {
-		t.Errorf("DeleteProduct: deleted=%v gotID=%q, want true %q", store.deleted, store.gotID, "5")
-	}
-}
+			It("answers 422 for page=0", func() {
+				rec := adminProductsRequest(store, aStaffUser, http.MethodGet, "/admin/products?page=0", "", bearerFor("1"))
+				Expect(rec.Code).To(Equal(http.StatusUnprocessableEntity))
+			})
+		})
+	})
 
-func TestAdminProductsArchiveAndRestore(t *testing.T) {
-	when := time.Now()
-	store := &fakeProductsStore{product: domain.Product{ID: 5, Name: "Widget", ArchivedAt: &when}}
-	rec := adminProductsRequest(t, store, aStaffUser, http.MethodPost, "/admin/products/5/archive", "", bearerFor(t, "1"))
+	Describe("POST /admin/products", func() {
+		It("returns 201 and passes the fields to the store", func() {
+			store.product = domain.Product{ID: 5, Name: "Widget", PriceCents: 500, Stock: 10}
+			body := `{"name":"Widget","description":"a widget","price_cents":500,"stock":10,"image_url":"/w.webp"}`
+			rec := adminProductsRequest(store, aStaffUser, http.MethodPost, "/admin/products", body, bearerFor("1"))
 
-	if rec.Code != http.StatusOK || !store.archived || store.gotID != "5" {
-		t.Fatalf("archive: status %d archived=%v id=%q: %s", rec.Code, store.archived, store.gotID, rec.Body)
-	}
-	if strings.Contains(rec.Body.String(), `"archived_at":null`) {
-		t.Errorf("body = %s, want an archived_at time", rec.Body)
-	}
+			Expect(rec.Code).To(Equal(http.StatusCreated), rec.Body.String())
+			Expect(store.gotProduct.Name).To(Equal("Widget"))
+			Expect(store.gotProduct.PriceCents).To(BeEquivalentTo(500))
+		})
 
-	store = &fakeProductsStore{product: domain.Product{ID: 5, Name: "Widget"}}
-	rec = adminProductsRequest(t, store, aStaffUser, http.MethodPost, "/admin/products/5/restore", "", bearerFor(t, "1"))
-	if rec.Code != http.StatusOK || !store.restored {
-		t.Fatalf("restore: status %d restored=%v: %s", rec.Code, store.restored, rec.Body)
-	}
-	if !strings.Contains(rec.Body.String(), `"archived_at":null`) {
-		t.Errorf("body = %s, want archived_at null", rec.Body)
-	}
-}
+		// A validation failure (the store's Validate, run on create) is a 422,
+		// not a 500: the store reports domain.ErrInvalid, as a blank name would.
+		It("reports 422 on a validation failure", func() {
+			store.err = domain.ErrInvalid
+			rec := adminProductsRequest(store, aStaffUser, http.MethodPost, "/admin/products", `{"name":""}`, bearerFor("1"))
 
-// Archiving is staff-only like every other admin action.
-func TestAdminProductsArchiveRequiresStaff(t *testing.T) {
-	customer := fakeStaffStore{user: domain.User{ID: 9, Role: domain.RoleCustomer}}
-	store := &fakeProductsStore{}
-	rec := adminProductsRequest(t, store, customer, http.MethodPost, "/admin/products/5/archive", "", bearerFor(t, "9"))
-	if rec.Code != http.StatusForbidden || store.archived {
-		t.Errorf("customer archive: %d archived=%v, want 403 and nothing archived", rec.Code, store.archived)
-	}
-}
+			Expect(rec.Code).To(Equal(http.StatusUnprocessableEntity), rec.Body.String())
+		})
+	})
 
-// The admin list includes archived products unless told not to, and pages.
-func TestAdminProductsIndexPagesAndFiltersArchived(t *testing.T) {
-	store := &fakeProductsStore{total: 45}
-	rec := adminProductsRequest(t, store, aStaffUser, http.MethodGet, "/admin/products", "", bearerFor(t, "1"))
-	if !store.gotArchived || store.gotLimit != 20 || store.gotOffset != 0 {
-		t.Errorf("default: archived %v limit %d offset %d, want true 20 0", store.gotArchived, store.gotLimit, store.gotOffset)
-	}
-	if !strings.Contains(rec.Body.String(), `"total_pages":3`) {
-		t.Errorf("body = %s, want 3 total pages of 20 for 45", rec.Body)
-	}
+	Describe("PATCH /admin/products/:id", func() {
+		It("merges onto the existing product, carrying the id over", func() {
+			store.product = domain.Product{ID: 5, Name: "Widget", PriceCents: 500, Stock: 10, ImageUrl: "/w.webp"}
+			body := `{"name":"Widget v2","description":"updated","price_cents":600,"stock":8,"image_url":"/w2.webp"}`
+			rec := adminProductsRequest(store, aStaffUser, http.MethodPatch, "/admin/products/5", body, bearerFor("1"))
 
-	adminProductsRequest(t, store, aStaffUser, http.MethodGet, "/admin/products?include_archived=false&page=2&per_page=10", "", bearerFor(t, "1"))
-	if store.gotArchived || store.gotLimit != 10 || store.gotOffset != 10 {
-		t.Errorf("page 2: archived %v limit %d offset %d, want false 10 10", store.gotArchived, store.gotLimit, store.gotOffset)
-	}
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(store.gotProduct.ID).To(BeEquivalentTo(5))
+			Expect(store.gotProduct.Name).To(Equal("Widget v2"))
+			Expect(store.gotProduct.PriceCents).To(BeEquivalentTo(600))
+		})
+	})
 
-	rec = adminProductsRequest(t, store, aStaffUser, http.MethodGet, "/admin/products?page=0", "", bearerFor(t, "1"))
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("page=0: status = %d, want 422", rec.Code)
-	}
-}
+	Describe("DELETE /admin/products/:id", func() {
+		It("returns 204 and deletes", func() {
+			rec := adminProductsRequest(store, aStaffUser, http.MethodDelete, "/admin/products/5", "", bearerFor("1"))
+
+			Expect(rec.Code).To(Equal(http.StatusNoContent), rec.Body.String())
+			Expect(store.deleted).To(BeTrue())
+			Expect(store.gotID).To(Equal("5"))
+		})
+	})
+
+	Describe("POST /admin/products/:id/archive", func() {
+		It("archives and returns an archived_at time", func() {
+			when := time.Now()
+			store.product = domain.Product{ID: 5, Name: "Widget", ArchivedAt: &when}
+			rec := adminProductsRequest(store, aStaffUser, http.MethodPost, "/admin/products/5/archive", "", bearerFor("1"))
+
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(store.archived).To(BeTrue())
+			Expect(store.gotID).To(Equal("5"))
+			Expect(rec.Body.String()).NotTo(ContainSubstring(`"archived_at":null`))
+		})
+	})
+
+	Describe("POST /admin/products/:id/restore", func() {
+		It("restores and returns archived_at null", func() {
+			store.product = domain.Product{ID: 5, Name: "Widget"}
+			rec := adminProductsRequest(store, aStaffUser, http.MethodPost, "/admin/products/5/restore", "", bearerFor("1"))
+
+			Expect(rec.Code).To(Equal(http.StatusOK), rec.Body.String())
+			Expect(store.restored).To(BeTrue())
+			Expect(rec.Body.String()).To(ContainSubstring(`"archived_at":null`))
+		})
+	})
+})

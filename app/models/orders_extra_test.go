@@ -4,236 +4,147 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"testing"
 
 	"github.com/jackc/pgx/v5"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
-	"ecommerce/app/models"
 	"ecommerce/test/factories"
 	"ecommerce/test/testdb"
 )
 
-// checkoutFixtures arranges the usual start of a checkout test: a customer, an
-// empty cart, and one $5.00 product with the given stock.
-func checkoutFixtures(t *testing.T, store *models.Store, stock int32) (user domain.User, cart domain.Cart, product domain.Product) {
-	t.Helper()
-	product = factories.Product(t, store, func(p *domain.Product) { p.PriceCents = 500; p.Stock = stock })
-	return factories.User(t, store), factories.Cart(t, store), product
-}
+var _ = Describe("Checkout (CreateOrderFromCart)", func() {
+	var user domain.User
+	var cart domain.Cart
+	var product domain.Product // $5.00, 10 in stock
 
-// A successful checkout decrements stock, snapshots the price into an
-// order_item, and empties the cart — all three, since they are one
-// transaction.
-func TestCreateOrderFromCartSucceeds(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
-
-	user, cart, product := checkoutFixtures(t, store, 10)
-	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 3); err != nil {
-		t.Fatal(err)
-	}
-
-	order, lines, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if order.UserID != user.ID {
-		t.Errorf("order.UserID = %d, want %d", order.UserID, user.ID)
-	}
-	if order.SubtotalCents != 1500 || order.TotalCents != 1500 {
-		t.Errorf("order totals = %+v, want subtotal and total 1500 (no price rules seeded)", order)
-	}
-	if len(lines) != 1 || lines[0].ProductID != product.ID || lines[0].Quantity != 3 || lines[0].UnitPriceCents != 500 {
-		t.Errorf("lines = %+v, want one line of 3x product %d at 500", lines, product.ID)
-	}
-
-	gotProduct, err := store.GetProduct(ctx, strconv.FormatInt(product.ID, 10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotProduct.Stock != 7 {
-		t.Errorf("product stock after checkout = %d, want 7 (10 - 3)", gotProduct.Stock)
-	}
-
-	contents, err := store.CartContents(ctx, cart.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(contents) != 0 {
-		t.Errorf("cart contents after checkout = %v, want empty", contents)
-	}
-}
-
-// The transaction's whole point: when one line can't be filled, nothing
-// happens — not the stock decrement of any other line, not the order, not
-// the cart clear. A flash sale where two shoppers grab the last item is
-// exactly this race: AddCartItem's own stock check (a plain read then
-// compare) only looks at stock at add-to-cart time, so by checkout time it
-// can be stale.
-func TestCreateOrderFromCartRollsBackOnInsufficientStock(t *testing.T) {
-	store := testdb.Store(t)
-	pool := testdb.Pool(t)
-	ctx := context.Background()
-
-	user, cart, inStock := checkoutFixtures(t, store, 10)
-	outOfStock, err := store.CreateProduct(ctx, domain.Product{
-		Name: "Scarce", Description: "almost gone", PriceCents: 200, Stock: 1, ImageUrl: "/scarce.webp",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.AddCartItem(ctx, cart.ID, inStock.ID, 2); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.AddCartItem(ctx, cart.ID, outOfStock.ID, 1); err != nil {
-		t.Fatal(err)
-	}
-
-	// Someone else buys the last unit between adding to cart and checking
-	// out — simulated by taking the stock to zero directly.
-	if _, err := pool.Exec(ctx, "UPDATE products SET stock = 0 WHERE id = $1", outOfStock.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID); !errors.Is(err, domain.ErrInvalid) {
-		t.Fatalf("CreateOrderFromCart: err = %v, want ErrInvalid", err)
-	}
-
-	// inStock's decrement must have been rolled back too, even though its
-	// own stock was sufficient.
-	gotInStock, err := store.GetProduct(ctx, strconv.FormatInt(inStock.ID, 10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotInStock.Stock != 10 {
-		t.Errorf("in-stock product's stock = %d, want 10 (rolled back)", gotInStock.Stock)
-	}
-
-	contents, err := store.CartContents(ctx, cart.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(contents) != 2 {
-		t.Errorf("cart contents after a failed checkout = %v, want both lines still there", contents)
-	}
-
-	orders, err := store.ListOrdersForUser(ctx, user.ID, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(orders) != 0 {
-		t.Errorf("orders after a failed checkout = %v, want none", orders)
-	}
-}
-
-func TestCreateOrderFromCartRejectsAnEmptyCart(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
-
-	user, cart, _ := checkoutFixtures(t, store, 10)
-	if _, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID); !errors.Is(err, domain.ErrInvalid) {
-		t.Errorf("CreateOrderFromCart(empty cart): err = %v, want ErrInvalid", err)
-	}
-}
-
-func TestGetOrderForUserIsScopedToItsOwner(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
-
-	user, cart, product := checkoutFixtures(t, store, 10)
-	otherUser, err := store.CreateUser(ctx, domain.User{Email: "b@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 1); err != nil {
-		t.Fatal(err)
-	}
-	order, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, _, err := store.GetOrderForUser(ctx, otherUser.ID, strconv.FormatInt(order.ID, 10)); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("GetOrderForUser(other user's order): err = %v, want ErrNotFound", err)
-	}
-	if _, _, err := store.GetOrderForUser(ctx, user.ID, strconv.FormatInt(order.ID, 10)); err != nil {
-		t.Errorf("GetOrderForUser(owner): err = %v, want nil", err)
-	}
-}
-
-// The hook runs inside the checkout's transaction, after the order exists,
-// with that transaction: what it writes there commits with the order.
-func TestOnOrderPlacedRunsInsideTheTransaction(t *testing.T) {
-	store := testdb.Store(t)
-	pool := testdb.Pool(t)
-	ctx := context.Background()
-	user, cart, product := checkoutFixtures(t, store, 10)
-	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 1); err != nil {
-		t.Fatal(err)
-	}
-
-	var seen domain.Order
-	var sawTx bool
-	store.OnOrderPlaced(func(ctx context.Context, tx pgx.Tx, order domain.Order) error {
-		seen, sawTx = order, tx != nil
-		// The order is already visible on this transaction, not yet outside it.
-		var n int
-		if err := tx.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&n); err != nil || n != 1 {
-			t.Errorf("inside the transaction the order is not visible: n=%d err=%v", n, err)
-		}
-		if err := pool.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&n); err != nil || n != 0 {
-			t.Errorf("outside the transaction the order is visible before commit: n=%d err=%v", n, err)
-		}
-		return nil
+	BeforeEach(func() {
+		product = factories.Product(GinkgoT(), store, func(p *domain.Product) { p.PriceCents = 500; p.Stock = 10 })
+		user = factories.User(GinkgoT(), store)
+		cart = factories.Cart(GinkgoT(), store)
 	})
 
-	order, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID)
-	if err != nil {
-		t.Fatal(err)
+	addToCart := func(p domain.Product, quantity int32) {
+		_, err := store.AddCartItem(GinkgoT().Context(), cart.ID, p.ID, quantity)
+		Expect(err).NotTo(HaveOccurred())
 	}
-	if !sawTx || seen.ID != order.ID || seen.UserID != user.ID {
-		t.Errorf("hook saw %+v (tx %v), want order %d for user %d", seen, sawTx, order.ID, user.ID)
+	stockOf := func(p domain.Product) int32 {
+		got, err := store.GetProduct(GinkgoT().Context(), strconv.FormatInt(p.ID, 10))
+		Expect(err).NotTo(HaveOccurred())
+		return got.Stock
 	}
-}
 
-// A hook that fails undoes the checkout: no order, stock back, cart intact.
-// This is what makes "the job exists if and only if the order does" true.
-func TestAFailingOnOrderPlacedRollsBackTheCheckout(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
-	user, cart, product := checkoutFixtures(t, store, 10)
-	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 3); err != nil {
-		t.Fatal(err)
-	}
-	store.OnOrderPlaced(func(context.Context, pgx.Tx, domain.Order) error { return errors.New("queue is down") })
+	// A successful checkout decrements stock, snapshots the price into an
+	// order_item, and empties the cart, all three in one transaction.
+	It("decrements stock, snapshots the price and empties the cart", func() {
+		addToCart(product, 3)
 
-	if _, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID); err == nil {
-		t.Fatal("CreateOrderFromCart succeeded although the hook failed")
-	}
-	if orders, _ := store.ListOrdersForUser(ctx, user.ID, 10); len(orders) != 0 {
-		t.Errorf("orders = %v, want none", orders)
-	}
-	if got, _ := store.GetProduct(ctx, strconv.FormatInt(product.ID, 10)); got.Stock != 10 {
-		t.Errorf("stock = %d, want 10", got.Stock)
-	}
-	if lines, _ := store.CartContents(ctx, cart.ID); len(lines) != 1 {
-		t.Errorf("cart = %v, want the line still there", lines)
-	}
-}
+		order, lines, err := store.CreateOrderFromCart(GinkgoT().Context(), user.ID, cart.ID)
 
-// No checkout, no job: the hook only runs for an order that was written.
-func TestOnOrderPlacedIsNotCalledWhenCheckoutFails(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
-	user, cart, _ := checkoutFixtures(t, store, 10) // an empty cart
-	called := false
-	store.OnOrderPlaced(func(context.Context, pgx.Tx, domain.Order) error { called = true; return nil })
+		Expect(err).NotTo(HaveOccurred())
+		Expect(order.UserID).To(Equal(user.ID))
+		Expect(order.SubtotalCents).To(BeEquivalentTo(1500))
+		Expect(order.TotalCents).To(BeEquivalentTo(1500))
+		Expect(lines).To(HaveLen(1))
+		Expect(lines[0].ProductID).To(Equal(product.ID))
+		Expect(lines[0].Quantity).To(BeEquivalentTo(3))
+		Expect(lines[0].UnitPriceCents).To(BeEquivalentTo(500))
+		Expect(stockOf(product)).To(BeEquivalentTo(7))
+		Expect(store.CartContents(GinkgoT().Context(), cart.ID)).To(BeEmpty())
+	})
 
-	if _, _, err := store.CreateOrderFromCart(ctx, user.ID, cart.ID); err == nil {
-		t.Fatal("an empty cart checked out")
-	}
-	if called {
-		t.Error("the hook ran for a checkout that failed")
-	}
-}
+	// The transaction's whole point: when one line can't be filled, nothing
+	// happens. AddCartItem's stock check only looks at add-to-cart time, so by
+	// checkout it can be stale.
+	When("one line can no longer be filled", func() {
+		It("rolls everything back", func() {
+			scarce := factories.Product(GinkgoT(), store, func(p *domain.Product) { p.Stock = 1 })
+			addToCart(product, 2)
+			addToCart(scarce, 1)
+			// Someone else buys the last unit between adding and checking out.
+			_, err := testdb.Pool(GinkgoT()).Exec(GinkgoT().Context(), "UPDATE products SET stock = 0 WHERE id = $1", scarce.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, _, err = store.CreateOrderFromCart(GinkgoT().Context(), user.ID, cart.ID)
+
+			Expect(err).To(MatchError(domain.ErrInvalid))
+			Expect(stockOf(product)).To(BeEquivalentTo(10), "the line that could be filled is rolled back too")
+			Expect(store.CartContents(GinkgoT().Context(), cart.ID)).To(HaveLen(2))
+			Expect(store.ListOrdersForUser(GinkgoT().Context(), user.ID, 10)).To(BeEmpty())
+		})
+	})
+
+	When("the cart is empty", func() {
+		It("is refused", func() {
+			_, _, err := store.CreateOrderFromCart(GinkgoT().Context(), user.ID, cart.ID)
+			Expect(err).To(MatchError(domain.ErrInvalid))
+		})
+
+		It("does not run the OnOrderPlaced hook", func() {
+			called := false
+			store.OnOrderPlaced(func(context.Context, pgx.Tx, domain.Order) error { called = true; return nil })
+
+			_, _, err := store.CreateOrderFromCart(GinkgoT().Context(), user.ID, cart.ID)
+
+			Expect(err).To(HaveOccurred())
+			Expect(called).To(BeFalse())
+		})
+	})
+
+	Describe("GetOrderForUser", func() {
+		It("is scoped to the order's owner", func() {
+			other := factories.User(GinkgoT(), store)
+			addToCart(product, 1)
+			order, _, err := store.CreateOrderFromCart(GinkgoT().Context(), user.ID, cart.ID)
+			Expect(err).NotTo(HaveOccurred())
+			id := strconv.FormatInt(order.ID, 10)
+
+			_, _, err = store.GetOrderForUser(GinkgoT().Context(), other.ID, id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			_, _, err = store.GetOrderForUser(GinkgoT().Context(), user.ID, id)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	// The hook runs inside the checkout's transaction, after the order exists,
+	// with that transaction: what it writes there commits with the order.
+	Describe("the OnOrderPlaced hook", func() {
+		It("runs inside the transaction", func() {
+			addToCart(product, 1)
+			pool := testdb.Pool(GinkgoT())
+			var seen domain.Order
+			var insideCount, outsideCount int
+			store.OnOrderPlaced(func(ctx context.Context, tx pgx.Tx, order domain.Order) error {
+				seen = order
+				// Visible on this transaction, not yet outside it.
+				if err := tx.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&insideCount); err != nil {
+					return err
+				}
+				return pool.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&outsideCount)
+			})
+
+			order, _, err := store.CreateOrderFromCart(GinkgoT().Context(), user.ID, cart.ID)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(seen.ID).To(Equal(order.ID))
+			Expect(seen.UserID).To(Equal(user.ID))
+			Expect(insideCount).To(Equal(1), "inside the transaction the order is visible")
+			Expect(outsideCount).To(BeZero(), "outside it, not before commit")
+		})
+
+		// A hook that fails undoes the checkout, which is what makes "the job
+		// exists if and only if the order does" true.
+		It("rolls the checkout back when it fails", func() {
+			addToCart(product, 3)
+			store.OnOrderPlaced(func(context.Context, pgx.Tx, domain.Order) error { return errors.New("queue is down") })
+
+			_, _, err := store.CreateOrderFromCart(GinkgoT().Context(), user.ID, cart.ID)
+
+			Expect(err).To(HaveOccurred())
+			Expect(store.ListOrdersForUser(GinkgoT().Context(), user.ID, 10)).To(BeEmpty())
+			Expect(stockOf(product)).To(BeEquivalentTo(10))
+			Expect(store.CartContents(GinkgoT().Context(), cart.ID)).To(HaveLen(1))
+		})
+	})
+})

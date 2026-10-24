@@ -1,85 +1,58 @@
 package models_test
 
 import (
-	"context"
-	"errors"
 	"strconv"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
 	"ecommerce/app/services/password"
-	"ecommerce/test/testdb"
 )
 
-// Whatever the id looks like, a user that is not there is ErrNotFound, and a
-// caller cannot tell a malformed id from a well-formed one that names nothing.
-func TestUnknownUsersAreNotFound(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
+var _ = Describe("Users", func() {
 
-	for _, id := range []string{"nope", "", "999999999"} {
-		if _, err := store.GetUser(ctx, id); !errors.Is(err, domain.ErrNotFound) {
-			t.Errorf("GetUser(%q): err = %v, want ErrNotFound", id, err)
-		}
-		if err := store.DeleteUser(ctx, id); !errors.Is(err, domain.ErrNotFound) {
-			t.Errorf("DeleteUser(%q): err = %v, want ErrNotFound", id, err)
-		}
-	}
+	DescribeTable("an unknown user is not found",
+		func(id string) {
+			_, err := store.GetUser(GinkgoT().Context(), id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+			Expect(store.DeleteUser(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
+		},
+		Entry("a malformed id", "nope"),
+		Entry("an empty id", ""),
+		Entry("a well-formed id that names nothing", "999999999"),
+	)
 
-	// A valid-looking user, so Validate (unlike every other generated
-	// model's, no longer a no-op) passes and the not-found check is what
-	// actually gets exercised.
-	missing := domain.User{ID: 999999999, Email: "nope@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer}
-	if _, err := store.UpdateUser(ctx, missing); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("UpdateUser(%d): err = %v, want ErrNotFound", 999999999, err)
-	}
-}
+	It("cannot update one that is not there", func() {
+		// A valid-looking user, so Validate passes and the not-found check is
+		// what gets exercised.
+		_, err := store.UpdateUser(GinkgoT().Context(), domain.User{ID: 999999999, Email: "nope@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
+		Expect(err).To(MatchError(domain.ErrNotFound))
+	})
 
-func TestUserRoundTrip(t *testing.T) {
-	store := testdb.Store(t)
-	ctx := context.Background()
+	It("is created, read, listed, updated and deleted", func() {
+		ctx := GinkgoT().Context()
+		digest, err := password.Hash("correct-horse-battery-staple")
+		Expect(err).NotTo(HaveOccurred())
 
-	digest, err := password.Hash("correct-horse-battery-staple")
-	if err != nil {
-		t.Fatal(err)
-	}
-	created, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: digest, Role: domain.RoleCustomer})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if created.ID == 0 {
-		t.Error("CreateUser did not assign an id")
-	}
+		created, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: digest, Role: domain.RoleCustomer})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(created.ID).NotTo(BeZero())
+		id := strconv.FormatInt(created.ID, 10)
 
-	got, err := store.GetUser(ctx, strconv.FormatInt(created.ID, 10))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != created {
-		t.Errorf("GetUser = %+v, want %+v", got, created)
-	}
+		Expect(store.GetUser(ctx, id)).To(Equal(created))
+		all, err := store.ListUsers(ctx, 10)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(all).To(HaveLen(1))
+		Expect(all[0].ID).To(Equal(created.ID))
 
-	all, err := store.ListUsers(ctx, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(all) != 1 || all[0].ID != created.ID {
-		t.Errorf("ListUsers = %+v, want just the one created above", all)
-	}
+		created.Email = "b@example.com"
+		updated, err := store.UpdateUser(ctx, created)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated.Email).To(Equal("b@example.com"))
 
-	created.Email = "b@example.com"
-	updated, err := store.UpdateUser(ctx, created)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if updated.Email != "b@example.com" {
-		t.Errorf("UpdateUser: email = %q, want b@example.com", updated.Email)
-	}
-
-	if err := store.DeleteUser(ctx, strconv.FormatInt(created.ID, 10)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.GetUser(ctx, strconv.FormatInt(created.ID, 10)); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("GetUser after delete: err = %v, want ErrNotFound", err)
-	}
-}
+		Expect(store.DeleteUser(ctx, id)).To(Succeed())
+		_, err = store.GetUser(ctx, id)
+		Expect(err).To(MatchError(domain.ErrNotFound))
+	})
+})
