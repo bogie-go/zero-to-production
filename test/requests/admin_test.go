@@ -55,6 +55,75 @@ var _ = Describe("/admin", func() {
 		})
 	})
 
+	Describe("products, one at a time", func() {
+		var staff domain.User
+		var product domain.Product
+		var path string
+
+		BeforeEach(func() {
+			staff = factories.Staff(GinkgoT(), app.Store)
+			product = factories.Product(GinkgoT(), app.Store)
+			path = "/admin/products/" + strconv.FormatInt(product.ID, 10)
+		})
+
+		It("shows, updates and deletes one", func() {
+			var shown views.ProductResponse
+			app.Get(path).AsUser(staff).Do().Status(http.StatusOK).JSON(&shown)
+			Expect(shown.ID).To(Equal(product.ID))
+
+			var updated views.ProductResponse
+			app.Patch(path, views.ProductRequest{Name: "Renamed", PriceCents: 1234, Stock: 3, ImageUrl: "/r.webp"}).
+				AsUser(staff).Do().Status(http.StatusOK).JSON(&updated)
+			Expect(updated.ID).To(Equal(product.ID), "the id is carried over")
+			Expect(updated.Name).To(Equal("Renamed"))
+			Expect(updated.PriceCents).To(BeEquivalentTo(1234))
+
+			app.Delete(path).AsUser(staff).Do().Status(http.StatusNoContent)
+			app.Get(path).AsUser(staff).Do().Status(http.StatusNotFound)
+		})
+
+		It("restores an archived one, with archived_at null again", func() {
+			var archived, restored views.ProductResponse
+			app.Post(path+"/archive", nil).AsUser(staff).Do().Status(http.StatusOK).JSON(&archived)
+			Expect(archived.ArchivedAt).NotTo(BeNil())
+			app.Post(path+"/restore", nil).AsUser(staff).Do().Status(http.StatusOK).JSON(&restored)
+			Expect(restored.ArchivedAt).To(BeNil())
+		})
+
+		It("refuses to delete one that was ordered, with 422", func() {
+			user := factories.User(GinkgoT(), app.Store)
+			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 1}).AsUser(user).Do().Status(http.StatusCreated)
+			app.Post("/orders", nil).AsUser(user).Do().Status(http.StatusCreated)
+
+			app.Delete(path).AsUser(staff).Do().Status(http.StatusUnprocessableEntity)
+		})
+
+		It("pages the list by 20 and takes page, per_page and include_archived", func() {
+			for i := 0; i < 21; i++ {
+				factories.Product(GinkgoT(), app.Store)
+			}
+			var list views.ProductsResponse
+			app.Get("/admin/products").AsUser(staff).Do().Status(http.StatusOK).JSON(&list)
+			Expect(list.Products).To(HaveLen(20))
+			Expect(list.Pagination.TotalPages).To(BeEquivalentTo(2))
+
+			app.Get("/admin/products?page=2&per_page=10").AsUser(staff).Do().JSON(&list)
+			Expect(list.Pagination.Page).To(BeEquivalentTo(2))
+			app.Get("/admin/products?page=0").AsUser(staff).Do().Status(http.StatusUnprocessableEntity)
+		})
+
+		It("is closed to customers, who cannot create or archive", func() {
+			customer := factories.User(GinkgoT(), app.Store)
+			app.Post("/admin/products", views.ProductRequest{Name: "Sneaky", PriceCents: 1, Stock: 1, ImageUrl: "/s"}).AsUser(customer).Do().Status(http.StatusForbidden)
+			app.Post(path+"/archive", nil).AsUser(customer).Do().Status(http.StatusForbidden)
+
+			var list views.ProductsResponse
+			app.Get("/admin/products").AsUser(staff).Do().JSON(&list)
+			Expect(list.Products).To(HaveLen(1))
+			Expect(list.Products[0].ArchivedAt).To(BeNil())
+		})
+	})
+
 	Describe("a price rule", func() {
 		It("changes the cart total once it exists and is active", func() {
 			product := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 1000 })

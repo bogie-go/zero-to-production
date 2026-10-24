@@ -467,16 +467,19 @@ Tests sit beside the code, stdlib `testing`. What they share lives in `test/`:
   with `.AsUser(u)` or `.AsGuest(id)`.
 - `test/requests`: the request tests, one file per area of the API.
 
-Test **outside in**: the request test is the one every feature must have;
+Tests are **Ginkgo and Gomega** (`Describe`/`Context`/`It`, `Expect`), in external
+`_test` packages, one suite file per package that owns the shared setup (`app`,
+`store`). Test **outside in**: the request test is the one every feature must have;
 the store, domain and service tests below it cover the edge cases the request
 test would make tedious.
 
-- A **request test** (`test/requests`) sends HTTP through the real router to
-  the real application and the test database. Arrange with factories, assert
-  on status and JSON.
-- A **controller test** mounts the controller alone on `gin.New()` with a
-  fake of its interface; keep it for failure paths a real database makes
-  hard to reach (the store returning an unexpected error).
+- A **request test** (`test/requests`) sends HTTP through the real `Server`:
+  its router, middleware, controllers and store, wired exactly as `serve`
+  wires them, on the test database. Arrange with factories, assert on status
+  and JSON. There is no test of a controller on its own with a fake store:
+  the wiring is part of what is tested (`wiring_test.go` checks every
+  controller is constructed and mounted), and an unexpected failure is
+  tested by closing the store (`errors_test.go`).
 - A **store test**, in `package models_test` so it can use the factories,
   calls `testdb.Store(t)`.
 - A **domain test** is a plain function call: `Validate` and whatever rules

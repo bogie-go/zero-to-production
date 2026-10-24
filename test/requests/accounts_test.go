@@ -2,6 +2,7 @@ package requests_test
 
 import (
 	"net/http"
+	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -83,6 +84,38 @@ var _ = Describe("Accounts", func() {
 			app.Get("/cart").WithAuthorization("Bearer " + login.Token).Do().JSON(&cart)
 			Expect(cart.Items).To(HaveLen(1))
 			Expect(cart.Items[0].Quantity).To(BeEquivalentTo(2))
+
+			By("removing the guest's own cart")
+			app.Get("/cart").WithAuthorization("Bearer " + guest.Token).Do().JSON(&cart)
+			Expect(cart.Items).To(BeEmpty())
+		})
+	})
+
+	It("keeps merging after one guest line cannot be merged", func() {
+		app.Post("/users", creds).Do().Status(http.StatusCreated)
+		keep, gone := factories.Product(GinkgoT(), app.Store), factories.Product(GinkgoT(), app.Store)
+		var guest views.GuestSessionResponse
+		app.Post("/guest_sessions", nil).Do().Status(http.StatusCreated).JSON(&guest)
+		for _, p := range []domain.Product{gone, keep} {
+			app.Post("/cart_items", views.AddCartItemRequest{ProductID: p.ID, Quantity: 1}).
+				WithAuthorization("Bearer " + guest.Token).Do().Status(http.StatusCreated)
+		}
+		_, err := app.Store.ArchiveProduct(GinkgoT().Context(), strconv.FormatInt(gone.ID, 10))
+		Expect(err).NotTo(HaveOccurred())
+
+		var login views.SessionResponse
+		app.Post("/sessions", views.LoginRequest(creds)).
+			WithAuthorization("Bearer " + guest.Token).Do().Status(http.StatusOK).JSON(&login)
+
+		var cart views.CartResponse
+		app.Get("/cart").WithAuthorization("Bearer " + login.Token).Do().JSON(&cart)
+		Expect(cart.Items).To(HaveLen(1))
+		Expect(cart.Items[0].ProductID).To(Equal(keep.ID))
+	})
+
+	Describe("GET /me", func() {
+		It("is for accounts, not guests", func() {
+			app.Get("/me").AsGuest("someone").Do().Status(http.StatusForbidden)
 		})
 	})
 

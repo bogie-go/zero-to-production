@@ -66,11 +66,48 @@ var _ = Describe("GET /products", func() {
 		})
 	})
 
+	It("asks for the first twelve by default", func() {
+		for i := 0; i < 13; i++ {
+			factories.Product(GinkgoT(), app.Store)
+		}
+
+		var page views.ProductsResponse
+		app.Get("/products").Do().Status(http.StatusOK).JSON(&page)
+
+		Expect(page.Products).To(HaveLen(12))
+		Expect(page.Pagination).To(Equal(views.Pagination{Page: 1, PerPage: 12, Total: 13, TotalPages: 2}))
+	})
+
+	It("clamps per_page to 50", func() {
+		var page views.ProductsResponse
+		app.Get("/products?per_page=5000").Do().Status(http.StatusOK).JSON(&page)
+		Expect(page.Pagination.PerPage).To(BeEquivalentTo(50))
+	})
+
 	DescribeTable("refuses a bad query with 422",
 		func(query string) {
 			app.Get("/products?" + query).Do().Status(http.StatusUnprocessableEntity)
 		},
 		Entry("page 0", "page=0"),
+		Entry("a negative page", "page=-1"),
+		Entry("a page that is not a number", "page=abc"),
+		Entry("per_page 0", "per_page=0"),
+		Entry("a per_page that is not a number", "per_page=x"),
+		Entry("a page too large to offset", "page=99999999999"),
 		Entry("a category that is not a number", "category_id=audio"),
 	)
+
+	Describe("GET /products/:id", func() {
+		It("finds a product by id", func() {
+			p := factories.Product(GinkgoT(), app.Store)
+			var shown views.ProductResponse
+			app.Get("/products/" + strconv.FormatInt(p.ID, 10)).Do().Status(http.StatusOK).JSON(&shown)
+			Expect(shown.Name).To(Equal(p.Name))
+		})
+
+		It("is 404 for an unknown product", func() {
+			app.Get("/products/999999").Do().Status(http.StatusNotFound)
+			app.Get("/products/nope").Do().Status(http.StatusNotFound)
+		})
+	})
 })

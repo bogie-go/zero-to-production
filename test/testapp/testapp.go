@@ -65,6 +65,7 @@ type Request struct {
 	method, path  string
 	body          any
 	authorization string
+	headers       map[string]string
 }
 
 // Get starts a GET request.
@@ -116,6 +117,15 @@ func (r *Request) WithAuthorization(v string) *Request {
 	return r
 }
 
+// WithHeader sets a header on the request.
+func (r *Request) WithHeader(name, value string) *Request {
+	if r.headers == nil {
+		r.headers = map[string]string{}
+	}
+	r.headers[name] = value
+	return r
+}
+
 // Do sends the request through the real router.
 func (r *Request) Do() *Response {
 	t := r.app.t
@@ -137,6 +147,9 @@ func (r *Request) Do() *Response {
 	req.Header.Set("Content-Type", "application/json")
 	if r.authorization != "" {
 		req.Header.Set("Authorization", r.authorization)
+	}
+	for name, value := range r.headers {
+		req.Header.Set(name, value)
 	}
 	rec := httptest.NewRecorder()
 	r.app.Server.Router.ServeHTTP(rec, req)
@@ -185,4 +198,24 @@ func (a *App) Jobs(kind string) int {
 		a.t.Fatal(err)
 	}
 	return n
+}
+
+// JobArgs is the JSON arguments of each queued job of a kind, oldest first,
+// for the jobs that carry facts about the request (who, from where).
+func (a *App) JobArgs(kind string) []string {
+	a.t.Helper()
+	rows, err := a.Store.Pool().Query(context.Background(), "SELECT args::text FROM river_job WHERE kind = $1 ORDER BY id", kind)
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var args string
+		if err := rows.Scan(&args); err != nil {
+			a.t.Fatal(err)
+		}
+		out = append(out, args)
+	}
+	return out
 }

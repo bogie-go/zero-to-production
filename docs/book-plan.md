@@ -62,7 +62,7 @@ Next in the plan: H (deploy) and I (health). `docs/build-notes.md` has the open 
 
 Testing is taught in the tasks, not in a chapter of its own: each task ends green on `bin/ci`, and the new kind of test arrives with the task that needs it.
 
-**Outside in.** A feature starts from a request test: the real router, the real database, the factories for the arrangement, and assertions on status and JSON, which is the contract the UI relies on. The layers below it (store, domain, services) get the edge cases the request test would make tedious, added afterwards. Controller tests that use fakes are the fallback for failure paths that are hard to reach for real (a store returning an unexpected error), not the main test.
+**Outside in.** A feature starts from a request test: the real router, the real database, the factories for the arrangement, and assertions on status and JSON, which is the contract the UI relies on. The layers below it (store, domain, services) get the edge cases the request test would make tedious, added afterwards. There is no controller test with a fake store: the request test goes through the whole `Server`, so the wiring is tested too, and an unexpected failure is provoked for real (the store closed). Tests are written with Ginkgo and Gomega, RSpec-style, in external `_test` packages.
 
 Shared helpers live in `test/`, as Rails' `test/` does: `test/testdb` (a clean test database), `test/factories` (hand-written, no library: valid defaults, typed overrides, saved through the real store), `test/fake` (outside systems), `test/fixtures` (fixed files).
 

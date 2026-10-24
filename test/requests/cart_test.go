@@ -36,6 +36,11 @@ var _ = Describe("The cart", func() {
 			Expect(cart.Items).To(BeEmpty())
 		})
 
+		It("is 404 when the line does not exist", func() {
+			app.Patch("/cart_items/999999", views.UpdateCartItemRequest{Quantity: 2}).AsGuest("owner").Do().Status(http.StatusNotFound)
+			app.Delete("/cart_items/999999").AsGuest("owner").Do().Status(http.StatusNotFound)
+		})
+
 		It("is not found through anyone else's cart", func() {
 			app.Patch(line, views.UpdateCartItemRequest{Quantity: 2}).AsGuest("thief").Do().Status(http.StatusNotFound)
 			app.Delete(line).AsGuest("thief").Do().Status(http.StatusNotFound)
