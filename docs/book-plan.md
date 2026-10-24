@@ -85,7 +85,7 @@ Rules for tests in the book:
 
 Gaps to close in Pass 2:
 - The browser checks used in Pass 1 were ad hoc puppeteer scripts. Turn them into `bin/e2e`, kept out of `bin/ci` so readers need no Node for the core loop.
-- A test helper for authenticated requests (guest, user, staff), now repeated by hand.
+- Request tests for the flows not yet covered (sessions and login, categories and price rules in the admin, the order history UI's endpoints, `/me`); catalog, shopping and admin basics are in `test/requests`.
 - A concurrency test for checkout and for `carts.token`.
 - Decide whether `bogie g model` should generate tests that survive a real `Validate` (see `docs/bogie-gaps.md`).
 

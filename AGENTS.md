@@ -456,6 +456,11 @@ Tests sit beside the code, stdlib `testing`. Shared helpers live in `test/`:
   builds a valid record, overrides only what the test cares about, saves it
   through the real store and fails the test on error. `Sequence` keeps
   unique columns unique. Hand-written, no library.
+- `test/testapp`: the whole app for a test. `app := testapp.New(t)`, then
+  `app.Get("/products").Do().Status(200).JSON(&v)`, `.AsUser(u)`, `.AsGuest(id)`,
+  `app.Jobs("send_welcome_email")` for what a request queued.
+- `test/requests`: the request tests, one file per area of the API
+  (catalog, shopping, admin), using the three above.
 - `test/fake`: fakes of outside systems (a recording mailer, an SMTP server).
 
 Test **outside in**: the controller (request) test is the one every feature

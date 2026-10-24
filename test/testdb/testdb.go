@@ -45,7 +45,8 @@ func Store(t *testing.T) *models.Store {
 
 	// Every table of the app's, in one statement, CASCADE for the foreign
 	// keys between them. goose's version table is left alone, and so is
-	// River's schema, which keeps its own migration record.
+	// River's schema, which keeps its own migration record; only its job
+	// table is emptied (below), so a test can ask what a request enqueued.
 	pool := Pool(t)
 	rows, err := pool.Query(ctx,
 		"SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != 'goose_db_version' AND tablename NOT LIKE 'river_%'")
@@ -61,6 +62,7 @@ func Store(t *testing.T) *models.Store {
 		tables = append(tables, name)
 	}
 	rows.Close()
+	tables = append(tables, "river_job")
 	for _, table := range tables {
 		if _, err := pool.Exec(ctx, "TRUNCATE "+table+" CASCADE"); err != nil {
 			t.Fatal(err)

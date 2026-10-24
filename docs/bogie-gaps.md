@@ -161,3 +161,11 @@ Bogie has no `g mailer`. The SMTP service (`app/services/mailer`), the
 composing functions (`app/mailers`) and the Mailpit container in
 `docker-compose.yml` are by hand, as is the config (now a `bogie g config`
 group). Worth deciding whether Bogie should ship the shape.
+
+## `go test ./...` runs packages in parallel against one test database
+
+Once a second package (`test/requests`) used the test database, packages
+truncating each other's tables made tests fail at random under `bin/ci`. Fixed
+here with `-p 1` in `bin/ci` and `make test`; a package-per-database scheme
+would be faster but heavier. **Real fix:** Bogie's `bin/ci` and Makefile
+template use `-p 1`, or the scaffold gives each package its own database.
