@@ -162,10 +162,12 @@ composing functions (`app/mailers`) and the Mailpit container in
 `docker-compose.yml` are by hand, as is the config (now a `bogie g config`
 group). Worth deciding whether Bogie should ship the shape.
 
-## `go test ./...` runs packages in parallel against one test database
+## ~~`go test ./...` runs packages in parallel against one test database~~ — fixed in Bogie v0.4.0
 
 Once a second package (`test/requests`) used the test database, packages
 truncating each other's tables made tests fail at random under `bin/ci`. Fixed
 here with `-p 1` in `bin/ci` and `make test`; a package-per-database scheme
 would be faster but heavier. **Real fix:** Bogie's `bin/ci` and Makefile
 template use `-p 1`, or the scaffold gives each package its own database.
+
+**Fixed upstream** in v0.4.0, which also scaffolds `test/` (testdb, testapp, factories, a starter request test) from what this app built by hand. `app:update` conflicted on the three files this app already had; kept ours.
