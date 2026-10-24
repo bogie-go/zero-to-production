@@ -29,29 +29,51 @@ var _ = Describe("Products", func() {
 		Expect(err).To(MatchError(domain.ErrNotFound))
 	})
 
-	It("is created, read, listed, updated and deleted", func() {
-		ctx := GinkgoT().Context()
-
-		created, err := store.CreateProduct(ctx, domain.Product{
-			Name: "Widget", Description: "a widget", PriceCents: 500, Stock: 10, ImageUrl: "/widget.webp",
+	Describe("CreateProduct", func() {
+		It("creates a product", func() {
+			created, err := store.CreateProduct(GinkgoT().Context(), domain.Product{
+				Name: "Widget", Description: "a widget", PriceCents: 500, Stock: 10, ImageUrl: "/widget.webp",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.ID).NotTo(BeZero())
 		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(created.ID).NotTo(BeZero())
-		id := strconv.FormatInt(created.ID, 10)
+	})
 
-		Expect(store.GetProduct(ctx, id)).To(Equal(created))
-		all, err := store.ListProducts(ctx, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(all).To(HaveLen(1))
-		Expect(all[0].ID).To(Equal(created.ID))
+	Context("with a created product", func() {
+		var created domain.Product
+		var id string
 
-		created.Stock = 7
-		updated, err := store.UpdateProduct(ctx, created)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(updated.Stock).To(BeEquivalentTo(7))
+		BeforeEach(func() {
+			var err error
+			created, err = store.CreateProduct(GinkgoT().Context(), domain.Product{
+				Name: "Widget", Description: "a widget", PriceCents: 500, Stock: 10, ImageUrl: "/widget.webp",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			id = strconv.FormatInt(created.ID, 10)
+		})
 
-		Expect(store.DeleteProduct(ctx, id)).To(Succeed())
-		_, err = store.GetProduct(ctx, id)
-		Expect(err).To(MatchError(domain.ErrNotFound))
+		It("reads it", func() {
+			Expect(store.GetProduct(GinkgoT().Context(), id)).To(Equal(created))
+		})
+
+		It("lists it", func() {
+			all, err := store.ListProducts(GinkgoT().Context(), 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(all).To(HaveLen(1))
+			Expect(all[0].ID).To(Equal(created.ID))
+		})
+
+		It("updates it", func() {
+			created.Stock = 7
+			updated, err := store.UpdateProduct(GinkgoT().Context(), created)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.Stock).To(BeEquivalentTo(7))
+		})
+
+		It("deletes it", func() {
+			Expect(store.DeleteProduct(GinkgoT().Context(), id)).To(Succeed())
+			_, err := store.GetProduct(GinkgoT().Context(), id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+		})
 	})
 })

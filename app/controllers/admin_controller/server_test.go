@@ -5,16 +5,32 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 
+	"ecommerce/app/domain"
 	"ecommerce/test/factories"
 )
 
 var _ = Describe("/admin", func() {
-	It("is for staff only", func() {
-		customer, staff := factories.User(GinkgoT(), app.Store), factories.Staff(GinkgoT(), app.Store)
+	var customer, staff domain.User
 
-		app.Get("/admin/products").Do().Status(http.StatusUnauthorized)
-		app.Get("/admin/products").AsUser(customer).Do().Status(http.StatusForbidden)
-		app.Get("/admin/products").AsGuest("someone").Do().Status(http.StatusForbidden)
-		app.Get("/admin/products").AsUser(staff).Do().Status(http.StatusOK)
+	Context("with a customer and a staff account", func() {
+		BeforeEach(func() {
+			customer, staff = factories.User(GinkgoT(), app.Store), factories.Staff(GinkgoT(), app.Store)
+		})
+
+		It("answers 401 without a token", func() {
+			app.Get("/admin/products").Do().Status(http.StatusUnauthorized)
+		})
+
+		It("is forbidden to a customer", func() {
+			app.Get("/admin/products").AsUser(customer).Do().Status(http.StatusForbidden)
+		})
+
+		It("is forbidden to a guest", func() {
+			app.Get("/admin/products").AsGuest("someone").Do().Status(http.StatusForbidden)
+		})
+
+		It("is open to staff", func() {
+			app.Get("/admin/products").AsUser(staff).Do().Status(http.StatusOK)
+		})
 	})
 })

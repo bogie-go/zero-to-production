@@ -30,29 +30,56 @@ var _ = Describe("Cart items", func() {
 		Expect(err).To(MatchError(domain.ErrNotFound))
 	})
 
-	It("is created, read, listed, updated and deleted", func() {
-		ctx := GinkgoT().Context()
-		// A cart item names a cart and a product, so both have to exist.
-		cart := factories.Cart(GinkgoT(), store)
-		product := factories.Product(GinkgoT(), store)
+	// A cart item names a cart and a product, so both have to exist.
+	Context("with a cart and a product", func() {
+		var cart domain.Cart
+		var product domain.Product
 
-		created, err := store.CreateCartItem(ctx, domain.CartItem{CartID: cart.ID, ProductID: product.ID, Quantity: 2})
-		Expect(err).NotTo(HaveOccurred())
-		id := strconv.FormatInt(created.ID, 10)
+		BeforeEach(func() {
+			cart = factories.Cart(GinkgoT(), store)
+			product = factories.Product(GinkgoT(), store)
+		})
 
-		Expect(store.GetCartItem(ctx, id)).To(Equal(created))
-		all, err := store.ListCartItems(ctx, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(all).To(HaveLen(1))
-		Expect(all[0].ID).To(Equal(created.ID))
+		It("creates a cart item", func() {
+			created, err := store.CreateCartItem(GinkgoT().Context(), domain.CartItem{CartID: cart.ID, ProductID: product.ID, Quantity: 2})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.ID).NotTo(BeZero())
+		})
 
-		created.Quantity = 5
-		updated, err := store.UpdateCartItem(ctx, created)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(updated.Quantity).To(BeEquivalentTo(5))
+		Context("with a created cart item", func() {
+			var created domain.CartItem
+			var id string
 
-		Expect(store.DeleteCartItem(ctx, id)).To(Succeed())
-		_, err = store.GetCartItem(ctx, id)
-		Expect(err).To(MatchError(domain.ErrNotFound))
+			BeforeEach(func() {
+				var err error
+				created, err = store.CreateCartItem(GinkgoT().Context(), domain.CartItem{CartID: cart.ID, ProductID: product.ID, Quantity: 2})
+				Expect(err).NotTo(HaveOccurred())
+				id = strconv.FormatInt(created.ID, 10)
+			})
+
+			It("reads it", func() {
+				Expect(store.GetCartItem(GinkgoT().Context(), id)).To(Equal(created))
+			})
+
+			It("lists it", func() {
+				all, err := store.ListCartItems(GinkgoT().Context(), 10)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(all).To(HaveLen(1))
+				Expect(all[0].ID).To(Equal(created.ID))
+			})
+
+			It("updates it", func() {
+				created.Quantity = 5
+				updated, err := store.UpdateCartItem(GinkgoT().Context(), created)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.Quantity).To(BeEquivalentTo(5))
+			})
+
+			It("deletes it", func() {
+				Expect(store.DeleteCartItem(GinkgoT().Context(), id)).To(Succeed())
+				_, err := store.GetCartItem(GinkgoT().Context(), id)
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
+		})
 	})
 })

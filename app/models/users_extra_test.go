@@ -18,78 +18,111 @@ var _ = Describe("Users by email", func() {
 		return domain.User{Email: email, PasswordDigest: "digest", Role: domain.RoleCustomer}
 	}
 
-	It("refuses a duplicate email on create", func() {
-		_, err := store.CreateUser(GinkgoT().Context(), newUser("a@example.com"))
-		Expect(err).NotTo(HaveOccurred())
+	Describe("CreateUser", func() {
+		Context("with a user a@example.com", func() {
+			BeforeEach(func() {
+				_, err := store.CreateUser(GinkgoT().Context(), newUser("a@example.com"))
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-		_, err = store.CreateUser(GinkgoT().Context(), newUser("a@example.com"))
-		Expect(err).To(MatchError(domain.ErrInvalid))
+			It("refuses a duplicate email", func() {
+				_, err := store.CreateUser(GinkgoT().Context(), newUser("a@example.com"))
+				Expect(err).To(MatchError(domain.ErrInvalid))
+			})
+		})
 	})
 
 	Describe("GetUserByEmail", func() {
-		It("finds a user, and says not found for an unknown email", func() {
-			created, err := store.CreateUser(GinkgoT().Context(), newUser("a@example.com"))
-			Expect(err).NotTo(HaveOccurred())
+		Context("with a user a@example.com", func() {
+			var created domain.User
 
-			found, err := store.GetUserByEmail(GinkgoT().Context(), "a@example.com")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(found.ID).To(Equal(created.ID))
+			BeforeEach(func() {
+				var err error
+				created, err = store.CreateUser(GinkgoT().Context(), newUser("a@example.com"))
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-			_, err = store.GetUserByEmail(GinkgoT().Context(), "nobody@example.com")
-			Expect(err).To(MatchError(domain.ErrNotFound))
+			It("finds the user", func() {
+				found, err := store.GetUserByEmail(GinkgoT().Context(), "a@example.com")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(found.ID).To(Equal(created.ID))
+			})
+
+			It("says not found for an unknown email", func() {
+				_, err := store.GetUserByEmail(GinkgoT().Context(), "nobody@example.com")
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
 		})
 	})
 
 	Describe("RegisterUser", func() {
 		// The hook runs inside the signup's transaction, with the new user,
 		// and what it writes commits with the user.
-		It("runs the OnUserRegistered hook inside the transaction", func() {
-			pool := testdb.Pool(GinkgoT())
+		Context("with a hook that looks at the new user from outside the transaction", func() {
 			var seen domain.User
 			var visibleOutside int
-			store.OnUserRegistered(func(ctx context.Context, tx pgx.Tx, user domain.User) error {
-				seen = user
-				return pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", user.ID).Scan(&visibleOutside)
+
+			BeforeEach(func() {
+				pool := testdb.Pool(GinkgoT())
+				seen, visibleOutside = domain.User{}, 0
+				store.OnUserRegistered(func(ctx context.Context, tx pgx.Tx, user domain.User) error {
+					seen = user
+					return pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", user.ID).Scan(&visibleOutside)
+				})
 			})
 
-			user, err := store.RegisterUser(GinkgoT().Context(), newUser("new@example.com"))
+			It("runs the OnUserRegistered hook inside the transaction", func() {
+				user, err := store.RegisterUser(GinkgoT().Context(), newUser("new@example.com"))
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(seen.ID).To(Equal(user.ID))
-			Expect(seen.Email).To(Equal("new@example.com"))
-			Expect(visibleOutside).To(BeZero(), "not visible outside before commit")
-			got, err := store.GetUserByEmail(GinkgoT().Context(), "new@example.com")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(got.ID).To(Equal(user.ID))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(seen.ID).To(Equal(user.ID))
+				Expect(seen.Email).To(Equal("new@example.com"))
+				Expect(visibleOutside).To(BeZero(), "not visible outside before commit")
+				got, err := store.GetUserByEmail(GinkgoT().Context(), "new@example.com")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got.ID).To(Equal(user.ID))
+			})
 		})
 
 		// A hook that fails (the queue is down) means no account.
-		It("refuses the signup when the hook fails", func() {
-			store.OnUserRegistered(func(context.Context, pgx.Tx, domain.User) error { return errors.New("queue is down") })
+		Context("with a hook that fails", func() {
+			BeforeEach(func() {
+				store.OnUserRegistered(func(context.Context, pgx.Tx, domain.User) error { return errors.New("queue is down") })
+			})
 
-			_, err := store.RegisterUser(GinkgoT().Context(), newUser("new@example.com"))
+			It("refuses the signup", func() {
+				_, err := store.RegisterUser(GinkgoT().Context(), newUser("new@example.com"))
 
-			Expect(err).To(HaveOccurred())
-			_, err = store.GetUserByEmail(GinkgoT().Context(), "new@example.com")
-			Expect(err).To(MatchError(domain.ErrNotFound))
+				Expect(err).To(HaveOccurred())
+				_, err = store.GetUserByEmail(GinkgoT().Context(), "new@example.com")
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
 		})
 
 		// Same answers as CreateUser: a duplicate is ErrInvalid and runs no
 		// hook; an invalid user is refused before anything is written.
-		It("refuses duplicates and invalid users without running the hook", func() {
-			calls := 0
-			store.OnUserRegistered(func(context.Context, pgx.Tx, domain.User) error { calls++; return nil })
-			_, err := store.RegisterUser(GinkgoT().Context(), newUser("a@example.com"))
-			Expect(err).NotTo(HaveOccurred())
+		Context("with a counting hook and a user already registered", func() {
+			var calls int
 
-			_, err = store.RegisterUser(GinkgoT().Context(), newUser("a@example.com"))
-			Expect(err).To(MatchError(domain.ErrInvalid))
-			Expect(err).To(MatchError(ContainSubstring("already taken")))
+			BeforeEach(func() {
+				calls = 0
+				store.OnUserRegistered(func(context.Context, pgx.Tx, domain.User) error { calls++; return nil })
+				_, err := store.RegisterUser(GinkgoT().Context(), newUser("a@example.com"))
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-			_, err = store.RegisterUser(GinkgoT().Context(), newUser("nope"))
-			Expect(err).To(MatchError(domain.ErrInvalid))
+			It("refuses a duplicate without running the hook", func() {
+				_, err := store.RegisterUser(GinkgoT().Context(), newUser("a@example.com"))
+				Expect(err).To(MatchError(domain.ErrInvalid))
+				Expect(err).To(MatchError(ContainSubstring("already taken")))
+				Expect(calls).To(Equal(1), "only the first signup ran the hook")
+			})
 
-			Expect(calls).To(Equal(1), "only the first signup ran the hook")
+			It("refuses an invalid user without running the hook", func() {
+				_, err := store.RegisterUser(GinkgoT().Context(), newUser("nope"))
+				Expect(err).To(MatchError(domain.ErrInvalid))
+				Expect(calls).To(Equal(1), "only the first signup ran the hook")
+			})
 		})
 	})
 })

@@ -11,34 +11,47 @@ import (
 var _ = Describe("Carts by token", func() {
 
 	Describe("GetCartByToken", func() {
-		It("does not create a cart", func() {
-			ctx := GinkgoT().Context()
-			_, err := store.GetCartByToken(ctx, "nobody")
+		It("does not create a cart: an unknown token is not found", func() {
+			_, err := store.GetCartByToken(GinkgoT().Context(), "nobody")
 			Expect(err).To(MatchError(domain.ErrNotFound))
+		})
 
-			_, err = store.FindOrCreateCartByToken(ctx, "nobody")
-			Expect(err).NotTo(HaveOccurred())
+		Context("with a cart found or created for a token", func() {
+			BeforeEach(func() {
+				_, err := store.FindOrCreateCartByToken(GinkgoT().Context(), "nobody")
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-			found, err := store.GetCartByToken(ctx, "nobody")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(found.Token).To(Equal("nobody"))
+			It("finds it", func() {
+				found, err := store.GetCartByToken(GinkgoT().Context(), "nobody")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(found.Token).To(Equal("nobody"))
+			})
 		})
 	})
 
 	Describe("DeleteCartAndItems", func() {
-		It("removes the cart and its lines", func() {
-			ctx := GinkgoT().Context()
-			cart, err := store.FindOrCreateCartByToken(ctx, "guest-abc")
-			Expect(err).NotTo(HaveOccurred())
-			product := factories.Product(GinkgoT(), store, func(p *domain.Product) { p.Stock = 100 })
-			_, err = store.AddCartItem(ctx, cart.ID, product.ID, 2)
-			Expect(err).NotTo(HaveOccurred())
+		Context("with a cart holding a line", func() {
+			var cart domain.Cart
 
-			Expect(store.DeleteCartAndItems(ctx, cart.ID)).To(Succeed())
+			BeforeEach(func() {
+				ctx := GinkgoT().Context()
+				var err error
+				cart, err = store.FindOrCreateCartByToken(ctx, "guest-abc")
+				Expect(err).NotTo(HaveOccurred())
+				product := factories.Product(GinkgoT(), store, func(p *domain.Product) { p.Stock = 100 })
+				_, err = store.AddCartItem(ctx, cart.ID, product.ID, 2)
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-			_, err = store.GetCartByToken(ctx, "guest-abc")
-			Expect(err).To(MatchError(domain.ErrNotFound))
-			Expect(store.CartContents(ctx, cart.ID)).To(BeEmpty())
+			It("removes the cart and its lines", func() {
+				ctx := GinkgoT().Context()
+				Expect(store.DeleteCartAndItems(ctx, cart.ID)).To(Succeed())
+
+				_, err := store.GetCartByToken(ctx, "guest-abc")
+				Expect(err).To(MatchError(domain.ErrNotFound))
+				Expect(store.CartContents(ctx, cart.ID)).To(BeEmpty())
+			})
 		})
 	})
 
@@ -70,11 +83,15 @@ var _ = Describe("Carts by token", func() {
 	})
 
 	// The index is the guarantee itself.
-	It("refuses a second cart with a taken token", func() {
-		ctx := GinkgoT().Context()
-		_, err := store.CreateCart(ctx, domain.Cart{Token: "same"})
-		Expect(err).NotTo(HaveOccurred())
-		_, err = store.CreateCart(ctx, domain.Cart{Token: "same"})
-		Expect(err).To(HaveOccurred())
+	Context("with a cart whose token is taken", func() {
+		BeforeEach(func() {
+			_, err := store.CreateCart(GinkgoT().Context(), domain.Cart{Token: "same"})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("refuses a second cart with the same token", func() {
+			_, err := store.CreateCart(GinkgoT().Context(), domain.Cart{Token: "same"})
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })

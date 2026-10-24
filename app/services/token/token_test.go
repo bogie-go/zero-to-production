@@ -12,51 +12,82 @@ import (
 var maker = token.Maker{Secret: []byte("a-test-secret-of-at-least-thirty-two-bytes"), Issuer: "test"}
 
 var _ = Describe("Maker", func() {
-	Describe("Mint then Verify", func() {
-		It("round-trips the claims", func() {
-			raw, err := maker.Mint("user-42", time.Minute)
-			Expect(err).NotTo(HaveOccurred())
+	Describe("Mint and Verify", func() {
+		var (
+			raw    string
+			mintEr error
+		)
 
-			claims, err := maker.Verify(raw)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(claims.Subject).To(Equal("user-42"))
-			Expect(claims.ID).NotTo(BeEmpty())
-			Expect(time.Until(claims.ExpiresAt)).To(BeNumerically(">", 0))
+		Context("with a subject", func() {
+			BeforeEach(func() {
+				raw, mintEr = maker.Mint("user-42", time.Minute)
+			})
+
+			It("round-trips the claims", func() {
+				Expect(mintEr).NotTo(HaveOccurred())
+
+				claims, err := maker.Verify(raw)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(claims.Subject).To(Equal("user-42"))
+				Expect(claims.ID).NotTo(BeEmpty())
+				Expect(time.Until(claims.ExpiresAt)).To(BeNumerically(">", 0))
+			})
 		})
 
-		It("refuses to mint a token with no subject", func() {
-			_, err := maker.Mint("", time.Minute)
-			Expect(err).To(HaveOccurred())
+		Context("without a subject", func() {
+			BeforeEach(func() {
+				_, mintEr = maker.Mint("", time.Minute)
+			})
+
+			It("refuses to mint a token", func() {
+				Expect(mintEr).To(HaveOccurred())
+			})
 		})
 	})
 
 	Describe("Verify", func() {
-		var expired, otherSecret, otherIssuer string
+		var (
+			raw string
+			err error
+		)
 
-		BeforeEach(func() {
-			expired, _ = maker.Mint("user-42", -time.Minute)
-			otherSecret, _ = token.Maker{Secret: []byte("another-secret-of-at-least-thirty-two-bytes"), Issuer: "test"}.Mint("user-42", time.Minute)
-			otherIssuer, _ = token.Maker{Secret: maker.Secret, Issuer: "someone-else"}.Mint("user-42", time.Minute)
+		JustBeforeEach(func() {
+			_, err = maker.Verify(raw)
 		})
 
-		It("refuses an expired token", func() {
-			_, err := maker.Verify(expired)
-			Expect(err).To(MatchError(token.ErrExpired))
+		Context("with an expired token", func() {
+			BeforeEach(func() {
+				raw, _ = maker.Mint("user-42", -time.Minute)
+			})
+
+			It("refuses it as expired", func() {
+				Expect(err).To(MatchError(token.ErrExpired))
+			})
 		})
 
-		It("refuses a token signed with another secret", func() {
-			_, err := maker.Verify(otherSecret)
-			Expect(err).To(MatchError(token.ErrInvalid))
+		Context("with a token signed with another secret", func() {
+			BeforeEach(func() {
+				raw, _ = token.Maker{Secret: []byte("another-secret-of-at-least-thirty-two-bytes"), Issuer: "test"}.Mint("user-42", time.Minute)
+			})
+
+			It("refuses it as invalid", func() {
+				Expect(err).To(MatchError(token.ErrInvalid))
+			})
 		})
 
-		It("refuses a token from another issuer", func() {
-			_, err := maker.Verify(otherIssuer)
-			Expect(err).To(MatchError(token.ErrInvalid))
+		Context("with a token from another issuer", func() {
+			BeforeEach(func() {
+				raw, _ = token.Maker{Secret: maker.Secret, Issuer: "someone-else"}.Mint("user-42", time.Minute)
+			})
+
+			It("refuses it as invalid", func() {
+				Expect(err).To(MatchError(token.ErrInvalid))
+			})
 		})
 
 		DescribeTable("refuses malformed input",
-			func(raw string) {
-				_, err := maker.Verify(raw)
+			func(input string) {
+				_, err := maker.Verify(input)
 				Expect(err).To(MatchError(token.ErrInvalid))
 			},
 			Entry("garbage", "not.a.token"),

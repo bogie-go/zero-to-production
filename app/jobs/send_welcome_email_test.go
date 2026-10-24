@@ -34,6 +34,7 @@ var _ = Describe("SendWelcomeEmailWorker", func() {
 	var (
 		mail   *fakeSender
 		cancel *rivertype.JobCancelError
+		err    error
 	)
 
 	BeforeEach(func() {
@@ -41,24 +42,42 @@ var _ = Describe("SendWelcomeEmailWorker", func() {
 		cancel = nil
 	})
 
-	It("sends the email with the shop link", func() {
-		Expect(welcome(fakeWelcomeStore{user: domain.User{ID: 3, Email: "ann@example.com"}}, mail)).To(Succeed())
-		Expect(mail.sent).To(HaveLen(1))
-		Expect(mail.sent[0].To).To(Equal("ann@example.com"))
-		Expect(mail.sent[0].Text).To(ContainSubstring("https://shop.example.com"))
+	Context("when the user exists", func() {
+		BeforeEach(func() {
+			err = welcome(fakeWelcomeStore{user: domain.User{ID: 3, Email: "ann@example.com"}}, mail)
+		})
+
+		It("sends the email with the shop link", func() {
+			Expect(err).To(Succeed())
+			Expect(mail.sent).To(HaveLen(1))
+			Expect(mail.sent[0].To).To(Equal("ann@example.com"))
+			Expect(mail.sent[0].Text).To(ContainSubstring("https://shop.example.com"))
+		})
 	})
 
-	It("retries a send failure", func() {
-		boom := errors.New("connection refused")
-		mail.err = boom
-		err := welcome(fakeWelcomeStore{user: domain.User{ID: 3, Email: "a@example.com"}}, mail)
-		Expect(err).To(MatchError(boom))
-		Expect(errors.As(err, &cancel)).To(BeFalse())
+	Context("when sending fails", func() {
+		var boom error
+
+		BeforeEach(func() {
+			boom = errors.New("connection refused")
+			mail.err = boom
+			err = welcome(fakeWelcomeStore{user: domain.User{ID: 3, Email: "a@example.com"}}, mail)
+		})
+
+		It("returns the error so the job is retried", func() {
+			Expect(err).To(MatchError(boom))
+			Expect(errors.As(err, &cancel)).To(BeFalse())
+		})
 	})
 
-	It("cancels for a gone user", func() {
-		err := welcome(fakeWelcomeStore{err: domain.ErrNotFound}, mail)
-		Expect(errors.As(err, &cancel)).To(BeTrue())
-		Expect(mail.sent).To(BeEmpty())
+	Context("when the user is gone", func() {
+		BeforeEach(func() {
+			err = welcome(fakeWelcomeStore{err: domain.ErrNotFound}, mail)
+		})
+
+		It("cancels without sending", func() {
+			Expect(errors.As(err, &cancel)).To(BeTrue())
+			Expect(mail.sent).To(BeEmpty())
+		})
 	})
 })

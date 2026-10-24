@@ -54,18 +54,36 @@ var _ = Describe("Calculate", func() {
 			}, nil, int64(760), 2),
 	)
 
-	It("treats an unknown kind as invalid", func() {
-		_, err := pricing.Calculate(1000, []domain.PriceRule{rule(1, "Mystery", "no_such_kind", map[string]any{})}, nil)
-		Expect(err).To(MatchError(domain.ErrInvalid))
+	Context("with a rule of an unknown kind", func() {
+		var rules []domain.PriceRule
+
+		BeforeEach(func() {
+			rules = []domain.PriceRule{rule(1, "Mystery", "no_such_kind", map[string]any{})}
+		})
+
+		It("treats it as invalid", func() {
+			_, err := pricing.Calculate(1000, rules, nil)
+			Expect(err).To(MatchError(domain.ErrInvalid))
+		})
 	})
 })
 
 var _ = Describe("Result", func() {
-	It("reports the savings", func() {
-		result, err := pricing.Calculate(1000, []domain.PriceRule{rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 25})}, nil)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.TotalSavingsCents()).To(BeEquivalentTo(250))
-		Expect(result.SavingsPercentage()).To(BeNumerically("==", 25))
+	var (
+		result *pricing.Result
+		err    error
+	)
+
+	Context("after a 25% discount on 1000 cents", func() {
+		BeforeEach(func() {
+			result, err = pricing.Calculate(1000, []domain.PriceRule{rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 25})}, nil)
+		})
+
+		It("reports the savings", func() {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.TotalSavingsCents()).To(BeEquivalentTo(250))
+			Expect(result.SavingsPercentage()).To(BeNumerically("==", 25))
+		})
 	})
 })
 

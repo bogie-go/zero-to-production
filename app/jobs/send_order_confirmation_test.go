@@ -71,6 +71,7 @@ var _ = Describe("SendOrderConfirmationWorker", func() {
 		store  *fakeConfirmationStore
 		mail   *fakeSender
 		cancel *rivertype.JobCancelError
+		err    error
 	)
 
 	BeforeEach(func() {
@@ -78,41 +79,72 @@ var _ = Describe("SendOrderConfirmationWorker", func() {
 		cancel = nil
 	})
 
-	It("sends the confirmation", func() {
-		Expect(work(store, mail)).To(Succeed())
-		Expect(mail.sent).To(HaveLen(1))
-		Expect(mail.sent[0].To).To(Equal("ann@example.com"))
-		Expect(mail.sent[0].Subject).To(ContainSubstring("#7"))
-		Expect(store.gotUserID).To(BeEquivalentTo(3))
-		Expect(store.gotOrderID).To(Equal("7"))
+	Context("when the order and user exist", func() {
+		BeforeEach(func() {
+			err = work(store, mail)
+		})
+
+		It("sends the confirmation", func() {
+			Expect(err).To(Succeed())
+			Expect(mail.sent).To(HaveLen(1))
+			Expect(mail.sent[0].To).To(Equal("ann@example.com"))
+			Expect(mail.sent[0].Subject).To(ContainSubstring("#7"))
+			Expect(store.gotUserID).To(BeEquivalentTo(3))
+			Expect(store.gotOrderID).To(Equal("7"))
+		})
 	})
 
 	// A mail server that is down is River's to retry: the error comes back as is.
-	It("returns a send failure so River retries", func() {
-		boom := errors.New("connection refused")
-		mail.err = boom
-		err := work(store, mail)
-		Expect(err).To(MatchError(boom))
-		Expect(errors.As(err, &cancel)).To(BeFalse(), "a send failure cancelled the job; it should be retried")
+	Context("when the mail server is down", func() {
+		var boom error
+
+		BeforeEach(func() {
+			boom = errors.New("connection refused")
+			mail.err = boom
+			err = work(store, mail)
+		})
+
+		It("returns the send failure so River retries", func() {
+			Expect(err).To(MatchError(boom))
+			Expect(errors.As(err, &cancel)).To(BeFalse(), "a send failure cancelled the job; it should be retried")
+		})
 	})
 
 	// An order that is gone can never be emailed: cancel, do not retry 25 times.
-	DescribeTable("cancels when the order or user is gone",
-		func(break_ func(*fakeConfirmationStore)) {
-			break_(store)
-			err := work(store, mail)
+	Context("when the order is gone", func() {
+		BeforeEach(func() {
+			store.orderErr = domain.ErrNotFound
+			err = work(store, mail)
+		})
+
+		It("cancels without sending", func() {
 			Expect(errors.As(err, &cancel)).To(BeTrue(), "err = %v, want a cancel", err)
 			Expect(mail.sent).To(BeEmpty())
-		},
-		Entry("order gone", func(s *fakeConfirmationStore) { s.orderErr = domain.ErrNotFound }),
-		Entry("user gone", func(s *fakeConfirmationStore) { s.userErr = domain.ErrNotFound }),
-	)
+		})
+	})
+
+	Context("when the user is gone", func() {
+		BeforeEach(func() {
+			store.userErr = domain.ErrNotFound
+			err = work(store, mail)
+		})
+
+		It("cancels without sending", func() {
+			Expect(errors.As(err, &cancel)).To(BeTrue(), "err = %v, want a cancel", err)
+			Expect(mail.sent).To(BeEmpty())
+		})
+	})
 
 	// Any other store error is transient: retried, not cancelled.
-	It("retries on a database error", func() {
-		store.userErr = errors.New("database is restarting")
-		err := work(store, mail)
-		Expect(err).To(HaveOccurred())
-		Expect(errors.As(err, &cancel)).To(BeFalse())
+	Context("with a database error", func() {
+		BeforeEach(func() {
+			store.userErr = errors.New("database is restarting")
+			err = work(store, mail)
+		})
+
+		It("retries instead of cancelling", func() {
+			Expect(err).To(HaveOccurred())
+			Expect(errors.As(err, &cancel)).To(BeFalse())
+		})
 	})
 })

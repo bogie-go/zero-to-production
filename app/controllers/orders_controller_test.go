@@ -14,6 +14,9 @@ import (
 )
 
 var _ = Describe("POST /orders", func() {
+	var product domain.Product
+	var user domain.User
+
 	It("needs a token to check out", func() {
 		app.Post("/orders", nil).Do().Status(http.StatusUnauthorized)
 	})
@@ -22,10 +25,7 @@ var _ = Describe("POST /orders", func() {
 		app.Post("/orders", nil).AsGuest("someone").Do().Status(http.StatusForbidden)
 	})
 
-	When("the stock is taken between adding to the cart and paying", func() {
-		var product domain.Product
-		var user domain.User
-
+	Context("when the stock is taken between adding to the cart and paying", func() {
 		BeforeEach(func() {
 			product = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.Stock = 5 })
 			user = factories.User(GinkgoT(), app.Store)
@@ -51,16 +51,29 @@ var _ = Describe("POST /orders", func() {
 })
 
 var _ = Describe("GET /orders/:id", func() {
-	It("shows a customer only their own orders", func() {
-		product := factories.Product(GinkgoT(), app.Store)
-		ada, grace := factories.User(GinkgoT(), app.Store), factories.User(GinkgoT(), app.Store)
-		app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 1}).AsUser(ada).Do().Status(http.StatusCreated)
-		var order views.OrderResponse
-		app.Post("/orders", nil).AsUser(ada).Do().Status(http.StatusCreated).JSON(&order)
-		path := "/orders/" + strconv.FormatInt(order.ID, 10)
+	var ada, grace domain.User
+	var path string
 
-		app.Get(path).AsUser(ada).Do().Status(http.StatusOK)
-		app.Get(path).AsUser(grace).Do().Status(http.StatusNotFound)
-		app.Get("/orders").Do().Status(http.StatusUnauthorized)
+	Context("with an order placed by a customer", func() {
+		BeforeEach(func() {
+			product := factories.Product(GinkgoT(), app.Store)
+			ada, grace = factories.User(GinkgoT(), app.Store), factories.User(GinkgoT(), app.Store)
+			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 1}).AsUser(ada).Do().Status(http.StatusCreated)
+			var order views.OrderResponse
+			app.Post("/orders", nil).AsUser(ada).Do().Status(http.StatusCreated).JSON(&order)
+			path = "/orders/" + strconv.FormatInt(order.ID, 10)
+		})
+
+		It("shows the order to its customer", func() {
+			app.Get(path).AsUser(ada).Do().Status(http.StatusOK)
+		})
+
+		It("hides the order from another customer", func() {
+			app.Get(path).AsUser(grace).Do().Status(http.StatusNotFound)
+		})
+
+		It("needs a token to list orders", func() {
+			app.Get("/orders").Do().Status(http.StatusUnauthorized)
+		})
 	})
 })

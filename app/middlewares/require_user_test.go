@@ -29,7 +29,10 @@ func userRequest(authorization string) *httptest.ResponseRecorder {
 }
 
 var _ = Describe("RequireUser", func() {
-	var good, expired string
+	var (
+		good, expired string
+		rec           *httptest.ResponseRecorder
+	)
 
 	BeforeEach(func() {
 		var err error
@@ -39,10 +42,15 @@ var _ = Describe("RequireUser", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("lets a good token through with its subject", func() {
-		rec := userRequest("Bearer " + good)
-		Expect(rec.Code).To(Equal(http.StatusOK))
-		Expect(rec.Body.String()).To(Equal("user-42"))
+	Context("with a good token", func() {
+		BeforeEach(func() {
+			rec = userRequest("Bearer " + good)
+		})
+
+		It("lets the request through with its subject", func() {
+			Expect(rec.Code).To(Equal(http.StatusOK))
+			Expect(rec.Body.String()).To(Equal("user-42"))
+		})
 	})
 
 	DescribeTable("answers 401",

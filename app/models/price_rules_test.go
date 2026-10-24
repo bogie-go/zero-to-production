@@ -40,38 +40,60 @@ var _ = Describe("Price rules", func() {
 	Describe("listing", func() {
 		// The admin's list is every rule in the order the engine runs them,
 		// active or not; the cart's own list is only the active ones.
-		It("gives the admin all rules and the cart the active ones, by priority", func() {
-			factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) { r.Name = "second"; r.Priority = 20 })
-			factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) { r.Name = "off"; r.Priority = 5; r.Active = false })
-			factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) { r.Name = "first"; r.Priority = 10 })
+		Context("with a second, an off and a first rule", func() {
+			BeforeEach(func() {
+				factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) { r.Name = "second"; r.Priority = 20 })
+				factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) { r.Name = "off"; r.Priority = 5; r.Active = false })
+				factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) { r.Name = "first"; r.Priority = 10 })
+			})
 
-			all, err := store.ListAllPriceRules(GinkgoT().Context())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ruleNames(all)).To(Equal([]string{"off", "first", "second"}))
+			It("gives the admin all rules, by priority", func() {
+				all, err := store.ListAllPriceRules(GinkgoT().Context())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ruleNames(all)).To(Equal([]string{"off", "first", "second"}))
+			})
 
-			active, err := store.ListActivePriceRules(GinkgoT().Context())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ruleNames(active)).To(Equal([]string{"first", "second"}))
+			It("gives the cart the active ones, by priority", func() {
+				active, err := store.ListActivePriceRules(GinkgoT().Context())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ruleNames(active)).To(Equal([]string{"first", "second"}))
+			})
 		})
 	})
 
 	Describe("switching on and off", func() {
 		// Switching a rule off changes nothing but whether it applies: the very
 		// next read of the active rules no longer has it.
-		It("takes effect on the next read", func() {
-			ctx := GinkgoT().Context()
-			rule := factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) { r.Name = "Sale" })
-			id := strconv.FormatInt(rule.ID, 10)
+		Context("with a rule named Sale", func() {
+			var id string
 
-			off, err := store.SetPriceRuleActive(ctx, id, false)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(off.Active).To(BeFalse())
-			Expect(off.Name).To(Equal("Sale"))
-			Expect(store.ListActivePriceRules(ctx)).To(BeEmpty())
+			BeforeEach(func() {
+				rule := factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) { r.Name = "Sale" })
+				id = strconv.FormatInt(rule.ID, 10)
+			})
 
-			_, err = store.SetPriceRuleActive(ctx, id, true)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(store.ListActivePriceRules(ctx)).To(HaveLen(1))
+			It("takes effect on the next read when switched off", func() {
+				ctx := GinkgoT().Context()
+				off, err := store.SetPriceRuleActive(ctx, id, false)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(off.Active).To(BeFalse())
+				Expect(off.Name).To(Equal("Sale"))
+				Expect(store.ListActivePriceRules(ctx)).To(BeEmpty())
+			})
+
+			Context("when it was switched off", func() {
+				BeforeEach(func() {
+					_, err := store.SetPriceRuleActive(GinkgoT().Context(), id, false)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("takes effect on the next read when switched on again", func() {
+					ctx := GinkgoT().Context()
+					_, err := store.SetPriceRuleActive(ctx, id, true)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(store.ListActivePriceRules(ctx)).To(HaveLen(1))
+				})
+			})
 		})
 
 		It("is not found for an unknown rule", func() {
@@ -100,26 +122,30 @@ var _ = Describe("Price rules", func() {
 	// The cart's rules are the active ones inside their dates: a rule that has
 	// not started, or has ended, is left out even though it is switched on.
 	Describe("the active rules and their dates", func() {
-		It("leaves out rules outside their window", func() {
-			hour := time.Hour
-			past, future := time.Now().Add(-48*hour), time.Now().Add(48*hour)
-			earlier, later := time.Now().Add(-24*hour), time.Now().Add(24*hour)
-			rule := func(name string, priority int32, starts, ends *time.Time) {
-				factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) {
-					r.Name, r.Priority, r.StartsAt, r.EndsAt = name, priority, starts, ends
-				})
-			}
-			rule("no dates", 10, nil, nil)
-			rule("inside its window", 20, &past, &future)
-			rule("started, no end", 30, &earlier, nil)
-			rule("ends later, no start", 40, nil, &later)
-			rule("not started yet", 50, &later, &future)
-			rule("already ended", 60, &past, &earlier)
-			rule("ended, no start", 70, nil, &earlier)
+		Context("with rules inside and outside their windows", func() {
+			BeforeEach(func() {
+				hour := time.Hour
+				past, future := time.Now().Add(-48*hour), time.Now().Add(48*hour)
+				earlier, later := time.Now().Add(-24*hour), time.Now().Add(24*hour)
+				rule := func(name string, priority int32, starts, ends *time.Time) {
+					factories.PriceRule(GinkgoT(), store, func(r *domain.PriceRule) {
+						r.Name, r.Priority, r.StartsAt, r.EndsAt = name, priority, starts, ends
+					})
+				}
+				rule("no dates", 10, nil, nil)
+				rule("inside its window", 20, &past, &future)
+				rule("started, no end", 30, &earlier, nil)
+				rule("ends later, no start", 40, nil, &later)
+				rule("not started yet", 50, &later, &future)
+				rule("already ended", 60, &past, &earlier)
+				rule("ended, no start", 70, nil, &earlier)
+			})
 
-			active, err := store.ListActivePriceRules(GinkgoT().Context())
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ruleNames(active)).To(Equal([]string{"no dates", "inside its window", "started, no end", "ends later, no start"}))
+			It("leaves out rules outside their window", func() {
+				active, err := store.ListActivePriceRules(GinkgoT().Context())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ruleNames(active)).To(Equal([]string{"no dates", "inside its window", "started, no end", "ends later, no start"}))
+			})
 		})
 	})
 })

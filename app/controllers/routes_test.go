@@ -58,8 +58,8 @@ var _ = Describe("the server's routes", func() {
 	// public/index.html now answers / in every environment before welcome ever
 	// gets a turn — the same way a real route at / retires it.
 	Describe("the welcome page", func() {
-		call := func(env string) *httptest.ResponseRecorder {
-			s := testServer(env)
+		var s *controllers.Server
+		call := func() *httptest.ResponseRecorder {
 			rec := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(rec)
 			c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
@@ -67,23 +67,38 @@ var _ = Describe("the server's routes", func() {
 			return rec
 		}
 
-		It("greets in development", func() {
-			Expect(call(config.EnvDevelopment).Body.String()).To(ContainSubstring("is running"))
+		Context("in development", func() {
+			BeforeEach(func() {
+				s = testServer(config.EnvDevelopment)
+			})
+
+			It("greets", func() {
+				Expect(call().Body.String()).To(ContainSubstring("is running"))
+			})
+
+			It("leaves an unknown path a 404: nothing in public/ answers it either", func() {
+				Expect(get(s, "/nothing-here").Code).To(Equal(http.StatusNotFound))
+			})
+
+			Context("with a real route at /", func() {
+				BeforeEach(func() {
+					s.Router.GET("/", func(c *gin.Context) { c.String(http.StatusOK, "mine") })
+				})
+
+				It("replaces the welcome page", func() {
+					Expect(get(s, "/").Body.String()).To(Equal("mine"))
+				})
+			})
 		})
 
-		It("writes nothing in production", func() {
-			Expect(call(config.EnvProduction).Body.Len()).To(BeZero())
-		})
+		Context("in production", func() {
+			BeforeEach(func() {
+				s = testServer(config.EnvProduction)
+			})
 
-		It("leaves an unknown path a 404 in development: nothing in public/ answers it either", func() {
-			Expect(get(testServer(config.EnvDevelopment), "/nothing-here").Code).To(Equal(http.StatusNotFound))
-		})
-
-		It("is replaced by a real route at /", func() {
-			s := testServer(config.EnvDevelopment)
-			s.Router.GET("/", func(c *gin.Context) { c.String(http.StatusOK, "mine") })
-
-			Expect(get(s, "/").Body.String()).To(Equal("mine"))
+			It("writes nothing", func() {
+				Expect(call().Body.Len()).To(BeZero())
+			})
 		})
 	})
 
@@ -149,26 +164,28 @@ var _ = Describe("the server's routes", func() {
 		Describe("folders", func() {
 			var s *controllers.Server
 
-			BeforeEach(func() {
-				s = testServer(config.EnvProduction)
-			})
+			Context("in production", func() {
+				BeforeEach(func() {
+					s = testServer(config.EnvProduction)
+				})
 
-			It("redirects to the trailing slash", func() {
-				rec := get(s, "/admin")
+				It("redirects to the trailing slash", func() {
+					rec := get(s, "/admin")
 
-				Expect(rec.Code).To(Equal(http.StatusMovedPermanently))
-				Expect(rec.Header().Get("Location")).To(Equal("/admin/"))
-			})
+					Expect(rec.Code).To(Equal(http.StatusMovedPermanently))
+					Expect(rec.Header().Get("Location")).To(Equal("/admin/"))
+				})
 
-			It("serves the folder's index.html", func() {
-				rec := get(s, "/admin/")
+				It("serves the folder's index.html", func() {
+					rec := get(s, "/admin/")
 
-				Expect(rec.Code).To(Equal(http.StatusOK))
-				Expect(rec.Body.String()).To(ContainSubstring("<title>Admin</title>"))
-			})
+					Expect(rec.Code).To(Equal(http.StatusOK))
+					Expect(rec.Body.String()).To(ContainSubstring("<title>Admin</title>"))
+				})
 
-			It("is not found when there is no index.html", func() {
-				Expect(get(s, "/images").Code).To(Equal(http.StatusNotFound))
+				It("is not found when there is no index.html", func() {
+					Expect(get(s, "/images").Code).To(Equal(http.StatusNotFound))
+				})
 			})
 		})
 	})
@@ -188,13 +205,19 @@ var _ = Describe("the server's routes", func() {
 
 	// A panicking handler gets public/500.html from middlewares.Recover, not a
 	// bare status with no body.
-	It("serves the 500 page for a recovered panic", func() {
-		s := testServer(config.EnvTest)
-		s.Router.GET("/boom", func(c *gin.Context) { panic("boom") })
+	Context("with a handler that panics", func() {
+		var s *controllers.Server
 
-		rec := get(s, "/boom")
+		BeforeEach(func() {
+			s = testServer(config.EnvTest)
+			s.Router.GET("/boom", func(c *gin.Context) { panic("boom") })
+		})
 
-		Expect(rec.Code).To(Equal(http.StatusInternalServerError))
-		Expect(rec.Body.String()).To(ContainSubstring("500 Internal Server Error"))
+		It("serves the 500 page for a recovered panic", func() {
+			rec := get(s, "/boom")
+
+			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
+			Expect(rec.Body.String()).To(ContainSubstring("500 Internal Server Error"))
+		})
 	})
 })

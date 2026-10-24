@@ -102,62 +102,77 @@ func parse(raw string) *mail.Message {
 }
 
 var _ = Describe("Mailer.Send", func() {
-	var srv *fakeSMTP
+	var (
+		srv *fakeSMTP
+		msg mailer.Message
+	)
 
-	When("the server accepts the message", func() {
+	Context("when the server accepts the message", func() {
 		BeforeEach(func() {
 			srv = startFakeSMTP("")
 		})
 
-		It("delivers a text message", func() {
-			err := newTestMailer(srv.addr).Send(context.Background(), mailer.Message{
-				To: "Ann <ann@example.com>", Subject: "Order #7 — thanks", Text: "Hello Ann,\nYour order is placed. ฿100\n",
+		Context("with a text message", func() {
+			BeforeEach(func() {
+				msg = mailer.Message{
+					To: "Ann <ann@example.com>", Subject: "Order #7 — thanks", Text: "Hello Ann,\nYour order is placed. ฿100\n",
+				}
 			})
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(srv.done).Should(BeClosed())
 
-			Expect(srv.from).To(Equal("shop@example.com"), "bare envelope sender")
-			Expect(srv.to).To(Equal("ann@example.com"), "bare envelope recipient")
+			It("delivers a text message", func() {
+				err := newTestMailer(srv.addr).Send(context.Background(), msg)
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(srv.done).Should(BeClosed())
 
-			msg := parse(srv.data)
-			subject, _ := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
-			Expect(subject).To(Equal("Order #7 — thanks"))
-			Expect(msg.Header.Get("To")).To(BeElementOf(`"Ann" <ann@example.com>`, "Ann <ann@example.com>"))
-			Expect(msg.Header.Get("Message-ID")).NotTo(BeEmpty())
-			Expect(msg.Header.Get("Date")).NotTo(BeEmpty())
+				Expect(srv.from).To(Equal("shop@example.com"), "bare envelope sender")
+				Expect(srv.to).To(Equal("ann@example.com"), "bare envelope recipient")
 
-			body, _ := io.ReadAll(quotedprintable.NewReader(msg.Body))
-			Expect(string(body)).To(ContainSubstring("฿100"), "the UTF-8 text is intact")
+				parsed := parse(srv.data)
+				subject, _ := new(mime.WordDecoder).DecodeHeader(parsed.Header.Get("Subject"))
+				Expect(subject).To(Equal("Order #7 — thanks"))
+				Expect(parsed.Header.Get("To")).To(BeElementOf(`"Ann" <ann@example.com>`, "Ann <ann@example.com>"))
+				Expect(parsed.Header.Get("Message-ID")).NotTo(BeEmpty())
+				Expect(parsed.Header.Get("Date")).NotTo(BeEmpty())
+
+				body, _ := io.ReadAll(quotedprintable.NewReader(parsed.Body))
+				Expect(string(body)).To(ContainSubstring("฿100"), "the UTF-8 text is intact")
+			})
 		})
 
-		It("delivers an HTML alternative after the plain text", func() {
-			err := newTestMailer(srv.addr).Send(context.Background(), mailer.Message{
-				To: "ann@example.com", Subject: "Hi", Text: "plain version", HTML: "<p>html version</p>",
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(srv.done).Should(BeClosed())
-
-			msg := parse(srv.data)
-			typ, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(typ).To(Equal("multipart/alternative"))
-
-			mr := multipart.NewReader(msg.Body, params["boundary"])
-			var kinds []string
-			for {
-				p, err := mr.NextPart()
-				if err != nil {
-					break
+		Context("with text and HTML", func() {
+			BeforeEach(func() {
+				msg = mailer.Message{
+					To: "ann@example.com", Subject: "Hi", Text: "plain version", HTML: "<p>html version</p>",
 				}
-				kinds = append(kinds, strings.SplitN(p.Header.Get("Content-Type"), ";", 2)[0])
-			}
-			Expect(kinds).To(Equal([]string{"text/plain", "text/html"}))
+			})
+
+			It("delivers an HTML alternative after the plain text", func() {
+				err := newTestMailer(srv.addr).Send(context.Background(), msg)
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(srv.done).Should(BeClosed())
+
+				parsed := parse(srv.data)
+				typ, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(typ).To(Equal("multipart/alternative"))
+
+				mr := multipart.NewReader(parsed.Body, params["boundary"])
+				var kinds []string
+				for {
+					p, err := mr.NextPart()
+					if err != nil {
+						break
+					}
+					kinds = append(kinds, strings.SplitN(p.Header.Get("Content-Type"), ";", 2)[0])
+				}
+				Expect(kinds).To(Equal([]string{"text/plain", "text/html"}))
+			})
 		})
 
 		// Nothing in a Message may add a header or a recipient of its own.
 		DescribeTable("refuses injection and bad input",
-			func(msg mailer.Message) {
-				Expect(newTestMailer(srv.addr).Send(context.Background(), msg)).NotTo(Succeed())
+			func(bad mailer.Message) {
+				Expect(newTestMailer(srv.addr).Send(context.Background(), bad)).NotTo(Succeed())
 				Expect(srv.data).To(BeEmpty(), "the server received nothing")
 			},
 			Entry("subject with a line break", mailer.Message{To: "a@example.com", Subject: "Hi\r\nBcc: evil@example.com", Text: "x"}),
@@ -167,25 +182,31 @@ var _ = Describe("Mailer.Send", func() {
 		)
 	})
 
-	When("the server rejects the recipient", func() {
+	Context("when the server rejects the recipient", func() {
 		BeforeEach(func() {
 			srv = startFakeSMTP("gone@example.com")
+			msg = mailer.Message{To: "gone@example.com", Subject: "Hi", Text: "x"}
 		})
 
 		It("surfaces the server's 550", func() {
-			err := newTestMailer(srv.addr).Send(context.Background(), mailer.Message{To: "gone@example.com", Subject: "Hi", Text: "x"})
+			err := newTestMailer(srv.addr).Send(context.Background(), msg)
 			Expect(err).To(MatchError(ContainSubstring("550")))
 		})
 	})
 
-	When("the server is unreachable", func() {
-		It("reports a connect error", func() {
+	Context("when the server is unreachable", func() {
+		var addr string
+
+		BeforeEach(func() {
 			ln, err := net.Listen("tcp", "127.0.0.1:0")
 			Expect(err).NotTo(HaveOccurred())
-			addr := ln.Addr().String()
+			addr = ln.Addr().String()
 			Expect(ln.Close()).To(Succeed()) // nothing listens here now
+			msg = mailer.Message{To: "a@example.com", Subject: "Hi", Text: "x"}
+		})
 
-			err = newTestMailer(addr).Send(context.Background(), mailer.Message{To: "a@example.com", Subject: "Hi", Text: "x"})
+		It("reports a connect error", func() {
+			err := newTestMailer(addr).Send(context.Background(), msg)
 			Expect(err).To(MatchError(ContainSubstring("connect")))
 		})
 	})

@@ -30,29 +30,51 @@ var _ = Describe("Users", func() {
 		Expect(err).To(MatchError(domain.ErrNotFound))
 	})
 
-	It("is created, read, listed, updated and deleted", func() {
-		ctx := GinkgoT().Context()
-		digest, err := password.Hash("correct-horse-battery-staple")
-		Expect(err).NotTo(HaveOccurred())
+	Describe("CreateUser", func() {
+		It("creates a user", func() {
+			digest, err := password.Hash("correct-horse-battery-staple")
+			Expect(err).NotTo(HaveOccurred())
 
-		created, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: digest, Role: domain.RoleCustomer})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(created.ID).NotTo(BeZero())
-		id := strconv.FormatInt(created.ID, 10)
+			created, err := store.CreateUser(GinkgoT().Context(), domain.User{Email: "a@example.com", PasswordDigest: digest, Role: domain.RoleCustomer})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.ID).NotTo(BeZero())
+		})
+	})
 
-		Expect(store.GetUser(ctx, id)).To(Equal(created))
-		all, err := store.ListUsers(ctx, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(all).To(HaveLen(1))
-		Expect(all[0].ID).To(Equal(created.ID))
+	Context("with a created user", func() {
+		var created domain.User
+		var id string
 
-		created.Email = "b@example.com"
-		updated, err := store.UpdateUser(ctx, created)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(updated.Email).To(Equal("b@example.com"))
+		BeforeEach(func() {
+			digest, err := password.Hash("correct-horse-battery-staple")
+			Expect(err).NotTo(HaveOccurred())
+			created, err = store.CreateUser(GinkgoT().Context(), domain.User{Email: "a@example.com", PasswordDigest: digest, Role: domain.RoleCustomer})
+			Expect(err).NotTo(HaveOccurred())
+			id = strconv.FormatInt(created.ID, 10)
+		})
 
-		Expect(store.DeleteUser(ctx, id)).To(Succeed())
-		_, err = store.GetUser(ctx, id)
-		Expect(err).To(MatchError(domain.ErrNotFound))
+		It("reads it", func() {
+			Expect(store.GetUser(GinkgoT().Context(), id)).To(Equal(created))
+		})
+
+		It("lists it", func() {
+			all, err := store.ListUsers(GinkgoT().Context(), 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(all).To(HaveLen(1))
+			Expect(all[0].ID).To(Equal(created.ID))
+		})
+
+		It("updates it", func() {
+			created.Email = "b@example.com"
+			updated, err := store.UpdateUser(GinkgoT().Context(), created)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.Email).To(Equal("b@example.com"))
+		})
+
+		It("deletes it", func() {
+			Expect(store.DeleteUser(GinkgoT().Context(), id)).To(Succeed())
+			_, err := store.GetUser(GinkgoT().Context(), id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+		})
 	})
 })

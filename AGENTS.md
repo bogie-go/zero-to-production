@@ -475,6 +475,29 @@ Tests are **Ginkgo and Gomega** (`Describe`/`Context`/`It`, `Expect`), in extern
 the store, domain and service tests below it cover the edge cases the request
 test would make tedious.
 
+**How a spec reads.** `Describe` says what is under test; `Context` says the
+situation, and is followed straight away by the `BeforeEach` that creates it;
+`It` states one behavior and only acts and asserts.
+
+```go
+Describe("POST /sessions", func() {
+    var user domain.User
+
+    Context("when the user exists", func() {
+        BeforeEach(func() {
+            user = factories.User(GinkgoT(), app.Store)
+        })
+
+        It("logs in with the right password", func() { ... })
+        It("answers 401 for a wrong password", func() { ... })
+    })
+
+    Context("when the email is unknown", func() {
+        It("answers 401, as it does for a wrong password", func() { ... })
+    })
+})
+```
+
 - A **request test** (beside the controller, in `package controllers_test`) sends HTTP through the real `Server`:
   its router, middleware, controllers and store, wired exactly as `serve`
   wires them, on the test database. Arrange with factories, assert on status

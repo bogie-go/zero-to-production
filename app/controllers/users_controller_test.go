@@ -14,23 +14,31 @@ import (
 var _ = Describe("POST /users", func() {
 	creds := views.SignupRequest{Email: "ada@example.com", Password: "correct-horse-battery"}
 
-	It("signs up, logs in and says who you are", func() {
+	It("signs up", func() {
 		app.Post("/users", creds).Do().Status(http.StatusCreated)
-
-		var login views.SessionResponse
-		app.Post("/sessions", views.LoginRequest(creds)).Do().Status(http.StatusOK).JSON(&login)
-		Expect(login.Token).NotTo(BeEmpty())
-		Expect(app.Jobs("send_sign_in_alert")).To(Equal(1))
-
-		var me views.MeResponse
-		app.Get("/me").WithAuthorization("Bearer " + login.Token).Do().Status(http.StatusOK).JSON(&me)
-		Expect(me.Email).To(Equal("ada@example.com"))
-		Expect(me.Role).To(Equal(domain.RoleCustomer))
 	})
 
 	Context("with an account already signed up", func() {
 		BeforeEach(func() {
 			app.Post("/users", creds).Do().Status(http.StatusCreated)
+		})
+
+		It("logs in", func() {
+			var login views.SessionResponse
+			app.Post("/sessions", views.LoginRequest(creds)).Do().Status(http.StatusOK).JSON(&login)
+
+			Expect(login.Token).NotTo(BeEmpty())
+			Expect(app.Jobs("send_sign_in_alert")).To(Equal(1))
+		})
+
+		It("says who you are once logged in", func() {
+			var login views.SessionResponse
+			app.Post("/sessions", views.LoginRequest(creds)).Do().Status(http.StatusOK).JSON(&login)
+
+			var me views.MeResponse
+			app.Get("/me").WithAuthorization("Bearer " + login.Token).Do().Status(http.StatusOK).JSON(&me)
+			Expect(me.Email).To(Equal("ada@example.com"))
+			Expect(me.Role).To(Equal(domain.RoleCustomer))
 		})
 
 		It("refuses a taken email", func() {
@@ -59,19 +67,24 @@ var _ = Describe("POST /users", func() {
 		app.Post("/users", creds).WithAuthorization("Bearer not-a-real-token").Do().Status(http.StatusCreated)
 	})
 
-	It("merges the guest's cart into the new account", func() {
-		product := factories.Product(GinkgoT(), app.Store)
+	Context("with a guest who filled a cart with two of a product", func() {
 		var guest views.GuestSessionResponse
-		app.Post("/guest_sessions", nil).Do().Status(http.StatusCreated).JSON(&guest)
-		app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 2}).
-			WithAuthorization("Bearer " + guest.Token).Do().Status(http.StatusCreated)
 
-		var session views.SessionResponse
-		app.Post("/users", creds).WithAuthorization("Bearer " + guest.Token).Do().Status(http.StatusCreated).JSON(&session)
+		BeforeEach(func() {
+			product := factories.Product(GinkgoT(), app.Store)
+			app.Post("/guest_sessions", nil).Do().Status(http.StatusCreated).JSON(&guest)
+			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 2}).
+				WithAuthorization("Bearer " + guest.Token).Do().Status(http.StatusCreated)
+		})
 
-		var cart views.CartResponse
-		app.Get("/cart").WithAuthorization("Bearer " + session.Token).Do().Status(http.StatusOK).JSON(&cart)
-		Expect(cart.Items).To(HaveLen(1))
-		Expect(cart.Items[0].Quantity).To(BeEquivalentTo(2))
+		It("merges the guest's cart into the new account", func() {
+			var session views.SessionResponse
+			app.Post("/users", creds).WithAuthorization("Bearer " + guest.Token).Do().Status(http.StatusCreated).JSON(&session)
+
+			var cart views.CartResponse
+			app.Get("/cart").WithAuthorization("Bearer " + session.Token).Do().Status(http.StatusOK).JSON(&cart)
+			Expect(cart.Items).To(HaveLen(1))
+			Expect(cart.Items[0].Quantity).To(BeEquivalentTo(2))
+		})
 	})
 })

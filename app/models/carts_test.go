@@ -29,27 +29,47 @@ var _ = Describe("Carts", func() {
 		Expect(err).To(MatchError(domain.ErrNotFound))
 	})
 
-	It("is created, read, listed, updated and deleted", func() {
-		ctx := GinkgoT().Context()
+	Describe("CreateCart", func() {
+		It("creates a cart", func() {
+			created, err := store.CreateCart(GinkgoT().Context(), domain.Cart{Token: "visitor-1"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.ID).NotTo(BeZero())
+		})
+	})
 
-		created, err := store.CreateCart(ctx, domain.Cart{Token: "visitor-1"})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(created.ID).NotTo(BeZero())
-		id := strconv.FormatInt(created.ID, 10)
+	Context("with a created cart", func() {
+		var created domain.Cart
+		var id string
 
-		Expect(store.GetCart(ctx, id)).To(Equal(created))
-		all, err := store.ListCarts(ctx, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(all).To(HaveLen(1))
-		Expect(all[0].ID).To(Equal(created.ID))
+		BeforeEach(func() {
+			var err error
+			created, err = store.CreateCart(GinkgoT().Context(), domain.Cart{Token: "visitor-1"})
+			Expect(err).NotTo(HaveOccurred())
+			id = strconv.FormatInt(created.ID, 10)
+		})
 
-		created.Token = "visitor-2"
-		updated, err := store.UpdateCart(ctx, created)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(updated.Token).To(Equal("visitor-2"))
+		It("reads it", func() {
+			Expect(store.GetCart(GinkgoT().Context(), id)).To(Equal(created))
+		})
 
-		Expect(store.DeleteCart(ctx, id)).To(Succeed())
-		_, err = store.GetCart(ctx, id)
-		Expect(err).To(MatchError(domain.ErrNotFound))
+		It("lists it", func() {
+			all, err := store.ListCarts(GinkgoT().Context(), 10)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(all).To(HaveLen(1))
+			Expect(all[0].ID).To(Equal(created.ID))
+		})
+
+		It("updates it", func() {
+			created.Token = "visitor-2"
+			updated, err := store.UpdateCart(GinkgoT().Context(), created)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.Token).To(Equal("visitor-2"))
+		})
+
+		It("deletes it", func() {
+			Expect(store.DeleteCart(GinkgoT().Context(), id)).To(Succeed())
+			_, err := store.GetCart(GinkgoT().Context(), id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+		})
 	})
 })

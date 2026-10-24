@@ -30,30 +30,55 @@ var _ = Describe("Orders", func() {
 		Expect(err).To(MatchError(domain.ErrNotFound))
 	})
 
-	It("is created, read, listed, updated and deleted", func() {
-		ctx := GinkgoT().Context()
-		user := factories.User(GinkgoT(), store)
+	Context("with a user", func() {
+		var user domain.User
+		var order domain.Order
 
-		created, err := store.CreateOrder(ctx, domain.Order{
-			UserID: user.ID, Status: "pending", SubtotalCents: 1000, DiscountCents: 100, TotalCents: 900,
+		BeforeEach(func() {
+			user = factories.User(GinkgoT(), store)
+			order = domain.Order{UserID: user.ID, Status: "pending", SubtotalCents: 1000, DiscountCents: 100, TotalCents: 900}
 		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(created.ID).NotTo(BeZero())
-		id := strconv.FormatInt(created.ID, 10)
 
-		Expect(store.GetOrder(ctx, id)).To(Equal(created))
-		all, err := store.ListOrders(ctx, 10)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(all).To(HaveLen(1))
-		Expect(all[0].ID).To(Equal(created.ID))
+		It("creates an order", func() {
+			created, err := store.CreateOrder(GinkgoT().Context(), order)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.ID).NotTo(BeZero())
+		})
 
-		created.Status = "paid"
-		updated, err := store.UpdateOrder(ctx, created)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(updated.Status).To(Equal("paid"))
+		Context("with a created order", func() {
+			var created domain.Order
+			var id string
 
-		Expect(store.DeleteOrder(ctx, id)).To(Succeed())
-		_, err = store.GetOrder(ctx, id)
-		Expect(err).To(MatchError(domain.ErrNotFound))
+			BeforeEach(func() {
+				var err error
+				created, err = store.CreateOrder(GinkgoT().Context(), order)
+				Expect(err).NotTo(HaveOccurred())
+				id = strconv.FormatInt(created.ID, 10)
+			})
+
+			It("reads it", func() {
+				Expect(store.GetOrder(GinkgoT().Context(), id)).To(Equal(created))
+			})
+
+			It("lists it", func() {
+				all, err := store.ListOrders(GinkgoT().Context(), 10)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(all).To(HaveLen(1))
+				Expect(all[0].ID).To(Equal(created.ID))
+			})
+
+			It("updates it", func() {
+				created.Status = "paid"
+				updated, err := store.UpdateOrder(GinkgoT().Context(), created)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.Status).To(Equal("paid"))
+			})
+
+			It("deletes it", func() {
+				Expect(store.DeleteOrder(GinkgoT().Context(), id)).To(Succeed())
+				_, err := store.GetOrder(GinkgoT().Context(), id)
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
+		})
 	})
 })

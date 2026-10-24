@@ -28,9 +28,16 @@ var _ = Describe("Hash and Check", func() {
 		Expect(password.Check(digest, "wrong-password")).To(BeFalse())
 	})
 
-	It("rejects a short password", func() {
-		_, err := password.Hash("short")
-		Expect(err).To(MatchError(domain.ErrInvalid))
+	Context("with a short password", func() {
+		var hashErr error
+
+		BeforeEach(func() {
+			_, hashErr = password.Hash("short")
+		})
+
+		It("rejects it", func() {
+			Expect(hashErr).To(MatchError(domain.ErrInvalid))
+		})
 	})
 })
 
@@ -41,20 +48,27 @@ var _ = Describe("DummyCheck", func() {
 		Expect(password.DummyCheck("whatever-you-like")).To(BeFalse())
 	})
 
-	It("costs about as much as a real check", func() {
-		digest, err := password.Hash("correct-horse-battery")
-		Expect(err).NotTo(HaveOccurred())
+	Context("with a real digest to compare against", func() {
+		var digest string
 
-		measure := func(f func()) time.Duration {
-			start := time.Now()
-			f()
-			return time.Since(start)
-		}
-		real := measure(func() { password.Check(digest, "wrong-password-here") })
-		dummy := measure(func() { password.DummyCheck("wrong-password-here") })
+		BeforeEach(func() {
+			var err error
+			digest, err = password.Hash("correct-horse-battery")
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-		// Same work, so the same order of magnitude: not a hash-and-compare that
-		// returns at once. (Generous bounds: this is a smoke test, not a benchmark.)
-		Expect(dummy).To(BeNumerically(">=", real/5))
+		It("costs about as much as a real check", func() {
+			measure := func(f func()) time.Duration {
+				start := time.Now()
+				f()
+				return time.Since(start)
+			}
+			real := measure(func() { password.Check(digest, "wrong-password-here") })
+			dummy := measure(func() { password.DummyCheck("wrong-password-here") })
+
+			// Same work, so the same order of magnitude: not a hash-and-compare that
+			// returns at once. (Generous bounds: this is a smoke test, not a benchmark.)
+			Expect(dummy).To(BeNumerically(">=", real/5))
+		})
 	})
 })

@@ -13,31 +13,34 @@ import (
 )
 
 var _ = Describe("GET /products", func() {
+	var page, list views.ProductsResponse
 
-	It("lists products newest first, in pages", func() {
-		for i := 0; i < 5; i++ {
-			factories.Product(GinkgoT(), app.Store)
-		}
+	Context("with five products", func() {
+		BeforeEach(func() {
+			for i := 0; i < 5; i++ {
+				factories.Product(GinkgoT(), app.Store)
+			}
+		})
 
-		var page views.ProductsResponse
-		app.Get("/products?per_page=2&page=3").Do().Status(http.StatusOK).JSON(&page)
+		It("lists products newest first, in pages", func() {
+			app.Get("/products?per_page=2&page=3").Do().Status(http.StatusOK).JSON(&page)
 
-		Expect(page.Products).To(HaveLen(1))
-		Expect(page.Pagination).To(Equal(views.Pagination{Page: 3, PerPage: 2, Total: 5, TotalPages: 3}))
+			Expect(page.Products).To(HaveLen(1))
+			Expect(page.Pagination).To(Equal(views.Pagination{Page: 3, PerPage: 2, Total: 5, TotalPages: 3}))
+		})
 	})
 
 	Context("with a category", func() {
 		var audio domain.Category
+		var inAudio domain.Product
 
 		BeforeEach(func() {
 			audio = factories.Category(GinkgoT(), app.Store)
+			inAudio = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.CategoryID = &audio.ID })
+			factories.Product(GinkgoT(), app.Store)
 		})
 
 		It("lists only that category's products, with its name", func() {
-			inAudio := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.CategoryID = &audio.ID })
-			factories.Product(GinkgoT(), app.Store)
-
-			var list views.ProductsResponse
 			app.Get("/products?category_id=" + strconv.FormatInt(audio.ID, 10)).Do().Status(http.StatusOK).JSON(&list)
 
 			Expect(list.Products).To(HaveLen(1))
@@ -46,7 +49,7 @@ var _ = Describe("GET /products", func() {
 		})
 	})
 
-	When("a product is archived", func() {
+	Context("when a product is archived", func() {
 		var gone domain.Product
 
 		BeforeEach(func() {
@@ -56,7 +59,6 @@ var _ = Describe("GET /products", func() {
 		})
 
 		It("is left out of the list", func() {
-			var list views.ProductsResponse
 			app.Get("/products").Do().Status(http.StatusOK).JSON(&list)
 			Expect(list.Products).To(BeEmpty())
 		})
@@ -66,20 +68,22 @@ var _ = Describe("GET /products", func() {
 		})
 	})
 
-	It("asks for the first twelve by default", func() {
-		for i := 0; i < 13; i++ {
-			factories.Product(GinkgoT(), app.Store)
-		}
+	Context("with thirteen products", func() {
+		BeforeEach(func() {
+			for i := 0; i < 13; i++ {
+				factories.Product(GinkgoT(), app.Store)
+			}
+		})
 
-		var page views.ProductsResponse
-		app.Get("/products").Do().Status(http.StatusOK).JSON(&page)
+		It("asks for the first twelve by default", func() {
+			app.Get("/products").Do().Status(http.StatusOK).JSON(&page)
 
-		Expect(page.Products).To(HaveLen(12))
-		Expect(page.Pagination).To(Equal(views.Pagination{Page: 1, PerPage: 12, Total: 13, TotalPages: 2}))
+			Expect(page.Products).To(HaveLen(12))
+			Expect(page.Pagination).To(Equal(views.Pagination{Page: 1, PerPage: 12, Total: 13, TotalPages: 2}))
+		})
 	})
 
 	It("clamps per_page to 50", func() {
-		var page views.ProductsResponse
 		app.Get("/products?per_page=5000").Do().Status(http.StatusOK).JSON(&page)
 		Expect(page.Pagination.PerPage).To(BeEquivalentTo(50))
 	})
@@ -98,11 +102,18 @@ var _ = Describe("GET /products", func() {
 	)
 
 	Describe("GET /products/:id", func() {
-		It("finds a product by id", func() {
-			p := factories.Product(GinkgoT(), app.Store)
-			var shown views.ProductResponse
-			app.Get("/products/" + strconv.FormatInt(p.ID, 10)).Do().Status(http.StatusOK).JSON(&shown)
-			Expect(shown.Name).To(Equal(p.Name))
+		Context("with a product", func() {
+			var p domain.Product
+
+			BeforeEach(func() {
+				p = factories.Product(GinkgoT(), app.Store)
+			})
+
+			It("finds the product by id", func() {
+				var shown views.ProductResponse
+				app.Get("/products/" + strconv.FormatInt(p.ID, 10)).Do().Status(http.StatusOK).JSON(&shown)
+				Expect(shown.Name).To(Equal(p.Name))
+			})
 		})
 
 		It("is 404 for an unknown product", func() {

@@ -27,34 +27,51 @@ var _ = Describe("Categories", func() {
 		Expect(err).To(MatchError(domain.ErrNotFound))
 	})
 
-	It("is created, read, renamed and deleted", func() {
-		ctx := GinkgoT().Context()
+	Describe("CreateCategory", func() {
+		It("creates a category", func() {
+			created, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.ID).NotTo(BeZero())
+		})
+	})
 
-		created, err := store.CreateCategory(ctx, domain.Category{Name: "Audio"})
-		Expect(err).NotTo(HaveOccurred())
-		id := strconv.FormatInt(created.ID, 10)
-		Expect(store.GetCategory(ctx, id)).To(Equal(created))
+	Context("with a created category", func() {
+		var created domain.Category
+		var id string
 
-		created.Name = "Sound"
-		updated, err := store.UpdateCategory(ctx, created)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(updated.Name).To(Equal("Sound"))
+		BeforeEach(func() {
+			var err error
+			created, err = store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
+			Expect(err).NotTo(HaveOccurred())
+			id = strconv.FormatInt(created.ID, 10)
+		})
 
-		Expect(store.DeleteCategory(ctx, id)).To(Succeed())
-		_, err = store.GetCategory(ctx, id)
-		Expect(err).To(MatchError(domain.ErrNotFound))
+		It("reads it", func() {
+			Expect(store.GetCategory(GinkgoT().Context(), id)).To(Equal(created))
+		})
+
+		It("renames it", func() {
+			created.Name = "Sound"
+			updated, err := store.UpdateCategory(GinkgoT().Context(), created)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.Name).To(Equal("Sound"))
+		})
+
+		It("deletes it", func() {
+			Expect(store.DeleteCategory(GinkgoT().Context(), id)).To(Succeed())
+			_, err := store.GetCategory(GinkgoT().Context(), id)
+			Expect(err).To(MatchError(domain.ErrNotFound))
+		})
+
+		It("refuses a second category with the same name", func() {
+			_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
+			Expect(err).To(MatchError(domain.ErrInvalid))
+		})
 	})
 
 	Describe("the name", func() {
 		It("is required", func() {
 			_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "  "})
-			Expect(err).To(MatchError(domain.ErrInvalid))
-		})
-
-		It("is unique", func() {
-			_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
-			Expect(err).NotTo(HaveOccurred())
-			_, err = store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
 			Expect(err).To(MatchError(domain.ErrInvalid))
 		})
 	})
