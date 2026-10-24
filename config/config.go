@@ -26,10 +26,12 @@ package config
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/bogie-go/credentials/pkg/credentials"
@@ -124,6 +126,13 @@ type ServerConfig struct {
 	// ShutdownGrace is how long Start waits for in-flight requests on
 	// SIGTERM, default 10s.
 	ShutdownGrace time.Duration `mapstructure:"shutdown_grace"`
+	// TrustedProxies are the addresses whose X-Forwarded-For header is
+	// believed, comma-separated CIDRs or IPs. Empty means the private
+	// ranges (a load balancer, Kamal's proxy and docker networks all live
+	// there); "none" trusts no one, so the client address is the socket's.
+	// Anyone else's X-Forwarded-For is ignored, so a caller cannot choose
+	// the address the sign-in alert reports.
+	TrustedProxies string `mapstructure:"trusted_proxies"`
 	// bogie:config:server
 }
 
@@ -240,6 +249,11 @@ func (c Config) validate() error {
 	if c.Server.ShutdownGrace <= 0 {
 		return fmt.Errorf("config: SERVER_SHUTDOWN_GRACE must be a positive duration")
 	}
+	for _, entry := range c.Server.TrustedProxyList() {
+		if _, _, err := net.ParseCIDR(entry); err != nil && net.ParseIP(entry) == nil {
+			return fmt.Errorf("config: SERVER_TRUSTED_PROXIES has %q, which is neither an IP nor a CIDR", entry)
+		}
+	}
 	if c.Database.URL == "" {
 		return fmt.Errorf("config: DATABASE_URL is required in %s", c.Env)
 	}
@@ -313,4 +327,25 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// privateRanges are where a reverse proxy in front of this app usually is.
+var privateRanges = []string{"127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"}
+
+// TrustedProxyList is TrustedProxies as the list gin wants.
+func (s ServerConfig) TrustedProxyList() []string {
+	switch v := strings.TrimSpace(s.TrustedProxies); v {
+	case "":
+		return privateRanges
+	case "none":
+		return nil
+	default:
+		var out []string
+		for _, part := range strings.Split(v, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+		return out
+	}
 }

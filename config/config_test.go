@@ -292,3 +292,43 @@ var _ = Describe("Load", func() {
 		})
 	})
 })
+
+var _ = Describe("Server.TrustedProxyList", func() {
+	DescribeTable("reads the setting",
+		func(value string, want []string) {
+			Expect(config.ServerConfig{TrustedProxies: value}.TrustedProxyList()).To(Equal(want))
+		},
+		Entry("empty means the private ranges", "", []string{"127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"}),
+		Entry("none trusts no one", "none", []string(nil)),
+		Entry("a list is split and trimmed", "10.1.0.0/16, 203.0.113.7 ,", []string{"10.1.0.0/16", "203.0.113.7"}),
+	)
+})
+
+var _ = Describe("Load with trusted proxies", func() {
+	BeforeEach(func() {
+		setProduction()
+	})
+
+	Context("when an entry is neither an IP nor a CIDR", func() {
+		BeforeEach(func() {
+			GinkgoT().Setenv("SERVER_TRUSTED_PROXIES", "10.0.0.0/8,not-an-address")
+		})
+
+		It("refuses to start, naming the entry", func() {
+			_, err := config.Load()
+			Expect(err).To(MatchError(ContainSubstring("not-an-address")))
+		})
+	})
+
+	Context("when the entries are valid", func() {
+		BeforeEach(func() {
+			GinkgoT().Setenv("SERVER_TRUSTED_PROXIES", "10.0.0.0/8,203.0.113.7")
+		})
+
+		It("loads", func() {
+			cfg, err := config.Load()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Server.TrustedProxyList()).To(Equal([]string{"10.0.0.0/8", "203.0.113.7"}))
+		})
+	})
+})

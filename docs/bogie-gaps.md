@@ -171,3 +171,15 @@ would be faster but heavier. **Real fix:** Bogie's `bin/ci` and Makefile
 template use `-p 1`, or the scaffold gives each package its own database.
 
 **Fixed upstream** in v0.4.0, which also scaffolds `test/` (testdb, testapp, factories, a starter request test) from what this app built by hand. `app:update` conflicted on the three files this app already had; kept ours.
+
+## Deploy-time pieces the template leaves to the app (found in Task H)
+
+Three things every deployed app needs were written by hand here (2026-10-24):
+a `server.trusted_proxies` setting that calls `SetTrustedProxies` (gin trusts
+every proxy by default, so `ClientIP()` can be chosen by the caller), a
+command to make the first staff/admin account without a password on a command
+line (`ecommerce staff promote EMAIL`), and a guard that keeps a seed with a
+known password from running in production. **Real fix:** the template's
+`ServerConfig` and `NewServer` ship `trusted_proxies`; `g authentication`
+(token) offers a promote command when the user model has a role.
+Also `testapp` gained `WithRemoteAddr` to test it; the template should too.

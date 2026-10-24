@@ -3,10 +3,12 @@ package seeds
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"ecommerce/app/domain"
 	"ecommerce/app/models"
 	"ecommerce/app/services/password"
+	"ecommerce/config"
 )
 
 // staffEmail and staffPassword are a development-only login: no admin UI
@@ -23,6 +25,12 @@ const (
 // exists, so re-running never resets a password or role changed by hand
 // since.
 func SeedStaffUser(ctx context.Context, s *models.Store) error {
+	// A login whose password is in this repository must never exist on a
+	// deployed system, staging included (both run as production). A real
+	// environment promotes an account that signed up: ecommerce staff promote.
+	if os.Getenv(config.EnvVar) == config.EnvProduction {
+		return nil
+	}
 	digest, err := password.Hash(staffPassword)
 	if err != nil {
 		return fmt.Errorf("seeds: hash staff password: %w", err)

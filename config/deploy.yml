@@ -61,23 +61,37 @@ env:
 builder:
   arch: amd64
 
-# The database is not an accessory here on purpose. The premise is a service
-# next to a Rails app that already runs Postgres, so database.url in
-# config/credentials/staging.yml.enc points at that server, as a SEPARATE
-# database on it. If this service is to run its own, uncomment:
+# The database and the mail catcher run next to the app, as accessories: one
+# VM, no managed services, which is what a staging environment needs. They
+# live on Kamal's docker network, so database.url and smtp.address in
+# config/credentials/staging.yml.enc name them by container name
+# (ecommerce-db, ecommerce-mailpit) and nothing is published to the internet.
+# To use a Postgres that already exists instead, delete the db accessory and
+# point database.url at that server, as a SEPARATE database on it.
 #
-# accessories:
-#   db:
-#     image: postgres:18
-#     roles: [web]
-#     env:
-#       secret: [POSTGRES_PASSWORD]
-#     directories: [data:/var/lib/postgresql]
-#
-# and the URL becomes postgres://postgres:…@ecommerce-db:5432/ecommerce_staging,
-# resolved by container name on Kamal's docker network. The schema is applied
-# by the container itself at boot, from the migrations in the binary, so the
-# database only has to exist.
+# The schema is applied by the app container itself at boot, from the
+# migrations in the binary, so the database only has to exist (Postgres
+# creates POSTGRES_DB on first start).
+accessories:
+  db:
+    image: postgres:18
+    roles: [web]
+    env:
+      clear:
+        POSTGRES_USER: ecommerce
+        POSTGRES_DB: ecommerce_staging
+      secret:
+        - POSTGRES_PASSWORD
+    directories:
+      - data:/var/lib/postgresql
+  # Catches every email staging sends instead of delivering it. Its inbox is
+  # at port 8025 on the VM's loopback: ssh -L 8025:localhost:8025 user@host.
+  # Replace with a real SMTP provider (smtp.address in the credentials, and
+  # delete this accessory) before sending to real customers.
+  mailpit:
+    image: axllent/mailpit:latest
+    roles: [web]
+    port: "127.0.0.1:8025:8025"
 
 aliases:
   logs: app logs -f

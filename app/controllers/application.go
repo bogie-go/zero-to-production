@@ -54,7 +54,16 @@ func NewServer(cfg config.Config, log *slog.Logger) *Server {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	return &Server{Config: cfg, Router: gin.New(), Log: log}
+	router := gin.New()
+	// Behind a proxy the socket's address is the proxy's. Believe
+	// X-Forwarded-For only from the proxies the config names (private
+	// ranges by default); a bad entry is a startup bug, caught by the
+	// config's own validation.
+	if err := router.SetTrustedProxies(cfg.Server.TrustedProxyList()); err != nil {
+		log.Error("config: server.trusted_proxies is invalid; trusting no proxy", "err", err)
+		_ = router.SetTrustedProxies(nil)
+	}
+	return &Server{Config: cfg, Router: router, Log: log}
 }
 
 // Start serves until ctx is cancelled, then drains.

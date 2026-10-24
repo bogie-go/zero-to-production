@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/factories"
 	"ecommerce/test/testdb"
 )
 
@@ -123,6 +124,41 @@ var _ = Describe("Users by email", func() {
 				Expect(err).To(MatchError(domain.ErrInvalid))
 				Expect(calls).To(Equal(1), "only the first signup ran the hook")
 			})
+		})
+	})
+})
+
+var _ = Describe("PromoteToStaff", func() {
+	Context("when the account exists as a customer", func() {
+		var user domain.User
+
+		BeforeEach(func() {
+			user = factories.User(GinkgoT(), store)
+		})
+
+		It("makes it staff", func() {
+			promoted, err := store.PromoteToStaff(GinkgoT().Context(), user.Email)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(promoted.Role).To(Equal(domain.RoleStaff))
+			Expect(store.GetUserByEmail(GinkgoT().Context(), user.Email)).To(HaveField("Role", domain.RoleStaff))
+		})
+
+		It("is idempotent", func() {
+			_, err := store.PromoteToStaff(GinkgoT().Context(), user.Email)
+			Expect(err).NotTo(HaveOccurred())
+
+			again, err := store.PromoteToStaff(GinkgoT().Context(), user.Email)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(again.Role).To(Equal(domain.RoleStaff))
+		})
+	})
+
+	Context("when there is no such account", func() {
+		It("is not found", func() {
+			_, err := store.PromoteToStaff(GinkgoT().Context(), "nobody@example.com")
+			Expect(err).To(MatchError(domain.ErrNotFound))
 		})
 	})
 })

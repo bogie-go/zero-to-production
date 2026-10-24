@@ -66,6 +66,7 @@ type Request struct {
 	body          any
 	authorization string
 	headers       map[string]string
+	remoteAddr    string
 }
 
 // Get starts a GET request.
@@ -126,6 +127,13 @@ func (r *Request) WithHeader(name, value string) *Request {
 	return r
 }
 
+// WithRemoteAddr sets the socket address the request seems to come from
+// ("172.18.0.5:4000"), for specs about proxies and client addresses.
+func (r *Request) WithRemoteAddr(addr string) *Request {
+	r.remoteAddr = addr
+	return r
+}
+
 // Do sends the request through the real router.
 func (r *Request) Do() *Response {
 	t := r.app.t
@@ -147,6 +155,9 @@ func (r *Request) Do() *Response {
 	req.Header.Set("Content-Type", "application/json")
 	if r.authorization != "" {
 		req.Header.Set("Authorization", r.authorization)
+	}
+	if r.remoteAddr != "" {
+		req.RemoteAddr = r.remoteAddr
 	}
 	for name, value := range r.headers {
 		req.Header.Set(name, value)

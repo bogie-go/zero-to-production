@@ -28,6 +28,7 @@ Commands:
   db <command>        create, drop or prepare the database itself
   routes              every mounted route, method and path (rails routes)
   mail test ADDRESS   send a test email through the configured SMTP server
+  staff promote EMAIL make an existing account a staff member
 
 With no command this serves, which is what the container does. Every command
 reads the same ECOMMERCE_ENV, so they all act on the same database.
@@ -59,6 +60,7 @@ func main() {
 		"db":      runDB,
 		"routes":  runRoutes,
 		"mail":    runMail,
+		"staff":   runStaff,
 		"worker":  runWorker,
 		// bogie:commands
 	}

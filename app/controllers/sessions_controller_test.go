@@ -10,6 +10,7 @@ import (
 	"ecommerce/app/domain"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
+	"ecommerce/test/testapp"
 )
 
 var _ = Describe("POST /sessions", func() {
@@ -38,6 +39,28 @@ var _ = Describe("POST /sessions", func() {
 			args := app.JobArgs("send_sign_in_alert")
 			Expect(args).To(HaveLen(1))
 			Expect(args[0]).To(ContainSubstring("TestBrowser/1.0"))
+		})
+
+		Describe("the address in the sign-in alert", func() {
+			login := func() *testapp.Request {
+				return app.Post("/sessions", views.LoginRequest(creds)).WithHeader("X-Forwarded-For", "203.0.113.9")
+			}
+
+			Context("when the request comes from a proxy on a private network", func() {
+				It("is the client the proxy forwarded", func() {
+					login().WithRemoteAddr("172.18.0.5:4000").Do().Status(http.StatusOK)
+
+					Expect(app.JobArgs("send_sign_in_alert")[0]).To(MatchRegexp(`"ip":\s*"203\.0\.113\.9"`))
+				})
+			})
+
+			Context("when the request comes from anywhere else", func() {
+				It("is the socket's address: a caller cannot choose what the alert says", func() {
+					login().WithRemoteAddr("198.51.100.4:4000").Do().Status(http.StatusOK)
+
+					Expect(app.JobArgs("send_sign_in_alert")[0]).To(MatchRegexp(`"ip":\s*"198\.51\.100\.4"`))
+				})
+			})
 		})
 
 		Context("with an unrelated account", func() {

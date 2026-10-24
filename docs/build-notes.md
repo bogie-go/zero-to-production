@@ -12,7 +12,7 @@ Pass 1 has reached the end of Task G. Every checkpoint is a git tag; the table i
 
 **Real gaps, small enough to just do**
 - Empty carts piling up: `POST /guest_sessions` makes a cart at mint time.
-- No way to promote a second staff account, or change the seeded password, short of editing the database.
+
 - The headless-browser checks (real Chrome, via a scratch script) are not part of `bin/ci`.
 
 **Known limitations, kept on purpose**
@@ -482,7 +482,7 @@ are still ahead.
 
 ### Still to do
 
-- [ ] No way to promote a second staff account, or change the seeded password, short of editing the database by hand. Likely answer: an admin "manage users" endpoint, itself staff-only — not built yet.
+- [x] Promoting staff: `ecommerce staff promote EMAIL` (run on a host with `kamal app exec`) makes an account that signed up a staff member, idempotent, no password typed anywhere. The dev seed login `staff@shop.test` now refuses to run when `ECOMMERCE_ENV=production`, staging included, so no known password ever exists on a deployed system. Changing the seeded dev password is still by hand; it is development-only.
 - [x] Categories (folded in from Task B): done, see "Task F (2/3)" below. Price-rule admin CRUD is still ahead.
 - [x] The public `GET /products`/`GET /products/:id` are unchanged; only `/admin/products` gained write actions. (Informational; since then the public listing gained `?category_id=`.)
 
@@ -621,7 +621,7 @@ Decided with the user while setting up mail: the credentials file should be grou
 - **Not transactional, on purpose.** A login writes no row, so there is no transaction for the job to ride, and the alert is best effort: `SessionsController` calls a `signInAlerter` (declared beside it, rule 2) and logs a warning if the job cannot be queued; a correct password is never refused because the queue is down. `jobs.SignInAlerts{Queue}` is the adapter, over a one-method `inserter` so the package needs no pgx. Only a login that succeeded is announced (a wrong password or unknown email tells nobody anything).
 - **The design wart this exposed:** the signup page signed up and *then* logged in, to merge the guest cart, so a new user would have got a welcome email and a "new sign-in" alert seconds apart. Fix: the cart merge moved out of `SessionsController` into `app/services/cartmerge` (`Merger.FromAuthorization`), and `UsersController` calls it too (best effort: the account exists by then, so a failed merge is logged, not an error). `login.html` now sends the guest token with either request and signs a new account in by the signup itself.
 - Checked in real Chrome: a guest with 2 items signs up (the welcome email only, cart still 2), logs out and back in (the alert, with time, `::1` and the browser).
-- Known limits: an alert for **every** login is noisy for someone who logs in often, and `ClientIP()` trusts `X-Forwarded-For` from any proxy until `SetTrustedProxies` is configured for the deployment (Task H). The fix for noise is remembering known devices or addresses, which needs a table.
+- Known limits: an alert for **every** login is noisy for someone who logs in often, and `ClientIP()` used to trust `X-Forwarded-For` from any proxy; since Task H `server.trusted_proxies` (default: the private ranges, `none` to trust no one) decides whose header is believed, so a caller outside it cannot choose the address the alert reports. The fix for noise is remembering known devices or addresses, which needs a table.
 
 ## Pass 1 › Task F (2/3): categories (Task B, folded in)
 
@@ -687,3 +687,16 @@ Closes the "seeded until Task F" note from the pricing task, and with it Task F.
 - [ ] Coupon codes (`price_rules.code`) are still deferred.
 - [ ] No way to see which rule discounted which past order (an order keeps only its totals).
 - [ ] `buy_x_get_y` needs per-line pricing to actually discount.
+
+
+## Task H: going live (2026-10-24, in progress)
+
+Done without a VM, all verified by building the image and running it as production would (`ECOMMERCE_ENV=production ECOMMERCE_CREDENTIALS=staging`) against a throwaway database:
+
+- **Staging credentials** exist (`config/credentials/staging.yml.enc`, key `config/credentials/staging.key`, gitignored: back it up). They hold a generated token secret and Postgres password, and placeholders (`CHANGE-ME`) for the host name, the registry password and the mail sender. The first secrets were printed into a terminal by mistake and rotated before use.
+- **`config/deploy.yml`** has the Postgres and Mailpit accessories (reached by container name on Kamal's network, nothing published), `.kamal/secrets` feeds `POSTGRES_PASSWORD`. Still `CHANGE-ME`: image, registry user, the server, the host name.
+- **Trusted proxies** (`server.trusted_proxies`), tested through requests: a proxy on a private network is believed, anyone else cannot choose the sign-in alert's address.
+- **The image** boots in production mode, applies River's and the app's migrations from an empty database, answers `/healthz`; the worker role starts from the same image and works the queue.
+- **First staff account:** `ecommerce staff promote EMAIL` and the seed guard above.
+
+Remaining: a VM, a registry and a host name to deploy to; a real SMTP provider (staging catches mail in Mailpit until then); `kamal setup` and a first deploy; production overlay (`deploy.production.yml`); backups of the Postgres volume.

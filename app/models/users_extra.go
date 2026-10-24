@@ -85,3 +85,20 @@ func (s *Store) FindOrCreateUserByEmail(ctx context.Context, u domain.User) (dom
 		return domain.User{}, err
 	}
 }
+
+// PromoteToStaff makes the account with this email a staff member and
+// returns it. It is idempotent, and an unknown email is ErrNotFound. This is
+// how a real environment gets its first staff account: the person signs up
+// like anyone, then an operator promotes them (ecommerce staff promote), so
+// no password is ever typed or stored anywhere but the signup.
+func (s *Store) PromoteToStaff(ctx context.Context, email string) (domain.User, error) {
+	user, err := s.GetUserByEmail(ctx, email)
+	if err != nil {
+		return domain.User{}, err
+	}
+	if user.Role == domain.RoleStaff {
+		return user, nil
+	}
+	user.Role = domain.RoleStaff
+	return s.UpdateUser(ctx, user)
+}
