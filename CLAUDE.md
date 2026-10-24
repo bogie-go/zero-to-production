@@ -5,12 +5,11 @@ This repo holds the reference e-commerce shop built in the book, plus everything
 ## Repo layout
 - `app/` — the reference shop, built with Bogie (Go, API-only, sqlc). Tagged at each book iteration (`task-a1`, `task-a2`, ...).
 - `public/` — the frontend: plain HTML/CSS/JS with Alpine.js, served by Bogie via `embed`, Rails-style (no `ui/`, no build step). What's committed here is exactly what's served; readers need no Node to run the app.
-- `payment-simulator/` — a fake payment provider that sends webhooks to the app, including late and duplicate ones.
 - `requests/` — `.http` files, one per chapter.
 
 ## Rules for working in this repo
 - Write the app the way a reader would: use Bogie's generators first, then hand-edit. Don't add libraries Bogie doesn't already bring unless the plan calls for it.
-- Keep these hand-written, never generated: the price rule engine, cart logic, and webhook handling. They are teaching material.
+- Keep these hand-written, never generated: the price rule engine and cart logic. They are teaching material.
 - If Bogie is missing something the app needs, note it in `docs/bogie-gaps.md` rather than working around it silently. Fixing Bogie is part of the work.
 - The UI is the API contract. Don't change endpoint paths or JSON shapes without updating the contract and the UI together.
 - Keep the UI plain and buildless for readers: `public/` is plain HTML/CSS/JS with Alpine.js, no Node, no build step, no bundler.

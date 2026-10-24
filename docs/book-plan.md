@@ -14,7 +14,7 @@ By the end of this book, you can build a Go backend with Bogie, design it well e
 - Pragmatic Bookshelf style: one project built in named tasks and iterations, each driven by a client request.
 - Bogie first. Each iteration follows: generate, run, read the generated code, change it by hand, optionally peek under the hood.
 - A plain `net/http` server is shown once early, as the foundation under everything.
-- Arc: early tasks mostly generated code; middle tasks hand-written around it; late tasks designed independently (price rules, payment webhooks).
+- Arc: early tasks mostly generated code; middle tasks hand-written around it; late tasks designed independently (price rules).
 - Theme: borrow the idea from Rails, write it the Go way.
 
 ## The project: an e-commerce backend (API only)
@@ -75,12 +75,12 @@ Shared helpers live in `test/`, as Rails' `test/` does: `test/testdb` (a clean t
 | Jobs and mail | a worker run directly with a fake mailer; the enqueue happens inside the transaction and rolls back with it | G |
 | Contract | the JSON the UI relies on does not change by accident (golden or shape checks), since the UI is the contract | A onward, before the UI freeze |
 | End to end | a real browser against a running server: browse, add to cart, sign up, check out, admin edit | Pass 2, `bin/e2e` |
-| Webhooks | late, duplicate and out-of-order events from the payment simulator leave one correct result | payment simulator |
+| Fake outside server | an `httptest.NewServer` standing in for a third-party API, so the real client code runs against a fake that can fail on demand | Task G (the mailer's fake SMTP server), described for HTTP APIs |
 
 Rules for tests in the book:
 - Every task adds the test with the code, in the same step, never as a later "testing pass".
 - The test database is separate and is configured only through the environment (`ECOMMERCE_TEST_DATABASE_URL`), so a test can never touch development data.
-- Hand-written teaching code (price rules, cart, webhooks) gets the most tests, including the edge cases a reader would not think of (time windows, stacking, duplicates).
+- Hand-written teaching code (price rules, cart) gets the most tests, including the edge cases a reader would not think of (time windows, stacking, duplicates).
 - Bugs found later come with a test that fails first (the category select, the cart merge, the soft delete are the examples).
 
 Gaps to close in Pass 2:
@@ -91,8 +91,8 @@ Gaps to close in Pass 2:
 
 ## Supporting pieces
 - UI: ready-made, acts as the API contract. Features unlock as endpoints appear; shows clear errors when a response doesn't match the contract; one setting for the base URL. Served by Bogie from the same origin (no CORS).
-- Payments: simulated provider that sends webhooks (teaches idempotency and handling late/duplicate events).
-- Collaboration cast: shop owner (changing requirements), frontend developer (contract), payment provider (external system), senior reviewer (code review notes). "Working with others" boxes.
+- No payment simulator (decided 2026-10-24). Its only purpose in the book was to show a fake server in tests, and the shop already has one: the mailer's test starts a fake SMTP server (`app/services/mailer`), and the testing chapter shows the same idea for an HTTP API with `httptest.NewServer`. Real payments, webhooks and their idempotency stay in "Where to go next".
+- Collaboration cast: shop owner (changing requirements), frontend developer (contract), mail provider (external system), senior reviewer (code review notes). "Working with others" boxes.
 
 ## The API contract and OpenAPI
 
@@ -101,12 +101,12 @@ The UI is the contract today: its fetch calls and the `views` types decide what 
 - **One spec file in the app,** `docs/openapi.yaml`, hand-editable: the descriptions and examples are written by people.
 - **Tests keep it honest.** `testapp` validates every request and response in the request tests against the spec with `kin-openapi` (a test-only dependency). Code that drifts from the spec, or a spec that drifts from the code, fails a request test. This is what makes the UI-is-the-contract claim checkable, and what no code-comment generator (swaggo-style annotations) gives, since comments cannot be validated.
 - **A docs page,** buildless like the rest of `public/`: `public/docs.html` loads Swagger UI or Redoc from a CDN and shows `/docs`.
-- **When:** after Task I and the payment simulator (its webhook endpoints belong in the spec), as one task: draft the spec for the shop from the routes and `views` types, add the validation to `testapp`, fix every mismatch it finds, then freeze.
+- **When:** after Task I, as one task: draft the spec for the shop from the routes and `views` types, add the validation to `testapp`, fix every mismatch it finds, then freeze.
 - **Bogie follows the shop,** as it did for tests: once a proven spec and validator exist, `g scaffold` and `g controller` insert their paths and schemas above marker comments in `docs/openapi.yaml` (schemas from the model's attributes and the `views` structs), and the validation ships in the fresh-app template. Decided 2026-10-24; not built yet.
 
 ## Build process
 1. Pass 1: build the complete shop quickly to settle the data model, contract, and Bogie gaps.
-2. Freeze the API contract (written as OpenAPI and enforced by the request tests; see above); build the UI and payment simulator against it.
+2. Freeze the API contract (written as OpenAPI and enforced by the request tests; see above); build the UI against it.
 3. Pass 2: rebuild from an empty folder, iteration by iteration, exactly as a reader would. Commit and tag each iteration; keep notes as chapter raw material. Script it where possible so checkpoints can be regenerated when Bogie changes.
 4. Provide each checkpoint as a Git tag and a zip.
 

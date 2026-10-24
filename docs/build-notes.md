@@ -22,7 +22,7 @@ Pass 1 has reached the end of Task G. Every checkpoint is a git tag; the table i
 - A sign-in alert for every login is noisy; knowing a device needs a table.
 - One category per product; no manual ordering of categories.
 
-**Ahead in the plan:** Task H (deploy: Kamal, running the worker, a real mail provider, trusted proxies for the alert's address) and Task I (health, logging, monitoring); the payment simulator (its own task or "where to go next", undecided); `requests/*.http` per chapter; and Pass 2, rebuilding from an empty folder, tagging each iteration as a reader would.
+**Ahead in the plan:** Task H (deploy: Kamal, running the worker, a real mail provider, trusted proxies for the alert's address) and Task I (health, logging, monitoring); (no payment simulator: decided 2026-10-24, see the book plan); `requests/*.http` per chapter; and Pass 2, rebuilding from an empty folder, tagging each iteration as a reader would.
 
 ---
 
@@ -431,7 +431,7 @@ coverage 31% → 47%.
 
 ### Still to do
 
-- [ ] Payment capture (`status` transitioning `pending` → `paid`/`cancelled` via a webhook) is out of scope here on purpose — `payment-simulator/` doesn't exist yet, and CLAUDE.md already calls out webhook handling as its own hand-written teaching material, later. It belongs with the payment simulator decision (a task of its own, or "where to go next").
+- [ ] Payment capture (`status` transitioning `pending` → `paid`/`cancelled` via a webhook) is out of scope here on purpose — `payment-simulator/` doesn't exist yet, and CLAUDE.md already calls out webhook handling as its own hand-written teaching material, later. Decided 2026-10-24: no payment simulator, so this stays out of scope ("Where to go next" in the book).
 - [x] `BuyXGetYRule`'s known limitation (metadata only, no actual per-line discount) is unchanged; checkout inherits it from the cart's own pricing calculation rather than introducing a new one. (Same item as the `BuyXGetYRule` lines above; one open item, tracked there.)
 - [x] No git tag exists yet for price rules, Task D, or Task E — only `task-c1`/`task-c2` exist so far. Still an open offer, not yet acted on. (Done 2026-10-22.)
 
