@@ -28,10 +28,16 @@ proxy:
     - staging-ecommerce.example.com
   # The app listens on 8080, not Rails' 3000.
   app_port: 8080
-  # Kamal's default probe is /up, which this service does not have. /healthz
-  # touches nothing and allocates nothing, so it stays honest under load.
+  # Kamal's default probe is /up, which this service does not have. The proxy
+  # moves traffic to a new container only after this answers 200, so it asks
+  # the READINESS probe: it reaches the database, and a release that cannot
+  # never replaces the one that can (the old container keeps serving and the
+  # deploy fails). /healthz, which touches nothing, is for "is the process
+  # alive" and is what the `status` alias below asks.
   healthcheck:
-    path: /healthz
+    path: /readyz
+    interval: 3
+    timeout: 3
   # Bounds the wait for a RESPONSE. Nothing on an API path should approach
   # this; if a timeout appears here, the question is what started blocking,
   # not what to raise.
@@ -60,6 +66,15 @@ env:
 
 builder:
   arch: amd64
+
+# SAFE UPDATES. A new container boots beside the old one, applies any pending
+# migration (under a database lock, so the web and job containers starting
+# together cannot both run it), and takes traffic only once /readyz is green.
+# deploy_timeout is how long that may take; drain_timeout is how long the old
+# container may finish its in-flight requests, and must exceed
+# server.shutdown_grace (10s) or the proxy cuts them off first.
+deploy_timeout: 60
+drain_timeout: 30
 
 # The database and the mail catcher run next to the app, as accessories: one
 # VM, no managed services, which is what a staging environment needs. They
@@ -97,3 +112,4 @@ aliases:
   logs: app logs -f
   shell: app exec --interactive --reuse "sh"
   status: app exec --reuse "wget -qO- http://localhost:8080/healthz"
+  ready: app exec --reuse "wget -qO- http://localhost:8080/readyz"

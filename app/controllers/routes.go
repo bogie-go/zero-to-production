@@ -23,6 +23,8 @@ func (s *Server) SetupRoutes() {
 
 	// Unauthenticated, no side effects: what a load balancer polls.
 	r.GET("/healthz", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+	// Ready to serve: asks the database. See HealthController.
+	s.Health.SetupRoutes(&r.RouterGroup)
 
 	// Each controller mounts its own routes under a group it names; a
 	// namespace (`bogie g controller admin/reports`) mounts its group and

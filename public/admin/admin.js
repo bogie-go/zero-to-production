@@ -17,6 +17,7 @@ function adminShell() {
       { label: 'Products', href: '/admin/products.html', also: ['/admin/product.html'] },
       { label: 'Categories', href: '/admin/categories.html', also: ['/admin/category.html'] },
       { label: 'Price rules', href: '/admin/price_rules.html', also: ['/admin/price_rule.html'] },
+      { label: 'Health', href: '/admin/ops.html' },
     ],
     // A section's form page (product.html) highlights its list's link.
     isActive(link) {

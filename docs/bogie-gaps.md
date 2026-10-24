@@ -183,3 +183,14 @@ known password from running in production. **Real fix:** the template's
 `ServerConfig` and `NewServer` ship `trusted_proxies`; `g authentication`
 (token) offers a promote command when the user model has a role.
 Also `testapp` gained `WithRemoteAddr` to test it; the template should too.
+
+## No readiness probe, and a logger that logs everything at info
+
+The template ships `/healthz` (liveness) and a logger that writes every
+request at info, health probes included. Task I (2026-10-24) added by hand:
+`/readyz` (a database ping, 503 with no cause in the body, which Kamal's
+healthcheck should ask), a logger that levels by status and logs the route
+template, `ip`, `bytes` and `subject` but never a URL query, header or body,
+and `server.version` read from `KAMAL_VERSION`. **Real fix:** the template
+ships the readiness probe and that logger, and `deploy.yml` points the
+healthcheck at `/readyz` with `deploy_timeout` and `drain_timeout` set.

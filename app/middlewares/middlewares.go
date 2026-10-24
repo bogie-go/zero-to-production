@@ -32,7 +32,17 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
-// Logger records one structured line per request.
+// Logger records one structured line per request, at a level that says what
+// to do about it: a server error (5xx) is an error, everything else is info,
+// and the health probes, which fire every few seconds from every proxy and
+// monitor, are debug so they do not drown the lines that matter.
+//
+// What is logged is chosen to be safe to ship to a log service: the route
+// template and never the URL (a query string can carry an email or a token),
+// the status, the time taken, the size, the request id that also appears in
+// the response header and in every error line, the caller's address, and who
+// they are signed in as (the token's subject: a user id or a guest id), never
+// a header or a body.
 func Logger(log *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -44,13 +54,27 @@ func Logger(log *slog.Logger) gin.HandlerFunc {
 		if path == "" {
 			path = c.Request.URL.Path
 		}
-		log.LogAttrs(c.Request.Context(), slog.LevelInfo, "request",
+		status := c.Writer.Status()
+		level := slog.LevelInfo
+		switch {
+		case status >= http.StatusInternalServerError:
+			level = slog.LevelError
+		case path == "/healthz" || path == "/readyz":
+			level = slog.LevelDebug
+		}
+		attrs := []slog.Attr{
 			slog.String("method", c.Request.Method),
 			slog.String("path", path),
-			slog.Int("status", c.Writer.Status()),
+			slog.Int("status", status),
 			slog.Duration("took", time.Since(start)),
+			slog.Int("bytes", c.Writer.Size()),
 			slog.String("request_id", c.GetString("request_id")),
-		)
+			slog.String("ip", c.ClientIP()),
+		}
+		if who := Subject(c); who != "" {
+			attrs = append(attrs, slog.String("subject", who))
+		}
+		log.LogAttrs(c.Request.Context(), level, "request", attrs...)
 	}
 }
 

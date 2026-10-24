@@ -332,3 +332,33 @@ var _ = Describe("Load with trusted proxies", func() {
 		})
 	})
 })
+
+var _ = Describe("Server.Version", func() {
+	BeforeEach(func() {
+		setProduction()
+	})
+
+	Context("when Kamal has set KAMAL_VERSION", func() {
+		BeforeEach(func() {
+			GinkgoT().Setenv("KAMAL_VERSION", "abc1234")
+		})
+
+		It("is the release being deployed", func() {
+			cfg, err := config.Load()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Server.Version).To(Equal("abc1234"))
+		})
+	})
+
+	Context("when nothing names the release", func() {
+		BeforeEach(func() {
+			GinkgoT().Setenv("KAMAL_VERSION", "")
+		})
+
+		It("is dev", func() {
+			cfg, err := config.Load()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Server.Version).To(Equal("dev"))
+		})
+	})
+})

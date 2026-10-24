@@ -37,6 +37,7 @@ type Server struct {
 	Admin         *admin_controller.Server
 	Me            *MeController
 	Categories    *CategoriesController
+	Health        *HealthController
 	// bogie:controllers
 }
 

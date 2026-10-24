@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Health</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+  </head>
+  <body x-data="opsPage()" x-init="load()">
+    <div class="shell" x-show="!loading && !error">
+      <aside class="sidebar">
+        <a class="brand" href="/admin/">Ecommerce<small>admin</small></a>
+        <nav>
+          <template x-for="link in links" :key="link.href">
+            <a :href="link.soon ? null : link.href" :class="{ active: isActive(link), soon: link.soon }">
+              <span x-text="link.label"></span><em x-show="link.soon">soon</em>
+            </a>
+          </template>
+          <a href="/">&larr; Back to the shop</a>
+        </nav>
+        <div class="who">
+          <span x-text="email"></span>
+          <div><button @click="logout()">Log out</button></div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <h1>Health</h1>
+        <p class="note">What is running and what the queue is doing. Refreshes every 10 seconds.</p>
+        <p class="err" x-show="problem" x-text="problem"></p>
+
+        <div class="cards" x-show="ops">
+          <div class="card">
+            <h2>Release</h2>
+            <p><strong x-text="ops && ops.version"></strong> in <span x-text="ops && ops.env"></span></p>
+          </div>
+          <div class="card">
+            <h2>Database</h2>
+            <p>schema <strong x-text="ops && ops.schema_version"></strong></p>
+          </div>
+          <div class="card">
+            <h2>Queue lag</h2>
+            <p><strong x-text="lag()"></strong></p>
+          </div>
+        </div>
+
+        <h2 style="margin-top:2rem" x-show="ops">Jobs by state</h2>
+        <div class="cards" x-show="ops">
+          <template x-for="state in states" :key="state.name">
+            <div class="card" :class="{ attention: state.attention && count(state.name) > 0 }">
+              <h2 x-text="state.label"></h2>
+              <p><strong x-text="count(state.name)"></strong> <span x-text="state.help"></span></p>
+            </div>
+          </template>
+        </div>
+      </main>
+    </div>
+
+    <p class="state" x-show="loading">Checking access&hellip;</p>
+    <p class="state" x-show="!loading && error" x-text="error"></p>
+
+    <script src="/admin/admin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" defer></script>
+    <style>
+      .card.attention { border-color: var(--accent); background: var(--accent-soft); }
+    </style>
+    <script>
+      function opsPage() {
+        return {
+          ...adminShell(),
+          ops: null,
+          problem: '',
+          // The states River keeps a job in. retryable and discarded are the
+          // ones that mean something went wrong and may need a person.
+          states: [
+            { name: 'available', label: 'Waiting', help: 'ready to run' },
+            { name: 'running', label: 'Running', help: 'right now' },
+            { name: 'scheduled', label: 'Scheduled', help: 'for later' },
+            { name: 'retryable', label: 'Retrying', help: 'failed, will try again', attention: true },
+            { name: 'discarded', label: 'Gave up', help: 'failed too often', attention: true },
+            { name: 'completed', label: 'Done', help: 'finished' },
+          ],
+          async load() {
+            if (!(await this.guard())) return;
+            this.loading = false;
+            await this.refresh();
+            setInterval(() => this.refresh(), 10000);
+          },
+          async refresh() {
+            try {
+              const res = await this.api('/admin/ops');
+              if (!res.ok) throw new Error('status ' + res.status);
+              this.ops = await res.json();
+              this.problem = '';
+            } catch (e) {
+              this.problem = 'Could not read the health numbers: ' + e.message;
+            }
+          },
+          count(name) { return (this.ops && this.ops.jobs[name]) || 0; },
+          lag() {
+            const s = this.ops ? this.ops.oldest_waiting_seconds : 0;
+            if (!s) return 'none';
+            if (s < 60) return Math.round(s) + ' s';
+            if (s < 3600) return Math.round(s / 60) + ' min';
+            if (s < 86400) return Math.round(s / 3600) + ' h';
+            return Math.round(s / 86400) + ' days';
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

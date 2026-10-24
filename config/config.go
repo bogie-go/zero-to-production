@@ -133,6 +133,11 @@ type ServerConfig struct {
 	// Anyone else's X-Forwarded-For is ignored, so a caller cannot choose
 	// the address the sign-in alert reports.
 	TrustedProxies string `mapstructure:"trusted_proxies"`
+	// Version names the release that is running, shown to staff at
+	// /admin/ops and never to the public. Kamal sets KAMAL_VERSION (the git
+	// sha being deployed) in every container, which is used when this is
+	// empty; "dev" when neither is set.
+	Version string `mapstructure:"version"`
 	// bogie:config:server
 }
 
@@ -203,6 +208,12 @@ func Load() (Config, error) {
 
 	if os.Getenv(credentials.EnvKeyVar) != "" {
 		cfg.KeyFile = "from " + MasterKeyVar
+	}
+
+	// The release name is not a secret and not a setting a person writes:
+	// the deploy tool already knows it.
+	if cfg.Server.Version == "" {
+		cfg.Server.Version = envOr("KAMAL_VERSION", "dev")
 	}
 
 	return cfg, cfg.validate()

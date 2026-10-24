@@ -56,7 +56,7 @@ Pass 1 is built through Task G. Task B (categories) was skipped at first and bui
 | G | `task-g2` | the welcome email |
 | G | `task-g3` | the sign-in alert (Task G complete) |
 
-Next in the plan: H (deploy) and I (health). `docs/build-notes.md` has the open items.
+Next in the plan: H (deploy, waiting on a VM; the rest is done) and the OpenAPI contract freeze. I (health) is built (2026-10-24, see `docs/operations.md`). `docs/build-notes.md` has the open items.
 
 ## Testing
 

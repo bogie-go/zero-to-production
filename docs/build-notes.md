@@ -700,3 +700,15 @@ Done without a VM, all verified by building the image and running it as producti
 - **First staff account:** `ecommerce staff promote EMAIL` and the seed guard above.
 
 Remaining: a VM, a registry and a host name to deploy to; a real SMTP provider (staging catches mail in Mailpit until then); `kamal setup` and a first deploy; production overlay (`deploy.production.yml`); backups of the Postgres volume.
+
+
+## Task I: is it healthy? (2026-10-24)
+
+What was already there: `/healthz` (liveness), one request log line, graceful shutdown, migrations at boot under goose's advisory lock, River logging its own queue counts. What Task I added, all with tests:
+
+- **Readiness, apart from liveness.** `GET /readyz` pings the database (2s bound) and answers 200 or 503, with the checks named and the cause never said (it is in the log, with the request id). Kamal's proxy now waits for `/readyz`, so a release that cannot reach its database never replaces the one that can. `/healthz` stays 200 when the database is down: it says the process is alive and nothing else.
+- **A logger that says what to do.** 5xx is an `ERROR`, the rest `INFO`, the probes `DEBUG`; the line gained `bytes`, `ip` (honest since Task H's trusted proxies) and `subject`. The route template is logged, never the URL, and no header or body, which a spec asserts with an email, a token and a bearer string in the request.
+- **A staff view of the running system.** `GET /admin/ops` and a Health page: the release (`KAMAL_VERSION`, the git sha Kamal puts in every container; `dev` otherwise), the environment, the schema version, jobs by state and the queue's lag, with Retrying and Gave up highlighted. River's tables are not in sqlc's schema, so `Store.Ops` is plain SQL on the pool.
+- **Safe updates**, written down and set: `deploy_timeout` 60, `drain_timeout` 30 (above `shutdown_grace`), the expand-then-contract rule for migrations, how to roll back code and, if it must be, the schema. See `docs/operations.md`.
+
+Not built, on purpose: a metrics endpoint (Prometheus) and an error-tracking service. Both are a dependency and a service to run, and the book only needs one honest answer to "is it healthy?", which is the three views above. They belong in "Where to go next". The worker has no HTTP surface, so its health is the queue numbers on the Health page; Docker restarts it if it dies.

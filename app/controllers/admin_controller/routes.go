@@ -10,5 +10,6 @@ func (s *Server) SetupRoutes(router *gin.RouterGroup) {
 	s.Products.SetupRoutes(admin)
 	s.Categories.SetupRoutes(admin)
 	s.PriceRules.SetupRoutes(admin)
+	s.Ops.SetupRoutes(admin)
 	// bogie:routes
 }
