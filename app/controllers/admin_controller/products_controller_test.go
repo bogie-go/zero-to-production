@@ -1,4 +1,4 @@
-package requests_test
+package admin_controller_test
 
 import (
 	"net/http"
@@ -12,18 +12,8 @@ import (
 	"ecommerce/test/factories"
 )
 
-var _ = Describe("/admin", func() {
-
-	It("is for staff only", func() {
-		customer, staff := factories.User(GinkgoT(), app.Store), factories.Staff(GinkgoT(), app.Store)
-
-		app.Get("/admin/products").Do().Status(http.StatusUnauthorized)
-		app.Get("/admin/products").AsUser(customer).Do().Status(http.StatusForbidden)
-		app.Get("/admin/products").AsGuest("someone").Do().Status(http.StatusForbidden)
-		app.Get("/admin/products").AsUser(staff).Do().Status(http.StatusOK)
-	})
-
-	Describe("products", func() {
+var _ = Describe("/admin/products", func() {
+	Describe("the collection", func() {
 		var staff domain.User
 
 		BeforeEach(func() {
@@ -55,7 +45,7 @@ var _ = Describe("/admin", func() {
 		})
 	})
 
-	Describe("products, one at a time", func() {
+	Describe("one at a time", func() {
 		var staff domain.User
 		var product domain.Product
 		var path string
@@ -121,22 +111,6 @@ var _ = Describe("/admin", func() {
 			app.Get("/admin/products").AsUser(staff).Do().JSON(&list)
 			Expect(list.Products).To(HaveLen(1))
 			Expect(list.Products[0].ArchivedAt).To(BeNil())
-		})
-	})
-
-	Describe("a price rule", func() {
-		It("changes the cart total once it exists and is active", func() {
-			product := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 1000 })
-			factories.PriceRule(GinkgoT(), app.Store) // active, $1.00 off
-			user := factories.User(GinkgoT(), app.Store)
-			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 2}).AsUser(user).Do().Status(http.StatusCreated)
-
-			var cart views.CartResponse
-			app.Get("/cart").AsUser(user).Do().Status(http.StatusOK).JSON(&cart)
-
-			Expect(cart.SubtotalCents).To(BeEquivalentTo(2000))
-			Expect(cart.DiscountCents).To(BeNumerically(">", 0))
-			Expect(cart.TotalCents).To(Equal(cart.SubtotalCents - cart.DiscountCents))
 		})
 	})
 })

@@ -85,7 +85,7 @@ Rules for tests in the book:
 
 Gaps to close in Pass 2:
 - The browser checks used in Pass 1 were ad hoc puppeteer scripts. Turn them into `bin/e2e`, kept out of `bin/ci` so readers need no Node for the core loop.
-- Request tests now cover every endpoint (`test/requests`: catalog, shopping, accounts, cart, admin). Still to add: concurrency (two buyers, one unit of stock) and a failing-first test with every future bug.
+- Request tests cover every endpoint, one file beside each controller (`app/controllers/*_controller_test.go`), with the cross-controller journey, wiring and failure specs in `test/requests`. Still to add: concurrency (two buyers, one unit of stock) and a failing-first test with every future bug.
 - A concurrency test for checkout and for `carts.token`.
 - Decide whether `bogie g model` should generate tests that survive a real `Validate` (see `docs/bogie-gaps.md`).
 

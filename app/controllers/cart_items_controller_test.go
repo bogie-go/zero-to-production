@@ -1,4 +1,4 @@
-package requests_test
+package controllers_test
 
 import (
 	"net/http"
@@ -13,7 +13,7 @@ import (
 	"ecommerce/test/testapp"
 )
 
-var _ = Describe("The cart", func() {
+var _ = Describe("Cart items", func() {
 
 	Describe("a line", func() {
 		var line string

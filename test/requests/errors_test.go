@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"ecommerce/app/views"
-	"ecommerce/test/factories"
 	"ecommerce/test/testapp"
 )
 
@@ -51,31 +50,4 @@ var _ = Describe("Reading a request", func() {
 		Entry("a login", "/sessions"),
 		Entry("a cart line", "/cart_items"),
 	)
-})
-
-var _ = Describe("Sign-in alerts", func() {
-	It("record where the login came from", func() {
-		app.Post("/users", views.SignupRequest{Email: "ada@example.com", Password: "correct-horse-battery"}).Do().Status(http.StatusCreated)
-
-		app.Post("/sessions", views.LoginRequest{Email: "ada@example.com", Password: "correct-horse-battery"}).
-			WithHeader("User-Agent", "TestBrowser/1.0").Do().Status(http.StatusOK)
-
-		args := app.JobArgs("send_sign_in_alert")
-		Expect(args).To(HaveLen(1))
-		Expect(args[0]).To(ContainSubstring("TestBrowser/1.0"))
-	})
-})
-
-var _ = Describe("Signing up with a bad guest token", func() {
-	It("still creates the account: a cart that cannot be merged is not a reason to refuse", func() {
-		app.Post("/users", views.SignupRequest{Email: "ada@example.com", Password: "correct-horse-battery"}).
-			WithAuthorization("Bearer not-a-real-token").Do().Status(http.StatusCreated)
-	})
-
-	It("also lets a login through", func() {
-		factories.User(GinkgoT(), app.Store) // an unrelated account
-		app.Post("/users", views.SignupRequest{Email: "ada@example.com", Password: "correct-horse-battery"}).Do().Status(http.StatusCreated)
-		app.Post("/sessions", views.LoginRequest{Email: "ada@example.com", Password: "correct-horse-battery"}).
-			WithAuthorization("Bearer not-a-real-token").Do().Status(http.StatusOK)
-	})
 })

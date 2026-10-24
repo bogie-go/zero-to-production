@@ -1,0 +1,36 @@
+package controllers_test
+
+import (
+	"net/http"
+	"strconv"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"ecommerce/app/domain"
+	"ecommerce/app/views"
+	"ecommerce/test/factories"
+)
+
+var _ = Describe("GET /categories", func() {
+	It("is an empty list, not null, with no categories", func() {
+		app.Get("/categories").Do().Status(http.StatusOK).Contains(`"categories":[]`)
+	})
+
+	It("counts only live products and lists empty categories with 0", func() {
+		audio, empty := factories.Category(GinkgoT(), app.Store), factories.Category(GinkgoT(), app.Store)
+		factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.CategoryID = &audio.ID })
+		gone := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.CategoryID = &audio.ID })
+		_, err := app.Store.ArchiveProduct(GinkgoT().Context(), strconv.FormatInt(gone.ID, 10))
+		Expect(err).NotTo(HaveOccurred())
+
+		var list views.CategoriesResponse
+		app.Get("/categories").Do().Status(http.StatusOK).JSON(&list)
+
+		counts := map[int64]int64{}
+		for _, c := range list.Categories {
+			counts[c.ID] = c.ProductCount
+		}
+		Expect(counts).To(Equal(map[int64]int64{audio.ID: 1, empty.ID: 0}))
+	})
+})

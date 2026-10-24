@@ -465,7 +465,9 @@ Tests sit beside the code, stdlib `testing`. What they share lives in `test/`:
   `app.Get("/posts").Do().Status(200).JSON(&v)`, and
   `app.Jobs("kind")` for what a request queued. Requests are signed in
   with `.AsUser(u)` or `.AsGuest(id)`.
-- `test/requests`: the request tests, one file per area of the API.
+- `app/controllers/*_controller_test.go`: one request test file beside each
+  controller; `test/requests` keeps what spans controllers (a whole shopping
+  journey, wiring, failures).
 
 Tests are **Ginkgo and Gomega** (`Describe`/`Context`/`It`, `Expect`), in external
 `_test` packages, one suite file per package that owns the shared setup (`app`,
@@ -473,7 +475,7 @@ Tests are **Ginkgo and Gomega** (`Describe`/`Context`/`It`, `Expect`), in extern
 the store, domain and service tests below it cover the edge cases the request
 test would make tedious.
 
-- A **request test** (`test/requests`) sends HTTP through the real `Server`:
+- A **request test** (beside the controller, in `package controllers_test`) sends HTTP through the real `Server`:
   its router, middleware, controllers and store, wired exactly as `serve`
   wires them, on the test database. Arrange with factories, assert on status
   and JSON. There is no test of a controller on its own with a fake store:

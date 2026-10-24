@@ -5,7 +5,17 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"ecommerce/test/testapp"
 )
+
+// app is the whole application on a clean test database, rebuilt before
+// every spec: the specs in this package use it as RSpec specs use a `let`.
+var app *testapp.App
+
+var _ = BeforeEach(func() {
+	app = testapp.New(GinkgoT())
+})
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
