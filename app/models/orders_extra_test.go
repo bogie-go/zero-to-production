@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -9,34 +9,24 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/app/models"
+	"ecommerce/test/factories"
+	"ecommerce/test/testdb"
 )
 
-func checkoutFixtures(t *testing.T, store *Store, stock int32) (user domain.User, cart domain.Cart, product domain.Product) {
+// checkoutFixtures arranges the usual start of a checkout test: a customer, an
+// empty cart, and one $5.00 product with the given stock.
+func checkoutFixtures(t *testing.T, store *models.Store, stock int32) (user domain.User, cart domain.Cart, product domain.Product) {
 	t.Helper()
-	ctx := context.Background()
-
-	user, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cart, err = store.FindOrCreateCartByToken(ctx, "cart-token")
-	if err != nil {
-		t.Fatal(err)
-	}
-	product, err = store.CreateProduct(ctx, domain.Product{
-		Name: "Widget", Description: "a widget", PriceCents: 500, Stock: stock, ImageUrl: "/widget.webp",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return user, cart, product
+	product = factories.Product(t, store, func(p *domain.Product) { p.PriceCents = 500; p.Stock = stock })
+	return factories.User(t, store), factories.Cart(t, store), product
 }
 
 // A successful checkout decrements stock, snapshots the price into an
 // order_item, and empties the cart — all three, since they are one
 // transaction.
 func TestCreateOrderFromCartSucceeds(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	user, cart, product := checkoutFixtures(t, store, 10)
@@ -82,7 +72,8 @@ func TestCreateOrderFromCartSucceeds(t *testing.T) {
 // compare) only looks at stock at add-to-cart time, so by checkout time it
 // can be stale.
 func TestCreateOrderFromCartRollsBackOnInsufficientStock(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
+	pool := testdb.Pool(t)
 	ctx := context.Background()
 
 	user, cart, inStock := checkoutFixtures(t, store, 10)
@@ -101,7 +92,7 @@ func TestCreateOrderFromCartRollsBackOnInsufficientStock(t *testing.T) {
 
 	// Someone else buys the last unit between adding to cart and checking
 	// out — simulated by taking the stock to zero directly.
-	if _, err := store.pool.Exec(ctx, "UPDATE products SET stock = 0 WHERE id = $1", outOfStock.ID); err != nil {
+	if _, err := pool.Exec(ctx, "UPDATE products SET stock = 0 WHERE id = $1", outOfStock.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,7 +128,7 @@ func TestCreateOrderFromCartRollsBackOnInsufficientStock(t *testing.T) {
 }
 
 func TestCreateOrderFromCartRejectsAnEmptyCart(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	user, cart, _ := checkoutFixtures(t, store, 10)
@@ -147,7 +138,7 @@ func TestCreateOrderFromCartRejectsAnEmptyCart(t *testing.T) {
 }
 
 func TestGetOrderForUserIsScopedToItsOwner(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	user, cart, product := checkoutFixtures(t, store, 10)
@@ -174,7 +165,8 @@ func TestGetOrderForUserIsScopedToItsOwner(t *testing.T) {
 // The hook runs inside the checkout's transaction, after the order exists,
 // with that transaction: what it writes there commits with the order.
 func TestOnOrderPlacedRunsInsideTheTransaction(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
+	pool := testdb.Pool(t)
 	ctx := context.Background()
 	user, cart, product := checkoutFixtures(t, store, 10)
 	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 1); err != nil {
@@ -190,7 +182,7 @@ func TestOnOrderPlacedRunsInsideTheTransaction(t *testing.T) {
 		if err := tx.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&n); err != nil || n != 1 {
 			t.Errorf("inside the transaction the order is not visible: n=%d err=%v", n, err)
 		}
-		if err := store.pool.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&n); err != nil || n != 0 {
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM orders WHERE id = $1", order.ID).Scan(&n); err != nil || n != 0 {
 			t.Errorf("outside the transaction the order is visible before commit: n=%d err=%v", n, err)
 		}
 		return nil
@@ -208,7 +200,7 @@ func TestOnOrderPlacedRunsInsideTheTransaction(t *testing.T) {
 // A hook that fails undoes the checkout: no order, stock back, cart intact.
 // This is what makes "the job exists if and only if the order does" true.
 func TestAFailingOnOrderPlacedRollsBackTheCheckout(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	user, cart, product := checkoutFixtures(t, store, 10)
 	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 3); err != nil {
@@ -232,7 +224,7 @@ func TestAFailingOnOrderPlacedRollsBackTheCheckout(t *testing.T) {
 
 // No checkout, no job: the hook only runs for an order that was written.
 func TestOnOrderPlacedIsNotCalledWhenCheckoutFails(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	user, cart, _ := checkoutFixtures(t, store, 10) // an empty cart
 	called := false

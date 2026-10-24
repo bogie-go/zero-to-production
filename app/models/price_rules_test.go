@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/testdb"
 )
 
 // Whatever the id looks like, a price_rule that is not there is ErrNotFound, and a
 // caller cannot tell a malformed id from a well-formed one that names nothing.
 func TestUnknownPriceRulesAreNotFound(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	for _, id := range []string{"nope", "", "999999999"} {
@@ -35,7 +36,7 @@ func TestUnknownPriceRulesAreNotFound(t *testing.T) {
 // The admin's list is every rule in the order the engine runs them, active or
 // not; the cart's own list is only the active ones, in the same order.
 func TestAdminListIncludesInactiveRulesInRunningOrder(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	mk := func(name string, priority int32, active bool) domain.PriceRule {
 		r, err := store.CreatePriceRule(ctx, domain.PriceRule{Name: name, Kind: "fixed_discount", Properties: []byte(`{"amount_cents":100}`), Active: active, Priority: priority})
@@ -70,7 +71,7 @@ func names(rs []domain.PriceRule) []string {
 // read of the active rules (the cart's) no longer has it, and switching it
 // back on restores it.
 func TestSetPriceRuleActiveTakesEffectOnTheNextRead(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	rule, err := store.CreatePriceRule(ctx, domain.PriceRule{Name: "Sale", Kind: "fixed_discount", Properties: []byte(`{"amount_cents":100}`), Active: true})
 	if err != nil {
@@ -100,7 +101,7 @@ func TestSetPriceRuleActiveTakesEffectOnTheNextRead(t *testing.T) {
 
 // A rule needs a name and a kind, and cannot end before it starts.
 func TestPriceRulesAreValidatedOnSave(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	start, before := time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	for name, r := range map[string]domain.PriceRule{
@@ -119,7 +120,7 @@ func TestPriceRulesAreValidatedOnSave(t *testing.T) {
 // with no dates (or only one end) applies whenever that allows. This is the
 // scheduling the admin's start and end dates rely on.
 func TestActivePriceRulesRespectTheirDates(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	hour := time.Hour
 	past, future := time.Now().Add(-48*hour), time.Now().Add(48*hour)

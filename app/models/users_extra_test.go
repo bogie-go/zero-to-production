@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -9,10 +9,11 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/testdb"
 )
 
 func TestCreateUserRejectsADuplicateEmail(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	if _, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer}); err != nil {
@@ -24,7 +25,7 @@ func TestCreateUserRejectsADuplicateEmail(t *testing.T) {
 }
 
 func TestGetUserByEmail(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	created, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})
@@ -48,14 +49,15 @@ func TestGetUserByEmail(t *testing.T) {
 // The hook runs inside the signup's transaction, with the new user, and what
 // it writes commits with the user.
 func TestRegisterUserRunsTheHookInsideTheTransaction(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
+	pool := testdb.Pool(t)
 	ctx := context.Background()
 
 	var seen domain.User
 	store.OnUserRegistered(func(ctx context.Context, tx pgx.Tx, user domain.User) error {
 		seen = user
 		var n int
-		if err := store.pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", user.ID).Scan(&n); err != nil || n != 0 {
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM users WHERE id = $1", user.ID).Scan(&n); err != nil || n != 0 {
 			t.Errorf("outside the transaction the user is visible before commit: n=%d err=%v", n, err)
 		}
 		return nil
@@ -75,7 +77,7 @@ func TestRegisterUserRunsTheHookInsideTheTransaction(t *testing.T) {
 // A hook that fails (the queue is down) means no account: the signup is
 // refused rather than leaving a user who will never get their email.
 func TestAFailingOnUserRegisteredRollsBackTheSignup(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	store.OnUserRegistered(func(context.Context, pgx.Tx, domain.User) error { return errors.New("queue is down") })
 
@@ -90,7 +92,7 @@ func TestAFailingOnUserRegisteredRollsBackTheSignup(t *testing.T) {
 // Same answers as CreateUser: a duplicate email is ErrInvalid and runs no
 // hook; an invalid user is refused before anything is written.
 func TestRegisterUserRefusesDuplicatesAndInvalidUsers(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	calls := 0
 	store.OnUserRegistered(func(context.Context, pgx.Tx, domain.User) error { calls++; return nil })

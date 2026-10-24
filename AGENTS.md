@@ -101,7 +101,9 @@ nobody's secrets and can never open the development database.
     public/                      404.html · 500.html, go:embedded; Rails's public/, API mode included
     lib/logger/
 
-Tests live beside the code they test, stdlib `testing` only.
+Tests live beside the code they test, stdlib `testing` only. What they share
+(the test database, factories, fakes) lives in `test/`, as Rails's `test/`
+does.
 
 ## Deploy
 
@@ -447,12 +449,25 @@ other value baked in, by the same rule that keeps `app/views` JSON-only.
 
 ### Write a test
 
-Tests sit beside the code, stdlib `testing`, no factories and no fixtures.
+Tests sit beside the code, stdlib `testing`. Shared helpers live in `test/`:
+
+- `test/testdb`: `testdb.Store(t)` (below) and `testdb.Pool(t)` for raw SQL.
+- `test/factories`: `factories.Product(t, store, func(p *domain.Product) { p.Stock = 0 })`
+  builds a valid record, overrides only what the test cares about, saves it
+  through the real store and fails the test on error. `Sequence` keeps
+  unique columns unique. Hand-written, no library.
+- `test/fake`: fakes of outside systems (a recording mailer, an SMTP server).
+
+Test **outside in**: the controller (request) test is the one every feature
+must have; the store, domain and service tests below it cover the edge cases
+the request test would make tedious.
+
 
 - A **controller test** mounts the controller alone on `gin.New()` with a
   fake of its interface and asserts on status and body. No database; the
   scaffolded `*_controller_test.go` is the pattern.
-- A **store test** calls `testStore(t)`, which opens the TEST database,
+- A **store test** (in `package models_test`, so it can use the factories)
+  calls `testdb.Store(t)`, which opens the TEST database,
   migrates it and truncates every table, so each test starts from nothing.
   It needs Postgres up (`make up`) and never touches development data.
 - A **domain test** is a plain function call: `Validate` and whatever rules

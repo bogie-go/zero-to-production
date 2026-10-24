@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/testdb"
 )
 
 // Whatever the id looks like, a category that is not there is ErrNotFound, and a
 // caller cannot tell a malformed id from a well-formed one that names nothing.
 func TestUnknownCategoriesAreNotFound(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	for _, id := range []string{"nope", "", "999999999"} {
@@ -32,7 +33,7 @@ func TestUnknownCategoriesAreNotFound(t *testing.T) {
 }
 
 func TestCategoryRoundTrip(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	created, err := store.CreateCategory(ctx, domain.Category{Name: "Audio"})
@@ -58,7 +59,7 @@ func TestCategoryRoundTrip(t *testing.T) {
 
 // The name is required and unique, and both are the caller's 422.
 func TestCategoryNamesAreRequiredAndUnique(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	if _, err := store.CreateCategory(ctx, domain.Category{Name: "  "}); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("blank name: err = %v, want ErrInvalid", err)

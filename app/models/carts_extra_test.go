@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/testdb"
 )
 
 func TestGetCartByTokenDoesNotCreateOne(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	if _, err := store.GetCartByToken(ctx, "nobody"); !errors.Is(err, domain.ErrNotFound) {
@@ -30,7 +31,7 @@ func TestGetCartByTokenDoesNotCreateOne(t *testing.T) {
 }
 
 func TestDeleteCartAndItemsRemovesBoth(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	cart, err := store.FindOrCreateCartByToken(ctx, "guest-abc")
@@ -66,7 +67,7 @@ func TestDeleteCartAndItemsRemovesBoth(t *testing.T) {
 // Two first requests for the same token at the same moment still end up with
 // one cart: the unique index plus the single upsert statement, not luck.
 func TestFindOrCreateCartByTokenIsSafeUnderConcurrency(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	const n = 8
@@ -98,7 +99,7 @@ func TestFindOrCreateCartByTokenIsSafeUnderConcurrency(t *testing.T) {
 // The index is the guarantee itself: a second cart with a taken token is
 // refused by the database, whoever tries to create it.
 func TestCartTokensAreUnique(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	if _, err := store.CreateCart(ctx, domain.Cart{Token: "same"}); err != nil {
 		t.Fatal(err)

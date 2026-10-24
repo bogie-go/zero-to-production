@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/testdb"
 )
 
 // The cross-cart bug from task C2: UpdateCartItemQuantity and
@@ -14,7 +15,7 @@ import (
 // id they were given, the same way a caller can never update or delete
 // another visitor's line by guessing a bigint id.
 func TestUpdateAndDeleteCartItemAreScopedToTheirCart(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	cartA, err := store.FindOrCreateCartByToken(ctx, "visitor-a")

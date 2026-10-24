@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -8,25 +8,16 @@ import (
 	"testing"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/factories"
+	"ecommerce/test/testdb"
 )
-
-func widget(t *testing.T, s *Store) domain.Product {
-	t.Helper()
-	p, err := s.CreateProduct(context.Background(), domain.Product{
-		Name: "Widget", Description: "a widget", PriceCents: 500, Stock: 10, ImageUrl: "/w.webp",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
 
 // An archived product leaves the shop (list and get) but the admin's own
 // listing still has it, and restoring puts it back.
 func TestArchiveHidesAProductFromTheShopAndRestoreBringsItBack(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
-	p := widget(t, store)
+	p := factories.Product(t, store)
 	id := strconv.FormatInt(p.ID, 10)
 
 	archived, err := store.ArchiveProduct(ctx, id)
@@ -63,9 +54,9 @@ func TestArchiveHidesAProductFromTheShopAndRestoreBringsItBack(t *testing.T) {
 
 // Editing an archived product does not quietly bring it back.
 func TestUpdateKeepsAProductArchived(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
-	p := widget(t, store)
+	p := factories.Product(t, store)
 	archived, _ := store.ArchiveProduct(ctx, strconv.FormatInt(p.ID, 10))
 
 	archived.Stock = 3
@@ -76,7 +67,7 @@ func TestUpdateKeepsAProductArchived(t *testing.T) {
 }
 
 func TestArchiveUnknownProductsAreNotFound(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	for _, id := range []string{"nope", "", "999999999"} {
 		if _, err := store.ArchiveProduct(context.Background(), id); !errors.Is(err, domain.ErrNotFound) {
 			t.Errorf("ArchiveProduct(%q): err = %v, want ErrNotFound", id, err)
@@ -87,7 +78,7 @@ func TestArchiveUnknownProductsAreNotFound(t *testing.T) {
 // A product in an order cannot be hard-deleted: the database refuses, and
 // the store answers ErrInvalid (a 422 upstream), not a raw error.
 func TestDeleteAProductInAnOrderIsRefused(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	user, cart, product := checkoutFixtures(t, store, 10)
 	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 1); err != nil {
@@ -104,7 +95,7 @@ func TestDeleteAProductInAnOrderIsRefused(t *testing.T) {
 // An archived product cannot be added to a cart, and one archived after it
 // was added blocks checkout without touching stock or the cart.
 func TestArchivedProductsCannotBeBought(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	user, cart, product := checkoutFixtures(t, store, 10)
 	if _, err := store.AddCartItem(ctx, cart.ID, product.ID, 2); err != nil {
@@ -133,14 +124,14 @@ func TestArchivedProductsCannotBeBought(t *testing.T) {
 // first, and a page past the end is empty rather than an error. The count
 // follows the same filter, so the pager and the pages agree.
 func TestListActiveProductsPages(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
-	audio := category(t, store, "Audio")
+	audio := factories.Category(t, store, func(c *domain.Category) { c.Name = "Audio" })
 	for _, n := range []string{"A", "B", "C", "D", "E"} {
-		productIn(t, store, n, &audio.ID)
+		factories.Product(t, store, func(p *domain.Product) { p.Name = n; p.CategoryID = &audio.ID })
 	}
-	productIn(t, store, "Other", nil)
-	archived := productIn(t, store, "Gone", nil)
+	factories.Product(t, store, func(p *domain.Product) { p.Name = "Other"; p.CategoryID = nil })
+	archived := factories.Product(t, store, func(p *domain.Product) { p.Name = "Gone"; p.CategoryID = nil })
 	if _, err := store.ArchiveProduct(ctx, strconv.FormatInt(archived.ID, 10)); err != nil {
 		t.Fatal(err)
 	}
@@ -174,10 +165,10 @@ func TestListActiveProductsPages(t *testing.T) {
 // The admin's pages can hold the archived or leave them out, and the count
 // follows.
 func TestListProductsPageIncludesArchivedOnRequest(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
-	productIn(t, store, "Live", nil)
-	gone := productIn(t, store, "Gone", nil)
+	factories.Product(t, store, func(p *domain.Product) { p.Name = "Live"; p.CategoryID = nil })
+	gone := factories.Product(t, store, func(p *domain.Product) { p.Name = "Gone"; p.CategoryID = nil })
 	if _, err := store.ArchiveProduct(ctx, strconv.FormatInt(gone.ID, 10)); err != nil {
 		t.Fatal(err)
 	}

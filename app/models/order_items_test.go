@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/testdb"
 )
 
 // Whatever the id looks like, a order_item that is not there is ErrNotFound, and a
 // caller cannot tell a malformed id from a well-formed one that names nothing.
 func TestUnknownOrderItemsAreNotFound(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	for _, id := range []string{"nope", "", "999999999"} {
@@ -35,7 +36,7 @@ func TestUnknownOrderItemsAreNotFound(t *testing.T) {
 }
 
 func TestOrderItemRoundTrip(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	user, err := store.CreateUser(ctx, domain.User{Email: "a@example.com", PasswordDigest: "digest", Role: domain.RoleCustomer})

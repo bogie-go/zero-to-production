@@ -1,0 +1,26 @@
+// Package factories builds records for tests: Rails' factory_bot, written the
+// Go way. Each function fills in valid defaults, lets the test override only
+// what it cares about, saves through the real store, and fails the test on
+// any error, so a test reads as its arrangement and nothing else.
+//
+//	cheap := factories.Product(t, store)
+//	sold := factories.Product(t, store, func(p *domain.Product) { p.Stock = 0 })
+//
+// Unique columns (emails, names, tokens) come from Sequence, so two records
+// made in one test never collide.
+package factories
+
+import (
+	"fmt"
+	"sync"
+	"sync/atomic"
+)
+
+var counters sync.Map // prefix -> *int64
+
+// Sequence returns prefix followed by a number that is new each call:
+// Sequence("user") is "user1", then "user2".
+func Sequence(prefix string) string {
+	c, _ := counters.LoadOrStore(prefix, new(int64))
+	return fmt.Sprintf("%s%d", prefix, atomic.AddInt64(c.(*int64), 1))
+}

@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -8,12 +8,13 @@ import (
 
 	"ecommerce/app/domain"
 	"ecommerce/app/services/password"
+	"ecommerce/test/testdb"
 )
 
 // Whatever the id looks like, a user that is not there is ErrNotFound, and a
 // caller cannot tell a malformed id from a well-formed one that names nothing.
 func TestUnknownUsersAreNotFound(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	for _, id := range []string{"nope", "", "999999999"} {
@@ -35,7 +36,7 @@ func TestUnknownUsersAreNotFound(t *testing.T) {
 }
 
 func TestUserRoundTrip(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	digest, err := password.Hash("correct-horse-battery-staple")

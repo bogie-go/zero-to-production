@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/testdb"
 )
 
 // Whatever the id looks like, a cart_item that is not there is ErrNotFound, and a
 // caller cannot tell a malformed id from a well-formed one that names nothing.
 func TestUnknownCartItemsAreNotFound(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	for _, id := range []string{"nope", "", "999999999"} {
@@ -32,7 +33,7 @@ func TestUnknownCartItemsAreNotFound(t *testing.T) {
 }
 
 func TestCartItemRoundTrip(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 
 	// A cart item names a cart and a product, so both have to exist.

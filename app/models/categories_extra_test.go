@@ -1,4 +1,4 @@
-package models
+package models_test
 
 import (
 	"context"
@@ -7,35 +7,19 @@ import (
 	"testing"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/factories"
+	"ecommerce/test/testdb"
 )
-
-func category(t *testing.T, s *Store, name string) domain.Category {
-	t.Helper()
-	c, err := s.CreateCategory(context.Background(), domain.Category{Name: name})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return c
-}
-
-func productIn(t *testing.T, s *Store, name string, categoryID *int64) domain.Product {
-	t.Helper()
-	p, err := s.CreateProduct(context.Background(), domain.Product{Name: name, PriceCents: 100, Stock: 5, ImageUrl: "/x.webp", CategoryID: categoryID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
 
 // The catalog joins the category's name on, filters by category when asked,
 // and an uncategorized product still appears (a LEFT JOIN, not an inner one).
 func TestListActiveProductsJoinsAndFiltersByCategory(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
-	audio, peripherals := category(t, store, "Audio"), category(t, store, "Peripherals")
-	productIn(t, store, "Headphones", &audio.ID)
-	productIn(t, store, "Mouse", &peripherals.ID)
-	productIn(t, store, "Mystery Box", nil)
+	audio, peripherals := factories.Category(t, store, func(c *domain.Category) { c.Name = "Audio" }), factories.Category(t, store, func(c *domain.Category) { c.Name = "Peripherals" })
+	factories.Product(t, store, func(p *domain.Product) { p.Name = "Headphones"; p.CategoryID = &audio.ID })
+	factories.Product(t, store, func(p *domain.Product) { p.Name = "Mouse"; p.CategoryID = &peripherals.ID })
+	factories.Product(t, store, func(p *domain.Product) { p.Name = "Mystery Box"; p.CategoryID = nil })
 
 	all, err := store.ListActiveProducts(ctx, nil, 10, 0)
 	if err != nil || len(all) != 3 {
@@ -67,11 +51,11 @@ func TestListActiveProductsJoinsAndFiltersByCategory(t *testing.T) {
 // The counts are of ACTIVE products: an archived one does not make a category
 // look stocked, and an empty category still appears, with 0.
 func TestListCategoriesWithCountsCountsOnlyActiveProducts(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
-	audio, empty := category(t, store, "Audio"), category(t, store, "Empty")
-	productIn(t, store, "A", &audio.ID)
-	b := productIn(t, store, "B", &audio.ID)
+	audio, empty := factories.Category(t, store, func(c *domain.Category) { c.Name = "Audio" }), factories.Category(t, store, func(c *domain.Category) { c.Name = "Empty" })
+	factories.Product(t, store, func(p *domain.Product) { p.Name = "A"; p.CategoryID = &audio.ID })
+	b := factories.Product(t, store, func(p *domain.Product) { p.Name = "B"; p.CategoryID = &audio.ID })
 	if _, err := store.ArchiveProduct(ctx, strconv.FormatInt(b.ID, 10)); err != nil {
 		t.Fatal(err)
 	}
@@ -96,10 +80,10 @@ func TestListCategoriesWithCountsCountsOnlyActiveProducts(t *testing.T) {
 // Deleting a category un-categorizes its products rather than refusing or
 // taking them along: ON DELETE SET NULL.
 func TestDeletingACategoryUncategorizesItsProducts(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
-	audio := category(t, store, "Audio")
-	p := productIn(t, store, "Headphones", &audio.ID)
+	audio := factories.Category(t, store, func(c *domain.Category) { c.Name = "Audio" })
+	p := factories.Product(t, store, func(p *domain.Product) { p.Name = "Headphones"; p.CategoryID = &audio.ID })
 
 	if err := store.DeleteCategory(ctx, strconv.FormatInt(audio.ID, 10)); err != nil {
 		t.Fatal(err)
@@ -113,14 +97,14 @@ func TestDeletingACategoryUncategorizesItsProducts(t *testing.T) {
 // A product pointed at a category that is not there is the caller's 422, on
 // create and on update, not a raw foreign-key error.
 func TestAProductNeedsARealCategory(t *testing.T) {
-	store := testStore(t)
+	store := testdb.Store(t)
 	ctx := context.Background()
 	ghost := int64(999999999)
 
 	if _, err := store.CreateProduct(ctx, domain.Product{Name: "X", ImageUrl: "/x", CategoryID: &ghost}); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("create with a missing category: err = %v, want ErrInvalid", err)
 	}
-	p := productIn(t, store, "Y", nil)
+	p := factories.Product(t, store, func(p *domain.Product) { p.Name = "Y"; p.CategoryID = nil })
 	p.CategoryID = &ghost
 	if _, err := store.UpdateProduct(ctx, p); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("update to a missing category: err = %v, want ErrInvalid", err)
