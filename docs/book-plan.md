@@ -56,7 +56,7 @@ Pass 1 is built through Task G. Task B (categories) was skipped at first and bui
 | G | `task-g2` | the welcome email |
 | G | `task-g3` | the sign-in alert (Task G complete) |
 
-Next in the plan: H (deploy, waiting on a VM; the rest is done) and the OpenAPI contract freeze. I (health) is built (2026-10-24, see `docs/operations.md`). `docs/build-notes.md` has the open items.
+H (deploy) is done: the shop runs at https://showcase.bogie-go.com. The OpenAPI contract is drafted and enforced (`docs/openapi.yaml`, `docs/api-contract.md`, 2026-10-25); Bogie's generator entries for it are not built yet. Next: Postgres backups, then Pass 2. I (health) is built (2026-10-24, see `docs/operations.md`). `docs/build-notes.md` has the open items.
 
 ## Testing
 

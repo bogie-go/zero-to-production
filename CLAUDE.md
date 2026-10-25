@@ -11,7 +11,7 @@ This repo holds the reference e-commerce shop built in the book, plus everything
 - Write the app the way a reader would: use Bogie's generators first, then hand-edit. Don't add libraries Bogie doesn't already bring unless the plan calls for it.
 - Keep these hand-written, never generated: the price rule engine and cart logic. They are teaching material.
 - If Bogie is missing something the app needs, note it in `docs/bogie-gaps.md` rather than working around it silently. Fixing Bogie is part of the work.
-- The UI is the API contract. Don't change endpoint paths or JSON shapes without updating the contract and the UI together.
+- The UI is the API contract, written down in `docs/openapi.yaml` and enforced by the request tests (see `docs/api-contract.md`). Don't change endpoint paths or JSON shapes without updating the spec and the UI together.
 - Keep the UI plain and buildless for readers: `public/` is plain HTML/CSS/JS with Alpine.js, no Node, no build step, no bundler.
 - SQL stays simple and readable; readers only get a light introduction to SQL.
 - Prefer idiomatic Go over Rails imitation. Borrow Rails ideas, write them the Go way (for example, STI-style price rules use an interface, a type column, and a registry).

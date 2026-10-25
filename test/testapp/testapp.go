@@ -2,7 +2,8 @@
 // real controllers and the real store on a clean test database, with a
 // request helper on top. A test written with it is a request test, the
 // outermost layer: it sends HTTP in and checks the status and JSON that come
-// back, which is the contract the UI relies on.
+// back, which is the contract the UI relies on. Every exchange is also
+// checked against docs/openapi.yaml (see contract.go).
 //
 //	app := testapp.New(t)
 //	product := factories.Product(t, app.Store)
@@ -138,20 +139,18 @@ func (r *Request) WithRemoteAddr(addr string) *Request {
 func (r *Request) Do() *Response {
 	t := r.app.t
 	t.Helper()
-	var reader *bytes.Reader
+	var raw []byte
 	switch b := r.body.(type) {
 	case nil:
-		reader = bytes.NewReader(nil)
 	case string:
-		reader = bytes.NewReader([]byte(b))
+		raw = []byte(b)
 	default:
-		raw, err := json.Marshal(b)
-		if err != nil {
+		var err error
+		if raw, err = json.Marshal(b); err != nil {
 			t.Fatal(err)
 		}
-		reader = bytes.NewReader(raw)
 	}
-	req := httptest.NewRequest(r.method, r.path, reader)
+	req := httptest.NewRequest(r.method, r.path, bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
 	if r.authorization != "" {
 		req.Header.Set("Authorization", r.authorization)
@@ -164,6 +163,7 @@ func (r *Request) Do() *Response {
 	}
 	rec := httptest.NewRecorder()
 	r.app.Server.Router.ServeHTTP(rec, req)
+	checkContract(t, req, raw, rec)
 	return &Response{t: t, Code: rec.Code, Body: rec.Body.Bytes()}
 }
 

@@ -720,3 +720,9 @@ What was already there: `/healthz` (liveness), one request log line, graceful sh
 - **Safe updates**, written down and set: `deploy_timeout` 60, `drain_timeout` 30 (above `shutdown_grace`), the expand-then-contract rule for migrations, how to roll back code and, if it must be, the schema. See `docs/operations.md`.
 
 Not built, on purpose: a metrics endpoint (Prometheus) and an error-tracking service. Both are a dependency and a service to run, and the book only needs one honest answer to "is it healthy?", which is the three views above. They belong in "Where to go next". The worker has no HTTP surface, so its health is the queue numbers on the Health page; Docker restarts it if it dies.
+
+## The API contract (2026-10-25)
+
+`docs/openapi.yaml` describes all 37 operations (OpenAPI 3.0, hand-written from the routes and `views`). `test/testapp/contract.go` validates every request test's exchange against it with kin-openapi: undocumented status codes, wrong types, missing or extra response fields fail the test; `test/requests/contract_test.go` compares mounted routes with the spec both ways. Mutation-checked: changing a field's type, removing a field and removing a path each made tests fail.
+
+What writing it turned up: any endpoint can answer 500 and none said so (now documented on every operation); `GET /orders` returns a bare array while every other list is an object (`{"products": ...}`), documented as it is because the UI relies on it, to be decided before the freeze is final.

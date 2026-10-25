@@ -1,0 +1,1043 @@
+openapi: 3.0.3
+info:
+  title: Bogie Showcase API
+  version: "1.0.0"
+  description: |
+    The contract between the shop's API and its UI (`public/`). The request
+    tests check every request and response against this file, so it cannot
+    drift quietly: code that disagrees with it fails a test, and so does a
+    spec that disagrees with the code.
+
+    **Authentication.** Everything except health, signup, login, guest
+    sessions and the public catalog needs `Authorization: Bearer <token>`.
+    A token is either a *user* token (from `POST /users` or `POST /sessions`)
+    or a *guest* token (from `POST /guest_sessions`). A guest can fill a cart
+    but cannot place an order or read `/me`; those answer 403 until the
+    visitor has an account. `/admin/*` additionally needs a staff account.
+
+    **Errors.** Every failure is `{"status": "error", "error": "<message>"}`:
+    400 for a body that is not valid JSON, 401 for a missing or bad token,
+    403 for the wrong kind of account, 404 for a record that is not there (or
+    not yours), 422 for input that is well formed but refused.
+
+    **Money** is whole cents (`price_cents`), never a decimal.
+
+    **Closed responses.** Response objects list every field they carry; a
+    field the code adds without adding it here fails the request tests.
+servers:
+  - url: http://localhost:8080
+    description: development
+  - url: https://showcase.bogie-go.com
+    description: the deployed showcase
+
+tags:
+  - name: Health
+  - name: Accounts
+  - name: Catalog
+  - name: Cart
+  - name: Orders
+  - name: Admin products
+  - name: Admin categories
+  - name: Admin price rules
+  - name: Admin operations
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness
+      description: Answers `ok` while the process is running. Touches nothing else.
+      responses:
+        "200":
+          description: The process is alive.
+          content:
+            text/plain:
+              schema: { type: string, example: ok }
+
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness
+      description: |
+        Asks the database (bounded to two seconds). Kamal's proxy waits for
+        this before moving traffic to a new release. A failure names the
+        check that failed, never the cause.
+      responses:
+        "200":
+          description: Ready to serve.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+        "503":
+          description: Not ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+
+  /users:
+    post:
+      tags: [Accounts]
+      summary: Sign up
+      description: Creates the account and signs it in. A guest's cart is not carried over.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Credentials" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sessions:
+    post:
+      tags: [Accounts]
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Credentials" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /guest_sessions:
+    post:
+      tags: [Accounts]
+      summary: Start as a guest
+      description: A token for a visitor with no account, enough to fill a cart.
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "201":
+          description: Guest token issued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+
+  /me:
+    get:
+      tags: [Accounts]
+      summary: The signed-in account
+      security: [{ bearerAuth: [] }]
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: The account behind the token.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /products:
+    get:
+      tags: [Catalog]
+      summary: List products
+      description: Active (not archived) products, newest page first.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: category_id
+          in: query
+          description: Only products in this category.
+          schema: { type: integer, format: int64 }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: A page of products.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Products" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /products/{id}:
+    get:
+      tags: [Catalog]
+      summary: One product
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: The product.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /categories:
+    get:
+      tags: [Catalog]
+      summary: List categories with product counts
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Every category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Categories" }
+
+  /cart:
+    get:
+      tags: [Cart]
+      summary: The cart
+      description: |
+        The caller's cart, priced: lines, subtotal, and the price rules that
+        applied with what each took off. Created on first use.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: The priced cart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /cart_items:
+    post:
+      tags: [Cart]
+      summary: Add a product to the cart
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddCartItem" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "201":
+          description: Added; the whole priced cart comes back.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /cart_items/{id}:
+    patch:
+      tags: [Cart]
+      summary: Change a line's quantity
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCartItem" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Updated; the whole priced cart comes back.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Cart]
+      summary: Remove a line
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Removed; the whole priced cart comes back.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /orders:
+    post:
+      tags: [Orders]
+      summary: Place an order from the cart
+      description: |
+        Prices the cart, takes the stock and empties the cart in one
+        transaction. Needs an account: a guest gets 403. An empty cart, or
+        a product with too little stock left, is 422.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "201":
+          description: Order placed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    get:
+      tags: [Orders]
+      summary: My orders
+      description: The account's most recent orders, newest first, at most 50.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Order summaries (a bare array).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OrderSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      summary: One of my orders
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: The order with its lines.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/products:
+    get:
+      tags: [Admin products]
+      summary: List every product, archived included
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: include_archived
+          in: query
+          description: Archived products are listed unless this is `false`.
+          schema: { type: string, enum: ["true", "false"], default: "true" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: A page of products.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Products" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    post:
+      tags: [Admin products]
+      summary: Create a product
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductInput" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /admin/products/{id}:
+    get:
+      tags: [Admin products]
+      summary: One product, archived or not
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: The product.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Admin products]
+      summary: Update a product
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductInput" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Admin products]
+      summary: Delete a product
+      description: Refused with 422 if an order refers to it; archive it instead.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /admin/products/{id}/archive:
+    post:
+      tags: [Admin products]
+      summary: Archive a product
+      description: Hides it from the catalog; existing orders keep it.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Archived.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/products/{id}/restore:
+    post:
+      tags: [Admin products]
+      summary: Restore an archived product
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Restored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/categories:
+    get:
+      tags: [Admin categories]
+      summary: List categories
+      security: [{ bearerAuth: [] }]
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Every category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Categories" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin categories]
+      summary: Create a category
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /admin/categories/{id}:
+    get:
+      tags: [Admin categories]
+      summary: One category
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: The category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Admin categories]
+      summary: Rename a category
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Admin categories]
+      summary: Delete a category
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /admin/price_rules:
+    get:
+      tags: [Admin price rules]
+      summary: List price rules
+      security: [{ bearerAuth: [] }]
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Every rule, with its computed status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRules" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin price rules]
+      summary: Create a price rule
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceRuleInput" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /admin/price_rules/kinds:
+    get:
+      tags: [Admin price rules]
+      summary: The kinds of rule and the fields each takes
+      description: What the admin form is built from.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Every registered kind.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Kinds" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/price_rules/{id}:
+    get:
+      tags: [Admin price rules]
+      summary: One price rule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: The rule.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Admin price rules]
+      summary: Update a price rule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceRuleInput" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Admin price rules]
+      summary: Delete a price rule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/price_rules/{id}/activate:
+    post:
+      tags: [Admin price rules]
+      summary: Turn a rule on
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Active.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/price_rules/{id}/deactivate:
+    post:
+      tags: [Admin price rules]
+      summary: Turn a rule off
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: Inactive.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceRule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/ops:
+    get:
+      tags: [Admin operations]
+      summary: How the running system is doing
+      description: The release, the environment, the schema version and the job queue.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ops" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    Page:
+      name: page
+      in: query
+      description: 1-based page number, up to 10000.
+      schema: { type: integer, minimum: 1, maximum: 10000, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      description: Page size; larger values are capped by the server.
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    BadRequest:
+      description: The body is not valid JSON, or has the wrong types.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: No bearer token, or one that is invalid or expired.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: The token is valid but the account may not do this (guest, or not staff).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such record, or it belongs to someone else.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unprocessable:
+      description: Well formed, but refused. The message says why.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ServerError:
+      description: Something failed on our side. The message is always `internal error`; the cause is in the logs, found by request id.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [error] }
+        error: { type: string }
+
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        checks:
+          type: object
+          additionalProperties: { type: string }
+
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    Session:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { type: string, description: A bearer token. }
+
+    Me:
+      type: object
+      additionalProperties: false
+      required: [id, email, role]
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string }
+        role: { type: string, enum: [customer, staff] }
+
+    Pagination:
+      type: object
+      additionalProperties: false
+      required: [page, per_page, total, total_pages]
+      properties:
+        page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer, format: int64 }
+        total_pages: { type: integer }
+
+    Product:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, price_cents, stock, image_url, archived_at, category_id, category_name, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string }
+        price_cents: { type: integer }
+        stock: { type: integer }
+        image_url: { type: string }
+        archived_at: { type: string, format: date-time, nullable: true }
+        category_id: { type: integer, format: int64, nullable: true }
+        category_name: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Products:
+      type: object
+      additionalProperties: false
+      required: [products, pagination]
+      properties:
+        products:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+
+    ProductInput:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        price_cents: { type: integer }
+        stock: { type: integer }
+        image_url: { type: string }
+        category_id: { type: integer, format: int64, nullable: true }
+
+    Category:
+      type: object
+      additionalProperties: false
+      required: [id, name, product_count]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        product_count: { type: integer, format: int64 }
+
+    Categories:
+      type: object
+      additionalProperties: false
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+
+    CategoryInput:
+      type: object
+      properties:
+        name: { type: string }
+
+    AddCartItem:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id: { type: integer, format: int64 }
+        quantity: { type: integer, minimum: 1 }
+
+    UpdateCartItem:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: { type: integer, minimum: 1 }
+
+    CartLine:
+      type: object
+      additionalProperties: false
+      required: [id, product_id, name, image_url, unit_price_cents, quantity, subtotal_cents]
+      properties:
+        id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        name: { type: string }
+        image_url: { type: string }
+        unit_price_cents: { type: integer }
+        quantity: { type: integer }
+        subtotal_cents: { type: integer }
+
+    AppliedRule:
+      type: object
+      additionalProperties: false
+      required: [name, discount_cents]
+      properties:
+        name: { type: string }
+        discount_cents: { type: integer }
+
+    Cart:
+      type: object
+      additionalProperties: false
+      required: [items, subtotal_cents, discount_cents, total_cents, applied_rules]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CartLine" }
+        subtotal_cents: { type: integer }
+        discount_cents: { type: integer }
+        total_cents: { type: integer }
+        applied_rules:
+          type: array
+          items: { $ref: "#/components/schemas/AppliedRule" }
+
+    OrderLine:
+      type: object
+      additionalProperties: false
+      required: [product_id, name, image_url, unit_price_cents, quantity, subtotal_cents]
+      properties:
+        product_id: { type: integer, format: int64 }
+        name: { type: string }
+        image_url: { type: string }
+        unit_price_cents: { type: integer }
+        quantity: { type: integer }
+        subtotal_cents: { type: integer }
+
+    Order:
+      type: object
+      additionalProperties: false
+      required: [id, status, items, subtotal_cents, discount_cents, total_cents]
+      properties:
+        id: { type: integer, format: int64 }
+        status: { type: string }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OrderLine" }
+        subtotal_cents: { type: integer }
+        discount_cents: { type: integer }
+        total_cents: { type: integer }
+
+    OrderSummary:
+      type: object
+      additionalProperties: false
+      required: [id, status, total_cents, created_at]
+      properties:
+        id: { type: integer, format: int64 }
+        status: { type: string }
+        total_cents: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    PriceRule:
+      type: object
+      additionalProperties: false
+      required: [id, name, kind, kind_label, summary, properties, active, priority, starts_at, ends_at, status]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        kind: { type: string, description: A registered kind; see /admin/price_rules/kinds. }
+        kind_label: { type: string }
+        summary: { type: string, description: The rule in one sentence. }
+        properties:
+          type: object
+          description: The kind's own settings. Their shape depends on `kind`.
+          additionalProperties: true
+        active: { type: boolean }
+        priority: { type: integer }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true }
+        status: { type: string, description: "Computed: whether the rule applies now (active, scheduled, expired, off)." }
+
+    PriceRules:
+      type: object
+      additionalProperties: false
+      required: [price_rules]
+      properties:
+        price_rules:
+          type: array
+          items: { $ref: "#/components/schemas/PriceRule" }
+
+    PriceRuleInput:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { type: string }
+        properties:
+          type: object
+          additionalProperties: true
+        active: { type: boolean }
+        priority: { type: integer }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true }
+
+    Field:
+      type: object
+      additionalProperties: false
+      required: [name, label, type, help]
+      properties:
+        name: { type: string }
+        label: { type: string }
+        type: { type: string }
+        help: { type: string }
+
+    Kind:
+      type: object
+      additionalProperties: false
+      required: [kind, label, help, note, fields]
+      properties:
+        kind: { type: string }
+        label: { type: string }
+        help: { type: string }
+        note: { type: string }
+        fields:
+          type: array
+          items: { $ref: "#/components/schemas/Field" }
+
+    Kinds:
+      type: object
+      additionalProperties: false
+      required: [kinds]
+      properties:
+        kinds:
+          type: array
+          items: { $ref: "#/components/schemas/Kind" }
+
+    Ops:
+      type: object
+      additionalProperties: false
+      required: [version, env, schema_version, jobs, oldest_waiting_seconds]
+      properties:
+        version: { type: string, description: "The release (git sha), or dev." }
+        env: { type: string }
+        schema_version: { type: integer, format: int64 }
+        jobs:
+          type: object
+          description: Job counts by state.
+          additionalProperties: { type: integer, format: int64 }
+        oldest_waiting_seconds: { type: number }
