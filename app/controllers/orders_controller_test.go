@@ -50,6 +50,30 @@ var _ = Describe("POST /orders", func() {
 	})
 })
 
+var _ = Describe("POST /orders with a buy 2 get 1 free rule", func() {
+	Context("when the cart holds three of a product", func() {
+		var user domain.User
+		var order views.OrderResponse
+
+		BeforeEach(func() {
+			product := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 1000 })
+			factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) {
+				r.Kind, r.Properties = "buy_x_get_y", []byte(`{"required_quantity":2,"free_quantity":1}`)
+			})
+			user = factories.User(GinkgoT(), app.Store)
+			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 3}).AsUser(user).Do().Status(http.StatusCreated)
+		})
+
+		It("charges what the cart showed: the third is free", func() {
+			app.Post("/orders", nil).AsUser(user).Do().Status(http.StatusCreated).JSON(&order)
+
+			Expect(order.SubtotalCents).To(BeEquivalentTo(3000))
+			Expect(order.DiscountCents).To(BeEquivalentTo(1000))
+			Expect(order.TotalCents).To(BeEquivalentTo(2000))
+		})
+	})
+})
+
 var _ = Describe("GET /orders/:id", func() {
 	var ada, grace domain.User
 	var path string

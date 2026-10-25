@@ -36,10 +36,8 @@ var _ = Describe("Calculate", func() {
 			int64(1000), []domain.PriceRule{rule(1, "Big Spender", "minimum_purchase", pricing.MinimumPurchaseRule{MinimumCents: 50000, DiscountCents: 7500})}, nil, int64(1000), 0),
 		Entry("minimum purchase at threshold applies",
 			int64(50000), []domain.PriceRule{rule(1, "Big Spender", "minimum_purchase", pricing.MinimumPurchaseRule{MinimumCents: 50000, DiscountCents: 7500})}, nil, int64(42500), 1),
-		Entry("buy x get y below required quantity does not apply",
-			int64(1000), []domain.PriceRule{rule(1, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1})}, map[string]any{"quantity": 1}, int64(1000), 0),
-		Entry("buy x get y at required quantity applies",
-			int64(1000), []domain.PriceRule{rule(1, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1})}, map[string]any{"quantity": 5}, int64(1000), 1),
+		Entry("buy x get y with no cart lines has nothing to discount",
+			int64(1000), []domain.PriceRule{rule(1, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1})}, nil, int64(1000), 0),
 		// 1000 -> 800 (20% off) -> 725 (meets the $5 minimum, -$0.75)
 		Entry("stacking two rules in order",
 			int64(1000), []domain.PriceRule{
@@ -64,6 +62,88 @@ var _ = Describe("Calculate", func() {
 		It("treats it as invalid", func() {
 			_, err := pricing.Calculate(1000, rules, nil)
 			Expect(err).To(MatchError(domain.ErrInvalid))
+		})
+	})
+})
+
+// Buy X, get Y free is priced per cart line: the free items are of the same
+// product, so the rule needs each line's unit price, which a single subtotal
+// does not carry.
+var _ = Describe("CalculateLines", func() {
+	bogo := func(buy, free int32) []domain.PriceRule {
+		return []domain.PriceRule{rule(1, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: buy, FreeQuantity: free})}
+	}
+	line := func(product, unit, quantity int64) pricing.Line {
+		return pricing.Line{ProductID: product, UnitCents: unit, Quantity: quantity}
+	}
+
+	DescribeTable("buy 2, get 1 free",
+		func(lines []pricing.Line, wantFinal int64, wantRules int) {
+			result, err := pricing.CalculateLines(lines, bogo(2, 1))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.FinalCents).To(Equal(wantFinal))
+			Expect(result.AppliedRules).To(HaveLen(wantRules))
+		},
+		Entry("two of a product is not enough: the free one has to be a third",
+			[]pricing.Line{line(1, 1000, 2)}, int64(2000), 0),
+		Entry("three of a product makes the third free",
+			[]pricing.Line{line(1, 1000, 3)}, int64(2000), 1),
+		Entry("four is still one free set, not two",
+			[]pricing.Line{line(1, 1000, 4)}, int64(3000), 1),
+		Entry("six is two sets",
+			[]pricing.Line{line(1, 1000, 6)}, int64(4000), 1),
+		Entry("only the line that qualifies is discounted, at its own unit price",
+			[]pricing.Line{line(1, 1000, 3), line(2, 500, 2)}, int64(3000), 1),
+		Entry("units of different products never complete a set",
+			[]pricing.Line{line(1, 1000, 2), line(2, 500, 1)}, int64(2500), 0),
+		Entry("each qualifying line gets its own free item",
+			[]pricing.Line{line(1, 1000, 3), line(2, 500, 3)}, int64(3000), 1), // 4500 - 1000 - 500
+	)
+
+	It("takes the free units off at the line's unit price and says which lines", func() {
+		result, err := pricing.CalculateLines([]pricing.Line{line(7, 1000, 3), line(8, 500, 6)}, bogo(2, 1))
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.OriginalCents).To(BeEquivalentTo(6000))
+		Expect(result.FinalCents).To(BeEquivalentTo(4000)) // -1000 for product 7, -2*500 for product 8
+		Expect(result.AppliedRules).To(HaveLen(1))
+		Expect(result.AppliedRules[0].Detail).To(HaveKeyWithValue("free_items", int64(3)))
+		Expect(result.AppliedRules[0].Detail["lines"]).To(ConsistOf(
+			HaveKeyWithValue("product_id", int64(7)),
+			HaveKeyWithValue("product_id", int64(8)),
+		))
+	})
+
+	It("reads buy 1 get 1 free as every second unit", func() {
+		result, err := pricing.CalculateLines([]pricing.Line{line(1, 800, 5)}, bogo(1, 1))
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.FinalCents).To(BeEquivalentTo(2400)) // 4000, and 2 of the 5 are free
+	})
+
+	Context("after another rule has already lowered the total", func() {
+		It("takes the free units off the running total, in priority order", func() {
+			rules := []domain.PriceRule{
+				rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 20}),
+				rule(2, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1}),
+			}
+			result, err := pricing.CalculateLines([]pricing.Line{line(1, 1000, 3)}, rules)
+
+			Expect(err).NotTo(HaveOccurred())
+			// 3000 -> 2400 (20% off) -> 1400 (one 1000 unit free, at its face price)
+			Expect(result.FinalCents).To(BeEquivalentTo(1400))
+		})
+
+		It("never takes more than what is left", func() {
+			rules := []domain.PriceRule{
+				rule(1, "Early Bird", "fixed_discount", pricing.FixedDiscountRule{AmountCents: 5000}),
+				rule(2, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1}),
+			}
+			result, err := pricing.CalculateLines([]pricing.Line{line(1, 1000, 3)}, rules)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.FinalCents).To(BeZero())
+			Expect(result.AppliedRules).To(HaveLen(1), "a rule that took nothing off is not listed")
 		})
 	})
 })

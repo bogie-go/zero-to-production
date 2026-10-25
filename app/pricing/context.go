@@ -11,6 +11,16 @@ type AppliedRule struct {
 	Detail        map[string]any
 }
 
+// Line is one cart line as a rule sees it: a product, what one unit costs
+// and how many are bought. Rules that depend on a product's own price, like
+// buy-X-get-Y, work line by line; the ones that only need the total ignore
+// Lines and work on CurrentCents.
+type Line struct {
+	ProductID int64
+	UnitCents int64
+	Quantity  int64
+}
+
 // PriceContext carries a price through the rule pipeline, the same role
 // Rack's env plays for Rails middleware: each rule reads it, changes
 // CurrentCents, and the next rule sees the result.
@@ -19,10 +29,14 @@ type PriceContext struct {
 	CurrentCents  int64
 	AppliedRules  []AppliedRule
 
+	// Lines are the cart's lines, when the price being worked out is a
+	// cart's. Empty for a bare price (Calculate), where a per-line rule has
+	// nothing to act on.
+	Lines []Line
+
 	// Metadata is read-and-written by individual rules for whatever they
-	// need beyond a price — BuyXGetYRule reads a "quantity" here, for
-	// instance. Keeping it a loose map, rather than named fields on
-	// PriceContext, means a new rule kind never needs a change here either.
+	// need beyond a price. Keeping it a loose map, rather than named fields
+	// on PriceContext, means a new rule kind never needs a change here.
 	Metadata map[string]any
 }
 

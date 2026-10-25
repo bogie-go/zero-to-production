@@ -112,7 +112,7 @@ func cartView(lines []domain.CartLine, rules []domain.PriceRule) (views.CartResp
 		subtotal += lineSubtotal
 	}
 
-	result, err := pricing.Calculate(int64(subtotal), rules, nil)
+	result, err := pricing.CalculateLines(pricing.CartLines(lines), rules)
 	if err != nil {
 		return views.CartResponse{}, err
 	}

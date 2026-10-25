@@ -37,7 +37,7 @@ func (s *Store) CreateOrderFromCart(ctx context.Context, userID int64, cartID in
 	for _, l := range lines {
 		subtotal += l.UnitPriceCents * l.Quantity
 	}
-	result, err := pricing.Calculate(int64(subtotal), rules, nil)
+	result, err := pricing.CalculateLines(pricing.CartLines(lines), rules)
 	if err != nil {
 		return domain.Order{}, nil, err
 	}

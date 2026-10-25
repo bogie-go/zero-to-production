@@ -35,6 +35,26 @@ var _ = Describe("GET /cart", func() {
 		})
 	})
 
+	Context("with a buy 2 get 1 free rule and three of a product in the cart", func() {
+		BeforeEach(func() {
+			product = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 1000 })
+			factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) {
+				r.Name, r.Kind, r.Properties = "Buy 2 Get 1 Free", "buy_x_get_y", []byte(`{"required_quantity":2,"free_quantity":1}`)
+			})
+			user = factories.User(GinkgoT(), app.Store)
+			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 3}).AsUser(user).Do().Status(http.StatusCreated)
+		})
+
+		It("makes the third one free", func() {
+			app.Get("/cart").AsUser(user).Do().Status(http.StatusOK).JSON(&cart)
+
+			Expect(cart.SubtotalCents).To(BeEquivalentTo(3000))
+			Expect(cart.DiscountCents).To(BeEquivalentTo(1000))
+			Expect(cart.TotalCents).To(BeEquivalentTo(2000))
+			Expect(cart.AppliedRules).To(ConsistOf(views.AppliedRuleResponse{Name: "Buy 2 Get 1 Free", DiscountCents: 1000}))
+		})
+	})
+
 	Context("with an inactive price rule and a guest's line", func() {
 		BeforeEach(func() {
 			staff = factories.Staff(GinkgoT(), app.Store)

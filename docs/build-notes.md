@@ -18,7 +18,7 @@ Pass 1 has reached the end of Task G. Every checkpoint is a git tag; the table i
 - The headless-browser checks (real Chrome, via a scratch script) are not part of `bin/ci`.
 
 **Known limitations, kept on purpose**
-- `buy_x_get_y` records free items but does not lower the price (needs per-line pricing). The admin form says so.
+- ~~`buy_x_get_y` records free items but does not lower the price.~~ Fixed 2026-10-25: priced per cart line (see "Buy X, get Y, priced per line" at the end).
 - Coupon codes (`price_rules.code`) are deferred; no record of which rule discounted which past order.
 - At-least-once email delivery (an occasional duplicate), and failures visible only in `river_job`.
 - A sign-in alert for every login is noisy; knowing a device needs a table.
@@ -688,7 +688,7 @@ Closes the "seeded until Task F" note from the pricing task, and with it Task F.
 
 - [ ] Coupon codes (`price_rules.code`) are still deferred.
 - [ ] No way to see which rule discounted which past order (an order keeps only its totals).
-- [ ] `buy_x_get_y` needs per-line pricing to actually discount.
+- [x] `buy_x_get_y` needs per-line pricing to actually discount. Done 2026-10-25, see the end of this file.
 
 
 ## Task H: going live (2026-10-24, in progress)
@@ -742,3 +742,15 @@ The shop has a name and a future: **Bogie Depot**, which becomes the real store 
 - The seeded price rules are active on every environment that runs `db seed`: *Flash Sale - 20% Off*, *Early Bird Special* ($50 off), *Buy 2 Get 1 Free* and *Big Spender Bonus* ($75 off over $500). They were tuned for desk gear at $20-$300. The fixed discount is capped at the cart's total, so on merch at $3-$25 the $50 *Early Bird Special* makes any cart under $50 cost $0 (checked in `app/pricing/fixed_discount.go`), and a permanent 20% sale is wrong for a real store. The book needs them as teaching data; the live store should not seed them as active.
 
 **Renamed (2026-10-25):** the shop is now served at `depot.bogie-go.com` (the DNS record moved) and its image is `roonglit/bogie-depot` on Docker Hub. `config/deploy.yml`, the production credentials (`site.url`, `mail.from`), `docs/openapi.yaml` and the book plan use the new names; the sections above keep the names they were written under (`showcase.bogie-go.com`, `roonglit/bogie-showcase`). The running containers still carry the old image until the next `kamal deploy`, and `showcase.bogie-go.com` still resolves to the same VM.
+
+## Buy X, get Y, priced per line (2026-10-25)
+
+`buy_x_get_y` used to record how many items were free and change nothing, and in practice it never even fired: the cart and checkout passed one subtotal and no quantity, so the rule never met its threshold. A discount on "the third one" is Y units at that product's own unit price, which a single total does not carry.
+
+**The fix is the one the original comment named: price per line.** `pricing.CalculateLines(lines, rules)` sums the lines for the subtotal and hands every rule the lines too (`PriceContext.Lines`, each a product id, unit price and quantity). `BuyXGetYRule.Apply` walks the lines and, for each, takes `quantity / (X+Y) * Y` units off at that line's unit price, capped at what is left of the running total, listing the lines in the applied rule's detail. `pricing.CartLines` turns the store's cart lines into pricing lines, and both `cartView` and `CreateOrderFromCart` use it, so the cart and the checkout still agree to the cent. The rules that only need a total (percentage, fixed, minimum purchase) ignore `Lines`. `Calculate(cents, ...)` stays for a bare price, where buy-X-get-Y has nothing to act on. The loose `Metadata["quantity"]` convention is gone.
+
+**Semantics, decided here and worth stating in the book:**
+- **A set is X+Y units of the same product.** "Buy 2, get 1 free" needs three in the cart: two units are not discounted (before, the rule counted one free for two, which a shopper reading the label would not expect). Four is still one free set, six is two. Units of different products never make up a set.
+- **Free units come off the running total at their face price.** The engine runs rules in priority order on what the last left, so a percentage rule that runs *before* buy-X-get-Y takes its percentage first and the free unit is then taken off at full price (3 x $10 with 20% off first: $30, $24, then $14, where applying the sale to what is left after the free unit would give $16). Putting the rule earlier fixes it; a test pins the current behaviour. The seeded rules run the 20% flash sale first, which the live store should not have active anyway.
+
+Tests: table-driven cases for the engine (`app/pricing/pricing_test.go`, `CalculateLines`), and request specs for the cart (`GET /cart` shows the third one free) and for checkout (`POST /orders` charges the same total). Disabling the rule makes both request specs fail. The admin form's note for the kind no longer says it does not lower the price.
