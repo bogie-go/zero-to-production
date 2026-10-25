@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Bogie Showcase API
+  title: Bogie Depot API
   version: "1.0.0"
   description: |
     The contract between the shop's API and its UI (`public/`). The request
@@ -27,8 +27,8 @@ info:
 servers:
   - url: http://localhost:8080
     description: development
-  - url: https://showcase.bogie-go.com
-    description: the deployed showcase
+  - url: https://depot.bogie-go.com
+    description: the deployed shop
 
 tags:
   - name: Health

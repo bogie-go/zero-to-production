@@ -5,23 +5,23 @@ service: ecommerce
 
 # Where the image is pushed. Docker Hub by default: `username/ecommerce`.
 # For another registry add `registry: server:` below.
-image: roonglit/bogie-showcase
+image: roonglit/bogie-depot
 
 servers:
   web:
-    - showcase.bogie-go.com
+    - depot.bogie-go.com
   # The worker is this same image started with a different argument, so a
   # web container and a job container cannot be built from different
   # commits. Same host as web until the queue needs its own.
   job:
     hosts:
-      - showcase.bogie-go.com
+      - depot.bogie-go.com
     cmd: ecommerce worker
 
 proxy:
   ssl: true
   hosts:
-    - showcase.bogie-go.com
+    - depot.bogie-go.com
   # The app listens on 8080, not Rails' 3000.
   app_port: 8080
   # Kamal's default probe is /up, which this service does not have. The proxy

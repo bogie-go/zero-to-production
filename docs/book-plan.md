@@ -18,7 +18,7 @@ By the end of this book, you can build a Go backend with Bogie, design it well e
 - Theme: borrow the idea from Rails, write it the Go way.
 
 ## The shop: Bogie Depot
-The shop in the book is **Bogie Depot** (name decided 2026-10-25). It is not a made-up example: https://showcase.bogie-go.com is the live store and **will sell real Bogie merchandise**, so the book's reference app and a working shop are the same code. The owner character (who runs Bogie Depot in the story, and how they talk to the reader) is still open.
+The shop in the book is **Bogie Depot** (name decided 2026-10-25). It is not a made-up example: https://depot.bogie-go.com is the live store and **will sell real Bogie merchandise**, so the book's reference app and a working shop are the same code. The owner character (who runs Bogie Depot in the story, and how they talk to the reader) is still open.
 
 - **The catalog is merchandise with no variants:** stickers, a mug, a desk mat, a keycap, a poster and a notebook, one price and one stock count each. The images are placeholders until there are real photos.
 - **Out of the book, in the live store later:** real payments, shipping, tax and product variants (T-shirt sizes and the like). The book stops where its scope stops; these are added to the live store afterwards and appear in "Where to go next" as the next steps a real shop takes. Until then the live store takes no real orders.
@@ -62,7 +62,7 @@ Pass 1 is built through Task G. Task B (categories) was skipped at first and bui
 | G | `task-g2` | the welcome email |
 | G | `task-g3` | the sign-in alert (Task G complete) |
 
-H (deploy) is done: the shop runs at https://showcase.bogie-go.com. The OpenAPI contract is drafted and enforced (`docs/openapi.yaml`, `docs/api-contract.md`, 2026-10-25); Bogie's generator entries for it are not built yet. Next: Postgres backups, then Pass 2. I (health) is built (2026-10-24, see `docs/operations.md`). `docs/build-notes.md` has the open items.
+H (deploy) is done: the shop runs at https://depot.bogie-go.com. The OpenAPI contract is drafted and enforced (`docs/openapi.yaml`, `docs/api-contract.md`, 2026-10-25); Bogie's generator entries for it are not built yet. Next: Postgres backups, then Pass 2. I (health) is built (2026-10-24, see `docs/operations.md`). `docs/build-notes.md` has the open items.
 
 ## Testing
 
