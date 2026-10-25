@@ -31,7 +31,7 @@ var _ = Describe("SignInAlert", func() {
 	Context("with a full sign-in", func() {
 		It("says when, from where and with what", func() {
 			Expect(m.To).To(Equal("ann@example.com"))
-			Expect(m.Subject).To(Equal("New sign-in to your account"))
+			Expect(m.Subject).To(Equal("New sign-in to your Bogie Depot account"))
 			for _, want := range []string{"Thu, 22 Oct 2026 14:30 UTC", "203.0.113.9", "Mozilla/5.0 (Mac)"} {
 				Expect(m.Text).To(ContainSubstring(want))
 				Expect(m.HTML).To(ContainSubstring(want))

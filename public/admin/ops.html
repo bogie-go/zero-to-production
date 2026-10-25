@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Health</title>
+    <title>Health - Bogie Depot Admin</title>
     <link rel="stylesheet" href="/admin/admin.css">
   </head>
   <body x-data="opsPage()" x-init="load()">
     <div class="shell" x-show="!loading && !error">
       <aside class="sidebar">
-        <a class="brand" href="/admin/">Ecommerce<small>admin</small></a>
+        <a class="brand" href="/admin/">Bogie Depot<small>admin</small></a>
         <nav>
           <template x-for="link in links" :key="link.href">
             <a :href="link.soon ? null : link.href" :class="{ active: isActive(link), soon: link.soon }">

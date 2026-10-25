@@ -28,7 +28,7 @@ var _ = Describe("OrderConfirmation", func() {
 
 		It("names the order and its totals", func() {
 			Expect(m.To).To(Equal("ann@example.com"))
-			Expect(m.Subject).To(Equal("Your order #7"))
+			Expect(m.Subject).To(Equal("Your Bogie Depot order #7"))
 			for _, want := range []string{"order #7", "Wireless Mouse x 2    $39.98", "Subtotal   $44.98", "Discounts  -$8.98", "Total      $36.00"} {
 				Expect(m.Text).To(ContainSubstring(want))
 			}

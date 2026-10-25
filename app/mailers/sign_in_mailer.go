@@ -21,8 +21,8 @@ func SignInAlert(user domain.User, s domain.SignIn) mailer.Message {
 	agent := orUnknown(truncate(s.UserAgent, maxUserAgent))
 	return mailer.Message{
 		To:      user.Email,
-		Subject: "New sign-in to your account",
-		Text: fmt.Sprintf(`Someone just signed in to your account.
+		Subject: "New sign-in to your Bogie Depot account",
+		Text: fmt.Sprintf(`Someone just signed in to your Bogie Depot account.
 
   When:     %s
   From:     %s
@@ -31,7 +31,7 @@ func SignInAlert(user domain.User, s domain.SignIn) mailer.Message {
 If this was you, nothing more to do. If it was not, reply to this email
 and we will help you secure your account.
 `, when, ip, agent),
-		HTML: fmt.Sprintf(`<p>Someone just signed in to your account.</p>
+		HTML: fmt.Sprintf(`<p>Someone just signed in to your Bogie Depot account.</p>
 <table cellpadding="4">
 <tr><td>When</td><td>%s</td></tr>
 <tr><td>From</td><td>%s</td></tr>

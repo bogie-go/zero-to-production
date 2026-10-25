@@ -730,3 +730,11 @@ What writing it turned up: any endpoint can answer 500 and none said so (now doc
 ## Backups: a runbook section, not a job (2026-10-25)
 
 Decided not to build backups for the showcase VM: it holds seed data and test accounts, and `kamal setup` plus `ecommerce db seed` rebuilds it. `docs/operations.md` has a "Backups" section instead (dump, copy off the VM, restore one before you need it), and managed Postgres with point-in-time recovery is the "Where to go next" answer. The `pg_dump -Fc` / `pg_restore` pair was round-tripped on the development database (10 products restored). The `kamal accessory exec db ...` wrapper was not run against the live database, because that would copy customer data to a laptop.
+
+## Bogie Depot (2026-10-25)
+
+The shop has a name and a future: **Bogie Depot**, which becomes the real store for Bogie merchandise at showcase.bogie-go.com. Done in code: the seed catalog is seven merch products in four categories (Stickers, Drinkware, Desk, Paper), none with a size or colour, with generated placeholder images (`public/images/products/bogie-*.webp`, 800x533, product name on a coloured background; the old desk-gear photos are removed); the header, page titles (`Cart - Bogie Depot`, admin pages `... - Bogie Depot Admin`) and the three emails (welcome, order confirmation, sign-in alert) say Bogie Depot, as do the development and production `mail.from` and the default sender in `config/mail.go`. Checked in real Chrome against a scratch database: 7 cards, no broken images.
+
+**Not done, and needs a decision before the live store is touched:**
+- The live database still has the ten desk-gear products from the first seed; `db seed` only adds missing names, so deploying this change adds the merch beside them and the old products' images are gone (broken thumbnails). Retiring them is a one-off on the live system (archive the old ten), which I did not do.
+- The seeded price rules are active on every environment that runs `db seed`: *Flash Sale - 20% Off*, *Early Bird Special* ($50 off), *Buy 2 Get 1 Free* and *Big Spender Bonus* ($75 off over $500). They were tuned for desk gear at $20-$300. On merch at $3-$25 the $50 fixed discount swamps every cart, and a permanent 20% sale is wrong for a real store. The book needs them as teaching data; the live store should not seed them as active.

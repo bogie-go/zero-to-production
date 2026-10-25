@@ -109,7 +109,7 @@ var _ = Describe("the server's routes", func() {
 			rec := get(testServer(env), "/")
 
 			Expect(rec.Code).To(Equal(http.StatusOK))
-			Expect(rec.Body.String()).To(ContainSubstring("<title>Ecommerce</title>"))
+			Expect(rec.Body.String()).To(ContainSubstring("<title>Bogie Depot</title>"))
 			Expect(rec.Body.String()).NotTo(ContainSubstring("is running"))
 		},
 		Entry("in development", config.EnvDevelopment),
@@ -154,7 +154,7 @@ var _ = Describe("the server's routes", func() {
 			},
 			Entry("/images/bogie-404.webp", "/images/bogie-404.webp"),
 			Entry("/images/bogie-500.webp", "/images/bogie-500.webp"),
-			Entry("/images/products/wireless-mouse.webp", "/images/products/wireless-mouse.webp"),
+			Entry("/images/products/bogie-logo-sticker.webp", "/images/products/bogie-logo-sticker.webp"),
 		)
 
 		// A folder in public/ answers with its index.html, redirecting to the
@@ -180,7 +180,7 @@ var _ = Describe("the server's routes", func() {
 					rec := get(s, "/admin/")
 
 					Expect(rec.Code).To(Equal(http.StatusOK))
-					Expect(rec.Body.String()).To(ContainSubstring("<title>Admin</title>"))
+					Expect(rec.Body.String()).To(ContainSubstring("<title>Bogie Depot Admin</title>"))
 				})
 
 				It("is not found when there is no index.html", func() {

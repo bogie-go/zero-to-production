@@ -37,10 +37,10 @@ func OrderConfirmation(user domain.User, order domain.Order, lines []domain.Orde
 
 	return mailer.Message{
 		To:      user.Email,
-		Subject: fmt.Sprintf("Your order #%d", order.ID),
-		Text: fmt.Sprintf("Thanks for your order #%d.\n\n%s\n%s\nWe have received it and will be in touch.\n",
+		Subject: fmt.Sprintf("Your Bogie Depot order #%d", order.ID),
+		Text: fmt.Sprintf("Thanks for your order #%d from Bogie Depot.\n\n%s\n%s\nWe have received it and will be in touch.\n",
 			order.ID, text.String(), totals.String()),
-		HTML: fmt.Sprintf(`<p>Thanks for your order #%d.</p>
+		HTML: fmt.Sprintf(`<p>Thanks for your order #%d from Bogie Depot.</p>
 <table cellpadding="4">
 %s%s</table>
 <p>We have received it and will be in touch.</p>

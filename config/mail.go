@@ -16,7 +16,7 @@ type MailConfig struct {
 // service in development, nothing in production.
 func (c *MailConfig) defaults(env string) {
 	if env == EnvDevelopment || env == EnvTest {
-		c.From = "Ecommerce <shop@ecommerce.test>"
+		c.From = "Bogie Depot <shop@bogiedepot.test>"
 	}
 }
 

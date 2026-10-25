@@ -15,10 +15,10 @@ var categorized = []struct {
 	name     string
 	products []string
 }{
-	{"Accessories", []string{"USB-C Hub", "Laptop Stand", "Portable SSD 1TB", "Wireless Charger"}},
-	{"Audio", []string{"Noise-Cancelling Headphones"}},
-	{"Displays", []string{"27-inch Monitor"}},
-	{"Peripherals", []string{"Wireless Mouse", "Mechanical Keyboard", "Webcam 1080p", "Desk Mat"}},
+	{"Stickers", []string{"Bogie Logo Sticker", "Bogie Sticker Pack"}},
+	{"Drinkware", []string{"Bogie Ceramic Mug"}},
+	{"Desk", []string{"Bogie Desk Mat", "Bogie Keycap"}},
+	{"Paper", []string{"Bogie Poster", "Bogie Notebook"}},
 }
 
 // SeedCategories seeds categories, then puts the seeded products in them. db

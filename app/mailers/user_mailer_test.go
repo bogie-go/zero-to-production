@@ -29,7 +29,7 @@ var _ = Describe("Welcome", func() {
 
 		It("links to the shop", func() {
 			Expect(m.To).To(Equal("ann@example.com"))
-			Expect(m.Subject).To(Equal("Welcome to Ecommerce"))
+			Expect(m.Subject).To(Equal("Welcome to Bogie Depot"))
 			Expect(m.Text).To(ContainSubstring("Start shopping: https://shop.example.com\n"))
 			Expect(m.HTML).To(ContainSubstring(`href="https://shop.example.com"`))
 		})

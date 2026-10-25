@@ -17,6 +17,12 @@ By the end of this book, you can build a Go backend with Bogie, design it well e
 - Arc: early tasks mostly generated code; middle tasks hand-written around it; late tasks designed independently (price rules).
 - Theme: borrow the idea from Rails, write it the Go way.
 
+## The shop: Bogie Depot
+The shop in the book is **Bogie Depot** (name decided 2026-10-25). It is not a made-up example: https://showcase.bogie-go.com is the live store and **will sell real Bogie merchandise**, so the book's reference app and a working shop are the same code. The owner character (who runs Bogie Depot in the story, and how they talk to the reader) is still open.
+
+- **The catalog is merchandise with no variants:** stickers, a mug, a desk mat, a keycap, a poster and a notebook, one price and one stock count each. The images are placeholders until there are real photos.
+- **Out of the book, in the live store later:** real payments, shipping, tax and product variants (T-shirt sizes and the like). The book stops where its scope stops; these are added to the live store afterwards and appear in "Where to go next" as the next steps a real shop takes. Until then the live store takes no real orders.
+
 ## The project: an e-commerce backend (API only)
 | Task | Client request | Teaches |
 |---|---|---|
@@ -111,6 +117,6 @@ The UI is the contract today: its fetch calls and the `views` types decide what 
 4. Provide each checkpoint as a Git tag and a zip.
 
 ## Still open
-- The shop's identity (name, owner, what it sells).
+- The shop's identity: ~~name~~ Bogie Depot and what it sells (Bogie merchandise) are decided (2026-10-25); the **owner character** is still open.
 - ~~Book language.~~ English (decided 2026-10-25).
 - ~~Whether Bogie generates an OpenAPI spec.~~ Yes: generators insert entries into a hand-editable `docs/openapi.yaml`, and the request tests validate against it (see "The API contract and OpenAPI").

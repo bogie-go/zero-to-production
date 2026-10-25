@@ -15,10 +15,10 @@ func Welcome(user domain.User, shopURL string) mailer.Message {
 	shop := strings.TrimRight(shopURL, "/")
 	return mailer.Message{
 		To:      user.Email,
-		Subject: "Welcome to Ecommerce",
-		Text: fmt.Sprintf("Welcome, and thanks for creating an account.\n\nYour account is %s.\nStart shopping: %s\n",
+		Subject: "Welcome to Bogie Depot",
+		Text: fmt.Sprintf("Welcome to Bogie Depot, and thanks for creating an account.\n\nYour account is %s.\nStart shopping: %s\n",
 			user.Email, shop),
-		HTML: fmt.Sprintf("<p>Welcome, and thanks for creating an account.</p>\n<p>Your account is %s.</p>\n<p><a href=%q>Start shopping</a></p>\n",
+		HTML: fmt.Sprintf("<p>Welcome to Bogie Depot, and thanks for creating an account.</p>\n<p>Your account is %s.</p>\n<p><a href=%q>Start shopping</a></p>\n",
 			html.EscapeString(user.Email), shop),
 	}
 }

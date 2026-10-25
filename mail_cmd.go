@@ -31,7 +31,7 @@ func runMail(ctx context.Context, args []string) error {
 	m := mailer.New(app.MailerConfig(cfg))
 	err = m.Send(ctx, mailer.Message{
 		To:      args[1],
-		Subject: "Ecommerce test email",
+		Subject: "Bogie Depot test email",
 		Text:    "If you can read this, mail works.\n\nSent " + time.Now().Format(time.RFC1123) + " via " + cfg.Smtp.Address + "\n",
 	})
 	if err != nil {
