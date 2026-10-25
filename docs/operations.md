@@ -66,3 +66,42 @@ schema in two releases, never one:
 The first staff account is made by signing up on the site, then
 `kamal app exec "ecommerce staff promote you@example.com"`. The development
 staff login in `db/seeds` never exists on a deployed system.
+
+## Backups
+
+The showcase does not back up its database, on purpose: it holds seed data and
+test accounts, and `kamal setup` plus `ecommerce db seed` rebuilds it in a few
+minutes. **A shop with real customers must, and this is the first thing to add
+before it has any.** The database is the only thing worth keeping; the image, the
+config and the credentials are all in git and the registry.
+
+What to do, in the order that matters:
+
+1. **Dump it.** Postgres runs as the `ecommerce-db` accessory, so the dump runs
+   inside that container and streams to a file on the VM:
+
+   ```
+   kamal accessory exec db "pg_dump -U ecommerce -Fc ecommerce_production" > shop-$(date +%F).dump
+   ```
+
+   `-Fc` is the compressed custom format that `pg_restore` reads. Run it from cron
+   or a systemd timer on the VM, nightly at least; how often is "how much work can
+   we afford to lose".
+2. **Copy it off the VM.** A backup on the machine that died is not a backup. Object
+   storage (any S3-compatible bucket) or a second host, with an expiry so old dumps
+   do not pile up. Encrypt it if the bucket is not yours alone: it holds customer
+   emails and password digests.
+3. **Restore one, before you need it.** A backup is real only once you have restored
+   it into an empty database and the shop worked against it:
+
+   ```
+   createdb -U ecommerce ecommerce_restore_check
+   pg_restore -U ecommerce -d ecommerce_restore_check shop-2026-10-25.dump
+   ```
+
+   Do this on a schedule too; a dump that has silently stopped being valid looks
+   exactly like one that is fine.
+
+A managed Postgres (the provider's point-in-time recovery) replaces steps 1 and 2 and
+is the better answer once the data matters; step 3 still applies. That is the
+"Where to go next" version of this section.
