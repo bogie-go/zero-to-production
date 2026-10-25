@@ -112,5 +112,5 @@ The UI is the contract today: its fetch calls and the `views` types decide what 
 
 ## Still open
 - The shop's identity (name, owner, what it sells).
-- Book language (Thai, English, or both).
+- ~~Book language.~~ English (decided 2026-10-25).
 - ~~Whether Bogie generates an OpenAPI spec.~~ Yes: generators insert entries into a hand-editable `docs/openapi.yaml`, and the request tests validate against it (see "The API contract and OpenAPI").
