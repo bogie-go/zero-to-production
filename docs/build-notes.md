@@ -699,7 +699,11 @@ Done without a VM, all verified by building the image and running it as producti
 - **The image** boots in production mode, applies River's and the app's migrations from an empty database, answers `/healthz`; the worker role starts from the same image and works the queue.
 - **First staff account:** `ecommerce staff promote EMAIL` and the seed guard above.
 
-Remaining: a VM, a registry and a host name to deploy to; a real SMTP provider (staging catches mail in Mailpit until then); `kamal setup` and a first deploy; production overlay (`deploy.production.yml`); backups of the Postgres volume.
+**One environment, not two (2026-10-25).** The book deploys one system, so the staging/production split went: the credentials above are now `config/credentials/production.yml.enc` (key `production.key`, gitignored), `ECOMMERCE_CREDENTIALS` is no longer set in `deploy.yml` (it defaults to `ECOMMERCE_ENV`), the database is `ecommerce_production`, and `deploy.production.yml` and `.kamal/secrets.production` are gone. `ECOMMERCE_CREDENTIALS` stays in `config.go` for anyone who adds a second environment as a Kamal destination. Development keeps its own file: it points at `localhost`, which the deployed system cannot use.
+
+The VM is `showcase.bogie-go.com` (Debian, Docker installed by `kamal server bootstrap`), the image `roonglit/bogie-showcase` on Docker Hub.
+
+Remaining: the registry token in the credentials; `kamal setup` and a first deploy; a real SMTP provider (Mailpit catches mail until then); backups of the Postgres volume.
 
 
 ## Task I: is it healthy? (2026-10-24)

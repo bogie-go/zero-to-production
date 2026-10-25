@@ -1,10 +1,6 @@
-# Kamal 2, STAGING. This file IS the staging config: a bare `kamal deploy`
-# targets staging. Production overlays it with config/deploy.production.yml
-# and is reached only as `kamal deploy -d production`, so an edit here
-# without a matching one there changes BOTH.
-#
-# Three things to fill in before the first deploy: the server, the host name
-# and the registry. Everything else is set.
+# Kamal 2. This file is the one deployed environment: a bare `kamal deploy`
+# targets it. A second environment would be a Kamal destination
+# (config/deploy.<name>.yml overlaying this, with .kamal/secrets.<name>).
 service: ecommerce
 
 # Where the image is pushed. Docker Hub by default: `username/ecommerce`.
@@ -53,18 +49,16 @@ registry:
 
 env:
   secret:
-    # The key that opens config/credentials/staging.yml.enc, which is baked
+    # The key that opens config/credentials/production.yml.enc, which is baked
     # into the image. The key never is: .dockerignore keeps every *.key out
     # of the build context, so an image cannot carry both halves. Its value
     # comes from .kamal/secrets.
     - ECOMMERCE_MASTER_KEY
   clear:
-    # PRODUCTION BEHAVIOUR, STAGING CREDENTIALS. ECOMMERCE_ENV is a closed
-    # set of three with no "staging" member on purpose: staging exercises the
-    # same gin mode, log format and validation strictness production will.
-    # ECOMMERCE_CREDENTIALS is what selects the secrets.
+    # ECOMMERCE_ENV is a closed set of three (development, test, production);
+    # a deployed system is production. Its credentials default to the same
+    # name, config/credentials/production.yml.enc.
     ECOMMERCE_ENV: production
-    ECOMMERCE_CREDENTIALS: staging
     SERVER_ADDR: ":8080"
 
 builder:
@@ -80,9 +74,9 @@ deploy_timeout: 60
 drain_timeout: 30
 
 # The database and the mail catcher run next to the app, as accessories: one
-# VM, no managed services, which is what a staging environment needs. They
+# VM, no managed services, which is what a small deployment needs. They
 # live on Kamal's docker network, so database.url and smtp.address in
-# config/credentials/staging.yml.enc name them by container name
+# config/credentials/production.yml.enc name them by container name
 # (ecommerce-db, ecommerce-mailpit) and nothing is published to the internet.
 # To use a Postgres that already exists instead, delete the db accessory and
 # point database.url at that server, as a SEPARATE database on it.
@@ -97,12 +91,12 @@ accessories:
     env:
       clear:
         POSTGRES_USER: ecommerce
-        POSTGRES_DB: ecommerce_staging
+        POSTGRES_DB: ecommerce_production
       secret:
         - POSTGRES_PASSWORD
     directories:
       - data:/var/lib/postgresql
-  # Catches every email staging sends instead of delivering it. Its inbox is
+  # Catches every email the app sends instead of delivering it. Its inbox is
   # at port 8025 on the VM's loopback: ssh -L 8025:localhost:8025 user@host.
   # Replace with a real SMTP provider (smtp.address in the credentials, and
   # delete this accessory) before sending to real customers.

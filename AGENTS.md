@@ -49,7 +49,6 @@ Encrypted credentials, the Rails pattern, via `bogie-go/credentials`:
 committed ciphertext, keys never committed, environment variables override.
 
     config/credentials.yml.enc            + config/master.key              development
-    config/credentials/staging.yml.enc    + config/credentials/staging.key
     config/credentials/production.yml.enc + config/credentials/production.key
 
 `make credentials` edits development's; `make credentials ENV=production`
@@ -61,9 +60,9 @@ them, so a `DATABASE_URL` another app exports in your shell reaches this one
 in development (test never reads it).
 
 Two variables, deliberately separate: `ECOMMERCE_ENV` is a closed set,
-`development`, `test`, `production`, and selects behaviour; staging is
-`ECOMMERCE_ENV=production ECOMMERCE_CREDENTIALS=staging`, production
-strictness with staging secrets. In a container the key arrives as
+`development`, `test`, `production`, and selects behaviour. A deployed
+system is `production`; `ECOMMERCE_CREDENTIALS` can point it at a differently
+named credentials file (a second environment, say), but there is one. In a container the key arrives as
 `ECOMMERCE_MASTER_KEY` and no key file exists. **Test never reads a
 credentials file**: it runs from defaults and the environment, so tests need
 nobody's secrets and can never open the development database.
@@ -90,7 +89,7 @@ nobody's secrets and can never open the development database.
       views/                     wire contracts; domain structs never double as wire structs
       domain/                    THE DOMAIN; imports nothing third-party
     config/                      credentials file + env → validated struct, no globals
-      deploy.yml                 Kamal 2, staging; deploy.production.yml overlays it
+      deploy.yml                 Kamal 2, the one deployed environment
     .kamal/secrets               what Kamal substitutes: the master key and the registry password
     Dockerfile                   one image, every role; keys never enter it (.dockerignore)
     db/
@@ -111,15 +110,15 @@ as Rails's `test/` does.
 
 ## Deploy
 
-Kamal 2, as the Rails app next door. `config/deploy.yml` IS staging and a
-bare `kamal deploy` targets it; `kamal deploy -d production` overlays
-`config/deploy.production.yml`. Three things to fill in first: the servers,
-the host names and the registry, marked CHANGE-ME. The image is one binary
+Kamal 2, as the Rails app next door. There is one deployed environment,
+`production`: `config/deploy.yml` is its config and a bare `kamal deploy`
+targets it. A second environment would be a Kamal destination
+(`config/deploy.<name>.yml` and `.kamal/secrets.<name>`). The image is one binary
 in every role, and the `job` role is that image started as `ecommerce worker`;
 it migrates at boot, so the database only has to exist. The encrypted
 credentials travel in the image and the key arrives as `ECOMMERCE_MASTER_KEY`
-from `.kamal/secrets`, which reads `config/credentials/staging.key`.
-`make credentials ENV=staging` makes that file and key the first time.
+from `.kamal/secrets`, which reads `config/credentials/production.key`.
+`make credentials ENV=production` makes that file and key the first time.
 
 ## The six rules
 
@@ -296,7 +295,7 @@ helper on the root Server in `app/controllers/authentication_<shape>.go`,
 and the config: a group (`token:`, or `control:` for the secret shape) with a
 `secret` key, as `bogie g config` writes it (see "Add a setting"), with a
 random development value written into the credentials file so the app boots
-as before. Staging and production get theirs with `make credentials ENV=...`,
+as before. The deployed environment gets its own with `make credentials ENV=production`,
 and refuse to boot without. Then mount what the guard protects on the group instead of the
 router, in `routes.go`:
 

@@ -38,7 +38,7 @@ import (
 )
 
 // Env is a CLOSED set, mirroring RAILS_ENV. There is deliberately no staging:
-// a staging deployment is production behaviour reading staging settings.
+// a deployment is production, whatever it is called.
 // Closing the set matters because every behavioural switch reads Env, and
 // ECOMMERCE_ENV=staging would otherwise fall through to production
 // behaviour silently. So would a typo.
@@ -53,8 +53,8 @@ const (
 //	ECOMMERCE_ENV            exactly development, test or production; selects BEHAVIOUR
 //	ECOMMERCE_CREDENTIALS    any name; selects WHICH credentials file to read
 //
-// A staging deployment is ECOMMERCE_ENV=production ECOMMERCE_CREDENTIALS=staging:
-// production strictness, staging secrets. CREDENTIALS defaults to ENV.
+// CREDENTIALS defaults to ENV, so a deployed system needs only ECOMMERCE_ENV;
+// set it to read a differently named file (a second environment, say).
 const (
 	EnvVar         = "ECOMMERCE_ENV"
 	CredentialsVar = "ECOMMERCE_CREDENTIALS"
@@ -149,7 +149,7 @@ type ServerConfig struct {
 //     and the test database must never be the development one, so its URL
 //     comes from ECOMMERCE_TEST_DATABASE_URL, never DATABASE_URL.
 //   - config/credentials/<ECOMMERCE_CREDENTIALS>.yml.enc with its own key
-//     beside it, if that file exists. Staging and production live here, each
+//     beside it, if that file exists. The deployed environment lives here,
 //     with a key that opens nothing else.
 //   - config/credentials.yml.enc with config/master.key: the shared file,
 //     which holds development.

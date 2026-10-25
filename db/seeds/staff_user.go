@@ -26,7 +26,7 @@ const (
 // since.
 func SeedStaffUser(ctx context.Context, s *models.Store) error {
 	// A login whose password is in this repository must never exist on a
-	// deployed system, staging included (both run as production). A real
+	// deployed system (a deployment runs as production). A real
 	// environment promotes an account that signed up: ecommerce staff promote.
 	if os.Getenv(config.EnvVar) == config.EnvProduction {
 		return nil

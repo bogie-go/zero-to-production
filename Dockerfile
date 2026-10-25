@@ -21,8 +21,8 @@ USER ecommerce
 # .dockerignore keeps them out of the build context entirely, and the key
 # arrives at runtime as ECOMMERCE_MASTER_KEY. An image carrying both halves
 # leaks both. The whole config directory is copied because the layout varies:
-# development lives in config/credentials.yml.enc, while staging and
-# production each have config/credentials/<name>.yml.enc.
+# development lives in config/credentials.yml.enc, while the deployed
+# environment has config/credentials/production.yml.enc.
 COPY --from=builder /src/config /app/config
 WORKDIR /app
 
