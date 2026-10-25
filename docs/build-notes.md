@@ -703,7 +703,9 @@ Done without a VM, all verified by building the image and running it as producti
 
 The VM is `showcase.bogie-go.com` (Debian, Docker installed by `kamal server bootstrap`), the image `roonglit/bogie-showcase` on Docker Hub.
 
-Remaining: the registry token in the credentials; `kamal setup` and a first deploy; a real SMTP provider (Mailpit catches mail until then); backups of the Postgres volume.
+**First deploy (2026-10-25):** `kamal setup` took about 280 seconds from a bare Debian VM and left the proxy, Postgres, Mailpit, web and job containers running. Checked live at `https://showcase.bogie-go.com`: `/healthz` and `/readyz` answer 200 with a valid certificate; signup (201) and login work; a customer gets 403 on `/admin/ops`; the development staff login gets 401 (the seed never ran); `staff promote` for an unknown address refuses with "they must sign up first".
+
+Remaining: promote the first real staff account after it signs up; load the catalog (the shop is empty); a real SMTP provider (Mailpit catches mail until then); backups of the Postgres volume.
 
 
 ## Task I: is it healthy? (2026-10-24)
