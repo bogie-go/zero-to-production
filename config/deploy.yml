@@ -13,19 +13,19 @@ image: CHANGE-ME/ecommerce
 
 servers:
   web:
-    - CHANGE-ME.example.com
+    - showcase.bogie-go.com
   # The worker is this same image started with a different argument, so a
   # web container and a job container cannot be built from different
   # commits. Same host as web until the queue needs its own.
   job:
     hosts:
-      - CHANGE-ME.example.com
+      - showcase.bogie-go.com
     cmd: ecommerce worker
 
 proxy:
   ssl: true
   hosts:
-    - staging-ecommerce.example.com
+    - showcase.bogie-go.com
   # The app listens on 8080, not Rails' 3000.
   app_port: 8080
   # Kamal's default probe is /up, which this service does not have. The proxy
@@ -42,6 +42,9 @@ proxy:
   # this; if a timeout appears here, the question is what started blocking,
   # not what to raise.
   response_timeout: 30
+
+ssh:
+  user: roonglit
 
 registry:
   username: CHANGE-ME
