@@ -27,30 +27,32 @@ The shop in the book is **Bogie Depot** (name decided 2026-10-25). It is not a m
 | Task | Client request | Teaches |
 |---|---|---|
 | A | Show our products | First model, CRUD, JSON responses, pagination |
-| B | Group products into categories | Relationships, filtering, JOIN |
-| C | Let customers add to a cart | State, validation, guest vs logged-in users |
-| Price rules | Run a sale / buy two get one | STI-style rules: interface, type column, registry, JSON params, table-driven tests |
+| Testing | How do we know it works? | A foundation chapter after Task A: Ginkgo and Gomega, the test database, factories, request tests from the outside in, `bin/ci` |
+| B | Let customers add to a cart | State, validation, guest vs logged-in users |
+| C | Run a sale / buy two get one | Price rules, STI-style: interface, type column, registry, JSON params, table-driven tests |
 | D | Customers need accounts | Token authentication, password handling |
 | E | Let customers place orders | Transactions, conditional stock UPDATE, saving price at time of order |
-| F | Only staff can manage products | Roles and authorization |
+| F | Staff manage the shop | Roles and authorization, the admin namespace, soft delete, categories (relationships, filtering, JOIN), price rules in the admin |
 | G | Email a confirmation | Background jobs, mailer |
 | H | Let's go live | Deployment, config, secrets |
 | I | Is it healthy? | Logging, monitoring, safe updates |
 
-Testing runs through every task (see "Testing" below). Out of scope (sketched in "Where to go next"): real payments, shipping, tax, reviews, image uploads, multiple vendors, product variants (size/color, per-variant price and stock — considered for Task B, deferred: it would mean reworking the cart and seeds already built around a bare `product_id`, not just adding something new).
+The letters run in the order the book teaches them (relettered 2026-10-25). Categories used to be their own Task B; they are now part of Task F, where the admin pages that manage them are built, and the cart and price rules moved up a letter each. Pass 1's checkpoint tags keep the old letters (see below).
+
+Testing runs through every task (see "Testing" below). Out of scope (sketched in "Where to go next"): real payments, shipping, tax, reviews, image uploads, multiple vendors, product variants (size/color, per-variant price and stock — considered for the catalog, deferred: it would mean reworking the cart and seeds already built around a bare `product_id`, not just adding something new).
 
 ## Pass 1 status and checkpoints (2026-10-22)
 
-Pass 1 is built through Task G. Task B (categories) was skipped at first and built inside Task F, where the admin pages it needs live. Each checkpoint is a git tag on the commit that finished that step. They are Pass 1's, so provisional: Pass 2 rebuilds from an empty folder and re-cuts them the way a reader would.
+Pass 1 is built through Task I. Each checkpoint is a git tag on the commit that finished that step. The tags are Pass 1's and **keep their old names**, which use the lettering from before 2026-10-25 (`task-c1` is the cart, now Task B; `task-f3` is categories, now inside Task F). Pass 2 rebuilds from an empty folder and cuts new tags under the new letters, so the old ones are provisional and will be retired then.
 
-| Task | Tag | What the checkpoint is |
+| Task (new letter) | Tag (Pass 1 name) | What the checkpoint is |
 |---|---|---|
 | A | `task-a1` | products: model, seeds' API, index and show |
 | A | `task-a2` | the catalog front page, seeds with real photos |
 | A | `task-a3` | the product detail page (Task A complete) |
-| C | `task-c1` | cart mechanics and UI |
-| C | `task-c2` | personal carts (Task C complete) |
-| Price rules | `task-pricing` | the rule engine, wired into the cart |
+| B | `task-c1` | cart mechanics and UI |
+| B | `task-c2` | personal carts (Task B complete) |
+| C | `task-pricing` | the rule engine, wired into the cart |
 | D | `task-d` | accounts: signup, login, merging a guest's cart |
 | E | `task-e1` | checkout: a real transaction, stock, price snapshot |
 | E | `task-e2` | the checkout UI, receipts, order history |
@@ -62,11 +64,16 @@ Pass 1 is built through Task G. Task B (categories) was skipped at first and bui
 | G | `task-g2` | the welcome email |
 | G | `task-g3` | the sign-in alert (Task G complete) |
 
+The Testing chapter has no Pass 1 tag: the tests were added late, across the whole shop, and Pass 2 builds them where the book teaches them.
+
 H (deploy) is done: the shop runs at https://depot.bogie-go.com. The OpenAPI contract is drafted and enforced (`docs/openapi.yaml`, `docs/api-contract.md`, 2026-10-25); Bogie's generator entries for it are not built yet. Next: Postgres backups, then Pass 2. I (health) is built (2026-10-24, see `docs/operations.md`). `docs/build-notes.md` has the open items.
 
 ## Testing
 
-Testing is taught in the tasks, not in a chapter of its own: each task ends green on `bin/ci`, and the new kind of test arrives with the task that needs it.
+Testing gets a **foundation chapter right after Task A**, once there is a model and two endpoints to test, and then **each task adds the new kind of test it needs**. Every task ends green on `bin/ci`.
+
+- **The foundation chapter** teaches what every later test stands on: how `go test` finds tests, Ginkgo and Gomega (`Describe` says what is tested, `Context` + `BeforeEach` set up a situation, `It` states one behaviour), the separate test database, hand-written factories, the request test from the outside in through the real `Server`, and the table-driven unit test for validation.
+- **Then, as the tasks need them:** B the state a cart keeps and the concurrency of `carts.token`; C table-driven rules with time windows and stacking; D acting as a user or a guest, and password and token helpers; E transactions that roll back whole and buyers that never oversell; F authorization (the 401/403 matrix) and soft delete; G jobs and mail against a fake SMTP server; H configuration and secrets; I health probes and what a log may never contain. The API contract check (OpenAPI) joins the request tests when the contract is frozen.
 
 **Outside in.** A feature starts from a request test: the real router, the real database, the factories for the arrangement, and assertions on status and JSON, which is the contract the UI relies on. The layers below it (store, domain, services) get the edge cases the request test would make tedious, added afterwards. There is no controller test with a fake store: the request test goes through the whole `Server`, so the wiring is tested too, and an unexpected failure is provoked for real (the store closed). Tests are written with Ginkgo and Gomega, RSpec-style, in external `_test` packages.
 
@@ -74,14 +81,14 @@ Shared helpers live in `test/`, as Rails' `test/` does: `test/testdb` (a clean t
 
 | Layer | What it checks | Where it is taught |
 |---|---|---|
-| Unit, table-driven | pure logic with no I/O: validation, the price rules, pagination parsing, password and token helpers | A (validation), Price rules, D |
-| Store / model | real SQL against a real Postgres test database, one clean state per test: ordering, limit and offset, counts, constraints, FK and unique errors | A, B, E |
+| Unit, table-driven | pure logic with no I/O: validation, the price rules, pagination parsing, password and token helpers | Testing foundation (validation), C, D |
+| Store / model | real SQL against a real Postgres test database, one clean state per test: ordering, limit and offset, counts, constraints, FK and unique errors | Testing foundation, E, F |
 | Transaction | all-or-nothing: a failing line leaves stock, order and cart untouched; concurrent buyers never oversell | E |
-| Controller (HTTP) | `httptest` against the router with a fake store declared next to the controller (rule 2): statuses, JSON shapes, 401/403/422 | every task that adds an endpoint |
-| Jobs and mail | a worker run directly with a fake mailer; the enqueue happens inside the transaction and rolls back with it | G |
+| Request (HTTP) | `httptest` through the real wired `Server` and a real test database: statuses, JSON shapes, 401/403/422 | Testing foundation, then every task that adds an endpoint |
+| Jobs and mail | a worker run directly against a fake SMTP server; the enqueue happens inside the transaction and rolls back with it | G |
 | Contract | the JSON the UI relies on does not change by accident (golden or shape checks), since the UI is the contract | A onward, before the UI freeze |
 | End to end | a real browser against a running server: browse, add to cart, sign up, check out, admin edit | Pass 2, `bin/e2e` |
-| Fake outside server | an `httptest.NewServer` standing in for a third-party API, so the real client code runs against a fake that can fail on demand | Task G (the mailer's fake SMTP server), described for HTTP APIs |
+| Fake outside server | an `httptest.NewServer` standing in for a third-party API, so the real client code runs against a fake that can fail on demand | G (the mailer's fake SMTP server), described for HTTP APIs |
 
 Rules for tests in the book:
 - Every task adds the test with the code, in the same step, never as a later "testing pass".

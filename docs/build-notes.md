@@ -4,6 +4,8 @@ Raw material for the book "Bogie, How to Go from zero to production": what was a
 
 Last updated: 2026-10-22 (covers through Task G; Task F is complete). Times are Bangkok time (UTC+7). "(inferred)" marks things read from files, timestamps or the Bogie repo, not confirmed by Mac.
 
+**Lettering.** The sections below are a log and keep the task letters they were written under (Pass 1). The book relettered its tasks on 2026-10-25: Pass 1's **C** (cart) is now **B**, **Price rules** is now **C**, and Pass 1's **B** (categories, built inside F) is now part of **F**; A, D, E, F, G, H and I are unchanged. The mapping, with the tags, is in `docs/book-plan.md`.
+
 ---
 
 ## Where things stand (2026-10-22)
