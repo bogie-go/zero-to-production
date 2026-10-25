@@ -203,9 +203,9 @@ files are written (`Dockerfile`, `config/deploy.yml`, `config/deploy.production.
 parses them once the app is in a git repo. What a reader still has to do by hand,
 and what the showcase did:
 
-- **No database or mail accessory.** The template deploys only the app and worker,
-  so `database.url` has nowhere to point. The showcase adds a Postgres accessory
-  (`POSTGRES_PASSWORD` from the credentials) and Mailpit.
+- **No database or mail accessory: on purpose.** Decided 2026-10-25: the template
+  stays small and self-contained, and an app adds a database accessory only when it
+  needs one (the showcase did: Postgres and Mailpit, see its `deploy.yml`). Not a gap.
 - **The healthcheck asks `/healthz`**, not a readiness probe (see above).
 - **No `ssh.user`**, so Kamal logs in as root; the showcase VM uses a named user.
 - **The deploy credentials do not exist yet.** `.kamal/secrets` reads
@@ -216,7 +216,7 @@ and what the showcase did:
 - **Staging plus a production overlay.** The showcase deploys one environment,
   `production`; the template's two-file shape is more than a first deploy needs.
 
-**Real fix, when asked:** the template ships one environment with the accessories,
-the readiness healthcheck and the timeouts, and `bogie new` (or a first-deploy
-checklist in the generated README) names the credentials keys to set. Nothing
-changed in Bogie for this.
+**Real fix, when asked:** the template ships one environment with the readiness
+healthcheck and the timeouts, and `bogie new` (or a first-deploy checklist in the
+generated README) names the credentials keys to set. Nothing changed in Bogie for
+this.
