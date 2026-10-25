@@ -9,7 +9,7 @@ service: ecommerce
 
 # Where the image is pushed. Docker Hub by default: `username/ecommerce`.
 # For another registry add `registry: server:` below.
-image: CHANGE-ME/ecommerce
+image: roonglit/bogie-showcase
 
 servers:
   web:
@@ -47,7 +47,7 @@ ssh:
   user: roonglit
 
 registry:
-  username: CHANGE-ME
+  username: roonglit
   password:
     - KAMAL_REGISTRY_PASSWORD
 
