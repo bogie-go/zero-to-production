@@ -194,3 +194,29 @@ template, `ip`, `bytes` and `subject` but never a URL query, header or body,
 and `server.version` read from `KAMAL_VERSION`. **Real fix:** the template
 ships the readiness probe and that logger, and `deploy.yml` points the
 healthcheck at `/readyz` with `deploy_timeout` and `drain_timeout` set.
+
+## A fresh app's Kamal files stop short of `kamal setup`
+
+Checked 2026-10-25 against v0.4.1 with `bogie new demo --jobs`. What works: the
+files are written (`Dockerfile`, `config/deploy.yml`, `config/deploy.production.yml`,
+`.kamal/secrets`, `.kamal/secrets.production`), the image builds, and `kamal config`
+parses them once the app is in a git repo. What a reader still has to do by hand,
+and what the showcase did:
+
+- **No database or mail accessory.** The template deploys only the app and worker,
+  so `database.url` has nowhere to point. The showcase adds a Postgres accessory
+  (`POSTGRES_PASSWORD` from the credentials) and Mailpit.
+- **The healthcheck asks `/healthz`**, not a readiness probe (see above).
+- **No `ssh.user`**, so Kamal logs in as root; the showcase VM uses a named user.
+- **The deploy credentials do not exist yet.** `.kamal/secrets` reads
+  `config/credentials/staging.key` and `kamal.registry_password` from a file the
+  reader has to create with `credentials:edit -e staging`; the template does not say
+  which keys that file needs (`database.url`, `token.secret`, `site.url`, the registry
+  password).
+- **Staging plus a production overlay.** The showcase deploys one environment,
+  `production`; the template's two-file shape is more than a first deploy needs.
+
+**Real fix, when asked:** the template ships one environment with the accessories,
+the readiness healthcheck and the timeouts, and `bogie new` (or a first-deploy
+checklist in the generated README) names the credentials keys to set. Nothing
+changed in Bogie for this.
