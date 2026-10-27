@@ -10,7 +10,7 @@ import (
 	"ecommerce/test/factories"
 )
 
-var _ = Describe("Cart items", func() {
+var _ = Describe("CartItems", func() {
 	// A cart item names a cart and a product, so both have to exist.
 	create := func() domain.CartItem {
 		cart := factories.Cart(GinkgoT(), store)

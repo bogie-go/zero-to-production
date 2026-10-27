@@ -19,7 +19,7 @@ func ruleNames(rules []domain.PriceRule) []string {
 	return out
 }
 
-var _ = Describe("Price rules", func() {
+var _ = Describe("PriceRules", func() {
 
 	Describe("GetPriceRule", func() {
 		DescribeTable("is not found for",

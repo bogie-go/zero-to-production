@@ -10,7 +10,7 @@ import (
 	"ecommerce/test/factories"
 )
 
-var _ = Describe("Order items", func() {
+var _ = Describe("OrderItems", func() {
 	// An order item names an order and a product, so both have to exist.
 	line := func() domain.OrderItem {
 		user := factories.User(GinkgoT(), store)
