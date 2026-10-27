@@ -754,3 +754,22 @@ The shop has a name and a future: **Bogie Depot**, which becomes the real store 
 - **Free units come off the running total at their face price.** The engine runs rules in priority order on what the last left, so a percentage rule that runs *before* buy-X-get-Y takes its percentage first and the free unit is then taken off at full price (3 x $10 with 20% off first: $30, $24, then $14, where applying the sale to what is left after the free unit would give $16). Putting the rule earlier fixes it; a test pins the current behaviour. The seeded rules run the 20% flash sale first, which the live store should not have active anyway.
 
 Tests: table-driven cases for the engine (`app/pricing/pricing_test.go`, `CalculateLines`), and request specs for the cart (`GET /cart` shows the third one free) and for checkout (`POST /orders` charges the same total). Disabling the rule makes both request specs fail. The admin form's note for the kind no longer says it does not lower the price.
+
+## Layout: models, db/sqlc, db/adapter (2026-10-27)
+
+The earlier entries above use the layout the app had until today: `app/domain` for the types and `app/models` for the store. Both names moved.
+
+| Before | Now | What it is |
+|---|---|---|
+| `app/domain` | `app/models` | The types and their `Validate`. Imports nothing third-party. This is what Rails calls a model. |
+| `app/models/*.sql.go`, `models.go`, `db.go` | `db/sqlc` (`package sqlc`) | Only what sqlc generates. Every file has the `DO NOT EDIT` header, and `bin/ci` fails if it is stale. |
+| `app/models/<table>.go`, `store.go`, `id.go` | `db/adapter` (`package adapter`) | The Store: validates on save, converts sqlc's rows to `app/models`, maps no-rows to `ErrNotFound`. |
+
+How we got there, in the order the arguments went (worth telling in the chapter that introduces the store):
+1. The user noticed `products.go` was only translating between sqlc's output and the domain, and asked whether sqlc could write elsewhere so the two could merge into one `models` folder. It can't, for two reasons seen in the code: `CreateOrderFromCart` (in the store) imports `app/pricing`, which imports the domain, so one package would import itself through the pricing engine; and about 50 files (controllers, jobs, mailers, pricing, services) import the domain and almost none import the store, which is what keeps pgx out of them.
+2. So the types kept their own package, renamed `models` because that is the Rails word, and the store got a name that says what it does: an adapter between the models and sqlc.
+3. A detour: the store lived inside the sqlc folder for an hour, as `package db`, like the sqlc tutorial. Folder and package names differed and there were two packages named `db`. Splitting it, `db/sqlc` generated-only and `db/adapter` hand-written, made folder and package names match and kept the generated folder purely generated.
+
+Mechanical consequences: the adapter qualifies sqlc's types (`sqlc.Product`, `sqlc.Queries`); `withTx` passes its closure the `pgx.Tx` as well as the bound queries, because the old helper reached into sqlc's unexported field, which only worked while they shared a package; and the model specs became `package adapter_test`, in `db/adapter` beside the code they test.
+
+An existing Bogie app cannot take this with `app:update` (it renames two packages); see Bogie's `docs/STATUS.md`. Bogie `main` generates this layout; there is no release yet, so the shop's `bogie.toml` still says v0.4.2.
