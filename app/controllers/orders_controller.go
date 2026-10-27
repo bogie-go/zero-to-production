@@ -138,7 +138,7 @@ func orderView(o models.Order, lines []models.OrderLine) views.OrderResponse {
 
 // fail maps a domain error to a status, the one place that mapping lives:
 // not found is 404, a validation failure (empty cart, a line out of stock)
-// is 422 as in Rails, and anything else is logged and answered 500 without
+// is 422, and anything else is logged and answered 500 without
 // leaking its text.
 func (ctl *OrdersController) fail(c *gin.Context, err error) {
 	switch {

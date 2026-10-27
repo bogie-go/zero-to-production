@@ -20,7 +20,7 @@ import (
 // hand-written addition goes in categories_extra.go, not here.
 
 // CreateCategory validates a category, inserts it, and returns it with its id and
-// timestamps. Validation runs on save, as Rails's does, so every caller
+// timestamps. Validation runs on save, so every caller
 // gets it and none can forget it.
 func (s *Store) CreateCategory(ctx context.Context, c models.Category) (models.Category, error) {
 	if err := c.Validate(); err != nil {

@@ -28,7 +28,7 @@ type Order struct {
 // there.
 var OrderStatuses = []string{"pending", "paid", "cancelled"}
 
-// Validate is the model's validations, as Rails would put them. Wrap every
+// Validate is the model's validations. Wrap every
 // failure in ErrInvalid so a controller can answer 422 without knowing the
 // rule.
 func (o Order) Validate() error {

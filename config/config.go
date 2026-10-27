@@ -1,11 +1,10 @@
 // Package config loads and validates settings.
 //
 // Two sources, in order: an encrypted credentials file if one exists, then
-// environment variables, which always win. The file is the Rails pattern,
-// committed ciphertext and a key that is never committed, so this service is
-// configured the same way the Rails app next to it is.
+// environment variables, which always win. The file is committed
+// ciphertext, and its key is never committed.
 //
-// The file is groups at the top level, as Rails credentials are:
+// The file is groups at the top level:
 //
 //	server:
 //	  addr: ":8080"
@@ -37,7 +36,7 @@ import (
 	"github.com/bogie-go/credentials/pkg/credentials"
 )
 
-// Env is a CLOSED set, mirroring RAILS_ENV. There is deliberately no staging:
+// Env is a CLOSED set. There is deliberately no staging:
 // a deployment is production, whatever it is called.
 // Closing the set matters because every behavioural switch reads Env, and
 // ECOMMERCE_ENV=staging would otherwise fall through to production
@@ -60,8 +59,7 @@ const (
 	CredentialsVar = "ECOMMERCE_CREDENTIALS"
 
 	// MasterKeyVar carries the decryption key from the deployment, so no key
-	// file ever has to exist in the image. It is RAILS_MASTER_KEY's
-	// counterpart and must hold the key for whichever credentials file is
+	// file ever has to exist in the image. It must hold the key for whichever credentials file is
 	// selected. The reader takes it directly: no file to write, no chmod to
 	// get wrong.
 	MasterKeyVar = "ECOMMERCE_MASTER_KEY"
@@ -74,8 +72,7 @@ const (
 	// Test never reads DATABASE_URL: the suite truncates every table and
 	// bin/ci drops the database, so a URL exported for development (or by
 	// another app in your shell) would turn `bogie test` into a wipe of
-	// that data. Rails keeps test in its own database.yml entry for the same
-	// reason.
+	// that data.
 	TestDatabaseURLVar = "ECOMMERCE_TEST_DATABASE_URL"
 )
 

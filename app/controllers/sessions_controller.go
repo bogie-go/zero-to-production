@@ -62,8 +62,7 @@ func (ctl *SessionsController) SetupRoutes(router *gin.RouterGroup) {
 // that account's cart, and queue the "new sign-in" email.
 //
 // A wrong email and a wrong password answer identically — a caller can't
-// tell "no such account" from "wrong password" apart, the same way Rails'
-// authenticate doesn't either.
+// tell "no such account" from "wrong password" apart.
 func (ctl *SessionsController) Create(c *gin.Context) {
 	var req views.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -73,7 +73,7 @@ func (ctl *CartItemsController) Create(c *gin.Context) {
 // must belong to the caller's own cart — resolved from the bearer token's
 // subject, never trusted from the URL or body — or this 404s exactly as a
 // nonexistent line would (UpdateCartItemQuantity doesn't distinguish the
-// two), same as Rails' current_cart.cart_items.find(id).
+// two).
 func (ctl *CartItemsController) Update(c *gin.Context) {
 	var req views.UpdateCartItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -132,7 +132,7 @@ func (ctl *CartItemsController) respondWithCart(c *gin.Context, status int, cart
 
 // fail maps a domain error to a status, the one place that mapping lives:
 // not found is 404, a validation failure (quantity <= 0, more than the
-// product's stock, no such product) is 422 as in Rails, and anything else
+// product's stock, no such product) is 422, and anything else
 // is logged and answered 500 without leaking its text.
 func (ctl *CartItemsController) fail(c *gin.Context, err error) {
 	switch {

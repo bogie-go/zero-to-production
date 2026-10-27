@@ -32,7 +32,7 @@ const (
 )
 
 // ProductsController is the HTTP surface of products: its dependencies, its
-// routes and its actions, one Rails controller in one file.
+// routes and its actions, all in one file.
 type ProductsController struct {
 	Store productsStore
 	Log   *slog.Logger

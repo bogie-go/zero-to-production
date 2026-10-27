@@ -20,7 +20,7 @@ import (
 // hand-written addition goes in users_extra.go, not here.
 
 // CreateUser validates a user, inserts it, and returns it with its id and
-// timestamps. Validation runs on save, as Rails's does, so every caller
+// timestamps. Validation runs on save, so every caller
 // gets it and none can forget it.
 func (s *Store) CreateUser(ctx context.Context, u models.User) (models.User, error) {
 	if err := u.Validate(); err != nil {

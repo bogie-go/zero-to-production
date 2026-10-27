@@ -19,7 +19,7 @@ import (
 // hand-written addition goes in order_items_extra.go, not here.
 
 // CreateOrderItem validates a order_item, inserts it, and returns it with its id and
-// timestamps. Validation runs on save, as Rails's does, so every caller
+// timestamps. Validation runs on save, so every caller
 // gets it and none can forget it.
 func (s *Store) CreateOrderItem(ctx context.Context, o models.OrderItem) (models.OrderItem, error) {
 	if err := o.Validate(); err != nil {

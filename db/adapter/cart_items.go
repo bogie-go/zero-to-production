@@ -19,7 +19,7 @@ import (
 // hand-written addition goes in cart_items_extra.go, not here.
 
 // CreateCartItem validates a cart_item, inserts it, and returns it with its id and
-// timestamps. Validation runs on save, as Rails's does, so every caller
+// timestamps. Validation runs on save, so every caller
 // gets it and none can forget it.
 func (s *Store) CreateCartItem(ctx context.Context, c models.CartItem) (models.CartItem, error) {
 	if err := c.Validate(); err != nil {

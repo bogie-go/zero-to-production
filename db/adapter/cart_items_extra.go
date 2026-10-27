@@ -13,7 +13,7 @@ import (
 
 // AddCartItem adds quantity of a product to a cart, incrementing an
 // existing line for that product instead of creating a second one — the
-// way adding the same thing to a Rails cart twice usually works. quantity
+// way adding the same thing to a cart twice works in a shop. quantity
 // must be positive and the line's total, new or incremented, must not
 // exceed the product's current stock.
 func (s *Store) AddCartItem(ctx context.Context, cartID, productID int64, quantity int32) (models.CartItem, error) {
@@ -54,8 +54,7 @@ func (s *Store) AddCartItem(ctx context.Context, cartID, productID int64, quanti
 // line must belong to cartID — the cart the caller's own token resolved to,
 // never a cart id the caller names — or this is ErrNotFound, the same as a
 // line that simply doesn't exist: a caller cannot tell "not yours" from
-// "doesn't exist" apart, the same way Rails' current_cart.cart_items.find
-// would 404 either way. id is a URL-sourced string, like every other store
+// "doesn't exist" apart. id is a URL-sourced string, like every other store
 // method that takes one; an id that is not a valid id is simply not found.
 func (s *Store) UpdateCartItemQuantity(ctx context.Context, cartID int64, id string, quantity int32) (models.CartItem, error) {
 	if quantity <= 0 {

@@ -24,8 +24,8 @@ type cartStore interface {
 
 // CartController is the HTTP surface of the current cart: one cart per
 // visitor, resolved by the bearer token's subject (middlewares.Subject)
-// rather than an id in the URL (there is no Rails-style singular resource
-// in Bogie yet — docs/bogie-gaps.md — so Index stands in for what would be
+// rather than an id in the URL (Bogie has no singular resource
+// yet — docs/bogie-gaps.md — so Index stands in for what would be
 // a singular show). The token itself, guest or (later) a real login, is
 // POST /guest_sessions's job to mint, not this controller's: by the time a
 // request reaches here it is required already, via s.WithUser in routes.go.
@@ -76,7 +76,7 @@ func (ctl *CartController) Index(c *gin.Context) {
 }
 
 // fail maps a domain error to a status, the one place that mapping lives:
-// not found is 404, a validation failure is 422 as in Rails, and anything
+// not found is 404, a validation failure is 422, and anything
 // else is logged and answered 500 without leaking its text.
 func (ctl *CartController) fail(c *gin.Context, err error) {
 	switch {

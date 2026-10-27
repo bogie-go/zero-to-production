@@ -14,7 +14,7 @@ import (
 	"ecommerce/app/models"
 )
 
-// minLength is Rails' has_secure_password default; good enough here too.
+// minLength is the shortest password accepted; 8 is a common floor.
 const minLength = 8
 
 // Hash bcrypt-hashes plain, for storing as a User's PasswordDigest.

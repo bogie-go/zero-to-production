@@ -1,5 +1,5 @@
 // Package admin_controller is the admin namespace: the controllers mounted under
-// /admin, as Rails's "namespace :admin" and the Admin:: module. One file per
+// /admin. One file per
 // controller; the group and its shared middleware in routes.go.
 package admin_controller
 

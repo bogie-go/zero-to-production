@@ -1,8 +1,7 @@
 // Package mailers composes the emails the shop sends: pure functions from
 // domain values to a mailer.Message, no I/O, so they are easy to test and to
 // preview. Delivering them is a job's work (app/jobs), over SMTP
-// (app/services/mailer). The same split as a Rails mailer class and
-// deliver_later.
+// (app/services/mailer).
 package mailers
 
 import (

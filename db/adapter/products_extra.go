@@ -24,7 +24,7 @@ func (s *Store) GetProductByName(ctx context.Context, name string) (models.Produ
 }
 
 // FindOrCreateProductByName returns the product named p.Name, creating it
-// from p if none exists yet. Like Rails's find_or_create_by, this is a plain
+// from p if none exists yet. This is a plain
 // find then create, not atomic: a race between two callers can still create
 // two products with the same name.
 func (s *Store) FindOrCreateProductByName(ctx context.Context, p models.Product) (models.Product, error) {

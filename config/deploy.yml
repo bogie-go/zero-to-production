@@ -22,7 +22,7 @@ proxy:
   ssl: true
   hosts:
     - depot.bogie-go.com
-  # The app listens on 8080, not Rails' 3000.
+  # The app listens on 8080, not Kamal's default of 3000.
   app_port: 8080
   # Kamal's default probe is /up, which this service does not have. The proxy
   # moves traffic to a new container only after this answers 200, so it asks

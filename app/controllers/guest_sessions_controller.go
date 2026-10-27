@@ -29,7 +29,7 @@ type guestTokenMaker interface {
 
 // guestTokenTTL is how long a minted guest token is good for: long enough
 // that a returning visitor's cart is still theirs weeks later, the way a
-// Rails session cookie usually outlives a single visit.
+// session cookie usually outlives a single visit.
 const guestTokenTTL = 30 * 24 * time.Hour
 
 // GuestSessionsController is the one place a guest's bearer token is

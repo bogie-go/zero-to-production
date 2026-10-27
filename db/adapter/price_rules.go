@@ -21,7 +21,7 @@ import (
 // hand-written addition goes in price_rules_extra.go, not here.
 
 // CreatePriceRule validates a price_rule, inserts it, and returns it with its id and
-// timestamps. Validation runs on save, as Rails's does, so every caller
+// timestamps. Validation runs on save, so every caller
 // gets it and none can forget it.
 func (s *Store) CreatePriceRule(ctx context.Context, p models.PriceRule) (models.PriceRule, error) {
 	if err := p.Validate(); err != nil {

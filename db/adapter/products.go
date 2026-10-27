@@ -20,7 +20,7 @@ import (
 // hand-written addition goes in products_extra.go, not here.
 
 // CreateProduct validates a product, inserts it, and returns it with its id and
-// timestamps. Validation runs on save, as Rails's does, so every caller
+// timestamps. Validation runs on save, so every caller
 // gets it and none can forget it.
 func (s *Store) CreateProduct(ctx context.Context, p models.Product) (models.Product, error) {
 	if err := p.Validate(); err != nil {

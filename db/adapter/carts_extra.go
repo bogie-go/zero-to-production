@@ -12,7 +12,7 @@ import (
 )
 
 // FindOrCreateCartByToken returns the cart with the given token, creating
-// an empty one if none exists yet. Unlike Rails's find_or_create_by this is
+// an empty one if none exists yet. This is
 // atomic: one INSERT ... ON CONFLICT against the unique index on token, so
 // two simultaneous first requests end up with the same cart.
 //

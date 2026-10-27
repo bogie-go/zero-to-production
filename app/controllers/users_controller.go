@@ -95,7 +95,7 @@ func (ctl *UsersController) Create(c *gin.Context) {
 
 // fail maps a domain error to a status: a validation failure (bad email, a
 // password that's too short, an email already taken — all models.ErrInvalid,
-// per AGENTS.md's new :uniq behavior) is 422 as in Rails, anything else is
+// per AGENTS.md's new :uniq behavior) is 422, anything else is
 // logged and answered 500 without leaking its text.
 func (ctl *UsersController) fail(c *gin.Context, err error) {
 	switch {

@@ -14,7 +14,7 @@ import (
 // staticFile is the first of three no-route handlers mounted in
 // routes.go (`r.NoRoute(s.staticFile, s.welcome, s.notFound)`): a request
 // that matched no route is tried against public/ before anything else, the
-// way a web server in front of Rails serves public/ ahead of the app. A
+// way a web server in front of an app serves public/ ahead of it. A
 // file found there is served as itself, whatever it is, and c.Abort() stops
 // welcome and notFound from also running: in Gin, returning from a handler
 // does not by itself stop the chain, only Abort does. Anything not found is
@@ -29,8 +29,8 @@ func (s *Server) staticFile(c *gin.Context) {
 		return
 	}
 	if info.IsDir() {
-		// A folder answers with its index.html, as a web server in front of
-		// Rails would: /admin/ is public/admin/index.html. Without the
+		// A folder answers with its index.html, as a web server would:
+		// /admin/ is public/admin/index.html. Without the
 		// trailing slash, redirect, so the page's relative links resolve.
 		if _, err := fs.Stat(public.Files, name+"/index.html"); err != nil {
 			return
@@ -47,8 +47,7 @@ func (s *Server) staticFile(c *gin.Context) {
 }
 
 // notFound is the last of the three: a request neither a route, public/,
-// nor (in development) the welcome page answered gets public/404.html, the
-// way a Rails app's own public/404.html answers an unmatched route.
+// nor (in development) the welcome page answered gets public/404.html.
 func (s *Server) notFound(c *gin.Context) {
 	c.Data(http.StatusNotFound, "text/html; charset=utf-8", public.NotFound)
 }
