@@ -1,4 +1,4 @@
-// Command ecommerce is the Go service next to the Rails app.
+// Command ecommerce is the Go API service.
 //
 // ONE BINARY, several roles, selected by the first argument: serving,
 // migrating the schema, creating the database. They share a module and
@@ -26,7 +26,7 @@ Commands:
   worker              work the job queue
   migrate <command>   inspect or move the embedded schema
   db <command>        create, drop or prepare the database itself
-  routes              every mounted route, method and path (rails routes)
+  routes              every mounted route, method and path
   mail test ADDRESS   send a test email through the configured SMTP server
   staff promote EMAIL make an existing account a staff member
 

@@ -21,7 +21,7 @@ const subjectKey = "subject"
 // RequireUser guards routes for a signed-in user: a bearer token in the
 // Authorization header that the token service verifies. The token's subject
 // is then on the context for handlers, through Subject. Who the subject is,
-// a Rails user id usually, is for the caller and the handler to agree on;
+// a user id usually, is for the caller and the handler to agree on;
 // nothing is loaded here.
 func RequireUser(tokens userTokens) gin.HandlerFunc {
 	return func(c *gin.Context) {

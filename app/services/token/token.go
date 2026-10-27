@@ -1,7 +1,7 @@
 // Package token mints and verifies the bearer tokens a signed-in user
-// presents. JWT, HS256, one shared secret: the Rails app next door can mint
-// a token for its user with the jwt gem and this service verifies it, so
-// users keep living in Rails, or this service mints its own from a sessions
+// presents. JWT, HS256, one shared secret: another service can mint
+// a token for its user with any JWT library and this service verifies it, so
+// users keep living there, or this service mints its own from a sessions
 // controller. Nothing here knows about HTTP.
 package token
 
@@ -32,7 +32,7 @@ type Maker struct {
 
 // Claims is what a verified token says.
 type Claims struct {
-	// Subject is who the token was minted for: the Rails user's id, usually.
+	// Subject is who the token was minted for: the caller's user id, usually.
 	Subject   string
 	ExpiresAt time.Time
 	// ID is the token's own id, for a revocation list if you keep one.
