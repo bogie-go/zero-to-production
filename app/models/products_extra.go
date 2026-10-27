@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // GetProductByName finds one product by its name.
@@ -44,7 +45,7 @@ func (s *Store) FindOrCreateProductByName(ctx context.Context, p domain.Product)
 // CountActiveProducts says how many there are in all. ListProducts
 // (generated) still returns all of them, archived included.
 func (s *Store) ListActiveProducts(ctx context.Context, categoryID *int64, limit, offset int32) ([]domain.Product, error) {
-	rows, err := s.q.ListActiveProducts(ctx, ListActiveProductsParams{CategoryID: categoryID, RowLimit: limit, RowOffset: offset})
+	rows, err := s.q.ListActiveProducts(ctx, sqlc.ListActiveProductsParams{CategoryID: categoryID, RowLimit: limit, RowOffset: offset})
 	if err != nil {
 		return nil, fmt.Errorf("models: list active products: %w", err)
 	}
@@ -72,7 +73,7 @@ func (s *Store) CountActiveProducts(ctx context.Context, categoryID *int64) (int
 // ListProductsPage is one page of the admin's list, newest first:
 // every product, or with includeArchived false only those not archived.
 func (s *Store) ListProductsPage(ctx context.Context, includeArchived bool, limit, offset int32) ([]domain.Product, error) {
-	rows, err := s.q.ListProductsPage(ctx, ListProductsPageParams{IncludeArchived: includeArchived, RowLimit: limit, RowOffset: offset})
+	rows, err := s.q.ListProductsPage(ctx, sqlc.ListProductsPageParams{IncludeArchived: includeArchived, RowLimit: limit, RowOffset: offset})
 	if err != nil {
 		return nil, fmt.Errorf("models: list products page: %w", err)
 	}
@@ -125,7 +126,7 @@ func (s *Store) RestoreProduct(ctx context.Context, id string) (domain.Product, 
 	return s.setArchived(ctx, id, s.q.RestoreProduct)
 }
 
-func (s *Store) setArchived(ctx context.Context, id string, run func(context.Context, int64) (Product, error)) (domain.Product, error) {
+func (s *Store) setArchived(ctx context.Context, id string, run func(context.Context, int64) (sqlc.Product, error)) (domain.Product, error) {
 	pk, err := parseID(id)
 	if err != nil {
 		return domain.Product{}, domain.ErrNotFound

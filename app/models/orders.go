@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // Orders, as the domain sees them. Each method converts domain.Order to and from
@@ -24,7 +25,7 @@ func (s *Store) CreateOrder(ctx context.Context, o domain.Order) (domain.Order, 
 	if err := o.Validate(); err != nil {
 		return domain.Order{}, err
 	}
-	row, err := s.q.CreateOrder(ctx, CreateOrderParams{UserID: o.UserID, Status: o.Status, SubtotalCents: o.SubtotalCents, DiscountCents: o.DiscountCents, TotalCents: o.TotalCents})
+	row, err := s.q.CreateOrder(ctx, sqlc.CreateOrderParams{UserID: o.UserID, Status: o.Status, SubtotalCents: o.SubtotalCents, DiscountCents: o.DiscountCents, TotalCents: o.TotalCents})
 	if err != nil {
 		return domain.Order{}, fmt.Errorf("models: create order: %w", err)
 	}
@@ -66,7 +67,7 @@ func (s *Store) UpdateOrder(ctx context.Context, o domain.Order) (domain.Order, 
 		return domain.Order{}, err
 	}
 	pk := o.ID
-	row, err := s.q.UpdateOrder(ctx, UpdateOrderParams{ID: pk, UserID: o.UserID, Status: o.Status, SubtotalCents: o.SubtotalCents, DiscountCents: o.DiscountCents, TotalCents: o.TotalCents})
+	row, err := s.q.UpdateOrder(ctx, sqlc.UpdateOrderParams{ID: pk, UserID: o.UserID, Status: o.Status, SubtotalCents: o.SubtotalCents, DiscountCents: o.DiscountCents, TotalCents: o.TotalCents})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.Order{}, domain.ErrNotFound
@@ -92,7 +93,7 @@ func (s *Store) DeleteOrder(ctx context.Context, id string) error {
 	return nil
 }
 
-func orderFromRow(r Order) domain.Order {
+func orderFromRow(r sqlc.Order) domain.Order {
 	return domain.Order{
 		ID:            r.ID,
 		UserID:        r.UserID,

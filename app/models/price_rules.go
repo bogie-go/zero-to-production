@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // PriceRules, as the domain sees them. Each method converts domain.PriceRule to and from
@@ -26,7 +27,7 @@ func (s *Store) CreatePriceRule(ctx context.Context, p domain.PriceRule) (domain
 	if err := p.Validate(); err != nil {
 		return domain.PriceRule{}, err
 	}
-	row, err := s.q.CreatePriceRule(ctx, CreatePriceRuleParams{Name: p.Name, Kind: p.Kind, Properties: p.Properties, Active: p.Active, Priority: p.Priority, StartsAt: timePtrToTimestamptz(p.StartsAt), EndsAt: timePtrToTimestamptz(p.EndsAt)})
+	row, err := s.q.CreatePriceRule(ctx, sqlc.CreatePriceRuleParams{Name: p.Name, Kind: p.Kind, Properties: p.Properties, Active: p.Active, Priority: p.Priority, StartsAt: timePtrToTimestamptz(p.StartsAt), EndsAt: timePtrToTimestamptz(p.EndsAt)})
 	if err != nil {
 		return domain.PriceRule{}, fmt.Errorf("models: create price_rule: %w", err)
 	}
@@ -68,7 +69,7 @@ func (s *Store) UpdatePriceRule(ctx context.Context, p domain.PriceRule) (domain
 		return domain.PriceRule{}, err
 	}
 	pk := p.ID
-	row, err := s.q.UpdatePriceRule(ctx, UpdatePriceRuleParams{ID: pk, Name: p.Name, Kind: p.Kind, Properties: p.Properties, Active: p.Active, Priority: p.Priority, StartsAt: timePtrToTimestamptz(p.StartsAt), EndsAt: timePtrToTimestamptz(p.EndsAt)})
+	row, err := s.q.UpdatePriceRule(ctx, sqlc.UpdatePriceRuleParams{ID: pk, Name: p.Name, Kind: p.Kind, Properties: p.Properties, Active: p.Active, Priority: p.Priority, StartsAt: timePtrToTimestamptz(p.StartsAt), EndsAt: timePtrToTimestamptz(p.EndsAt)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.PriceRule{}, domain.ErrNotFound
@@ -94,7 +95,7 @@ func (s *Store) DeletePriceRule(ctx context.Context, id string) error {
 	return nil
 }
 
-func price_ruleFromRow(r PriceRule) domain.PriceRule {
+func price_ruleFromRow(r sqlc.PriceRule) domain.PriceRule {
 	return domain.PriceRule{
 		ID:         r.ID,
 		Name:       r.Name,

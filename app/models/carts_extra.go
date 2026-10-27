@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // FindOrCreateCartByToken returns the cart with the given token, creating
@@ -46,7 +47,7 @@ func (s *Store) GetCartByToken(ctx context.Context, token string) (domain.Cart, 
 // checkout), so a failure midway never leaves a cart with no items but no
 // row deleted, or the reverse.
 func (s *Store) DeleteCartAndItems(ctx context.Context, cartID int64) error {
-	return s.withTx(ctx, func(q *Queries) error {
+	return s.withTx(ctx, func(_ pgx.Tx, q *sqlc.Queries) error {
 		if _, err := q.DeleteCartItemsForCart(ctx, cartID); err != nil {
 			return fmt.Errorf("models: delete cart items for cart %d: %w", cartID, err)
 		}

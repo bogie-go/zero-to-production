@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // CartItems, as the domain sees them. Each method converts domain.CartItem to and from
@@ -24,7 +25,7 @@ func (s *Store) CreateCartItem(ctx context.Context, c domain.CartItem) (domain.C
 	if err := c.Validate(); err != nil {
 		return domain.CartItem{}, err
 	}
-	row, err := s.q.CreateCartItem(ctx, CreateCartItemParams{CartID: c.CartID, ProductID: c.ProductID, Quantity: c.Quantity})
+	row, err := s.q.CreateCartItem(ctx, sqlc.CreateCartItemParams{CartID: c.CartID, ProductID: c.ProductID, Quantity: c.Quantity})
 	if err != nil {
 		return domain.CartItem{}, fmt.Errorf("models: create cart_item: %w", err)
 	}
@@ -66,7 +67,7 @@ func (s *Store) UpdateCartItem(ctx context.Context, c domain.CartItem) (domain.C
 		return domain.CartItem{}, err
 	}
 	pk := c.ID
-	row, err := s.q.UpdateCartItem(ctx, UpdateCartItemParams{ID: pk, CartID: c.CartID, ProductID: c.ProductID, Quantity: c.Quantity})
+	row, err := s.q.UpdateCartItem(ctx, sqlc.UpdateCartItemParams{ID: pk, CartID: c.CartID, ProductID: c.ProductID, Quantity: c.Quantity})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.CartItem{}, domain.ErrNotFound
@@ -92,7 +93,7 @@ func (s *Store) DeleteCartItem(ctx context.Context, id string) error {
 	return nil
 }
 
-func cart_itemFromRow(r CartItem) domain.CartItem {
+func cart_itemFromRow(r sqlc.CartItem) domain.CartItem {
 	return domain.CartItem{
 		ID:        r.ID,
 		CartID:    r.CartID,

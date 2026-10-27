@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // Categories, as the domain sees them. Each method converts domain.Category to and from
@@ -71,7 +72,7 @@ func (s *Store) UpdateCategory(ctx context.Context, c domain.Category) (domain.C
 		return domain.Category{}, err
 	}
 	pk := c.ID
-	row, err := s.q.UpdateCategory(ctx, UpdateCategoryParams{ID: pk, Name: c.Name})
+	row, err := s.q.UpdateCategory(ctx, sqlc.UpdateCategoryParams{ID: pk, Name: c.Name})
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -104,7 +105,7 @@ func (s *Store) DeleteCategory(ctx context.Context, id string) error {
 	return nil
 }
 
-func categoryFromRow(r Category) domain.Category {
+func categoryFromRow(r sqlc.Category) domain.Category {
 	return domain.Category{
 		ID:        r.ID,
 		Name:      r.Name,

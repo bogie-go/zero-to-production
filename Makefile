@@ -40,7 +40,7 @@ worker: ## work the job queue (bogie worker adds live reload)
 test: ## run the suite (one package at a time: they share one test database) with coverage, in the test environment (needs: make up, then ECOMMERCE_ENV=test bogie db:prepare once)
 	ECOMMERCE_ENV=test go test -p 1 -race -cover ./...
 
-sqlc: ## regenerate app/models from db/queries against db/migrate
+sqlc: ## regenerate db/sqlc from db/queries against db/migrate
 	@ls db/queries/*.sql >/dev/null 2>&1 || { echo "no query files in db/queries yet; nothing to generate"; exit 0; }
 	cd db && go tool sqlc generate
 

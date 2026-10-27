@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // Users, as the domain sees them. Each method converts domain.User to and from
@@ -25,7 +26,7 @@ func (s *Store) CreateUser(ctx context.Context, u domain.User) (domain.User, err
 	if err := u.Validate(); err != nil {
 		return domain.User{}, err
 	}
-	row, err := s.q.CreateUser(ctx, CreateUserParams{Email: u.Email, PasswordDigest: u.PasswordDigest, Role: u.Role})
+	row, err := s.q.CreateUser(ctx, sqlc.CreateUserParams{Email: u.Email, PasswordDigest: u.PasswordDigest, Role: u.Role})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -71,7 +72,7 @@ func (s *Store) UpdateUser(ctx context.Context, u domain.User) (domain.User, err
 		return domain.User{}, err
 	}
 	pk := u.ID
-	row, err := s.q.UpdateUser(ctx, UpdateUserParams{ID: pk, Email: u.Email, PasswordDigest: u.PasswordDigest, Role: u.Role})
+	row, err := s.q.UpdateUser(ctx, sqlc.UpdateUserParams{ID: pk, Email: u.Email, PasswordDigest: u.PasswordDigest, Role: u.Role})
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -100,7 +101,7 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	return nil
 }
 
-func userFromRow(r User) domain.User {
+func userFromRow(r sqlc.User) domain.User {
 	return domain.User{
 		ID:             r.ID,
 		Email:          r.Email,

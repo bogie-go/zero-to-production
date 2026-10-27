@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // OrderItems, as the domain sees them. Each method converts domain.OrderItem to and from
@@ -24,7 +25,7 @@ func (s *Store) CreateOrderItem(ctx context.Context, o domain.OrderItem) (domain
 	if err := o.Validate(); err != nil {
 		return domain.OrderItem{}, err
 	}
-	row, err := s.q.CreateOrderItem(ctx, CreateOrderItemParams{OrderID: o.OrderID, ProductID: o.ProductID, Quantity: o.Quantity, UnitPriceCents: o.UnitPriceCents})
+	row, err := s.q.CreateOrderItem(ctx, sqlc.CreateOrderItemParams{OrderID: o.OrderID, ProductID: o.ProductID, Quantity: o.Quantity, UnitPriceCents: o.UnitPriceCents})
 	if err != nil {
 		return domain.OrderItem{}, fmt.Errorf("models: create order_item: %w", err)
 	}
@@ -66,7 +67,7 @@ func (s *Store) UpdateOrderItem(ctx context.Context, o domain.OrderItem) (domain
 		return domain.OrderItem{}, err
 	}
 	pk := o.ID
-	row, err := s.q.UpdateOrderItem(ctx, UpdateOrderItemParams{ID: pk, OrderID: o.OrderID, ProductID: o.ProductID, Quantity: o.Quantity, UnitPriceCents: o.UnitPriceCents})
+	row, err := s.q.UpdateOrderItem(ctx, sqlc.UpdateOrderItemParams{ID: pk, OrderID: o.OrderID, ProductID: o.ProductID, Quantity: o.Quantity, UnitPriceCents: o.UnitPriceCents})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.OrderItem{}, domain.ErrNotFound
@@ -92,7 +93,7 @@ func (s *Store) DeleteOrderItem(ctx context.Context, id string) error {
 	return nil
 }
 
-func order_itemFromRow(r OrderItem) domain.OrderItem {
+func order_itemFromRow(r sqlc.OrderItem) domain.OrderItem {
 	return domain.OrderItem{
 		ID:             r.ID,
 		OrderID:        r.OrderID,

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // GetUserByEmail finds one user by their email — a login's first step.
@@ -41,8 +42,8 @@ func (s *Store) RegisterUser(ctx context.Context, u domain.User) (domain.User, e
 		return domain.User{}, err
 	}
 	var user domain.User
-	err := s.withTx(ctx, func(q *Queries) error {
-		row, err := q.CreateUser(ctx, CreateUserParams{Email: u.Email, PasswordDigest: u.PasswordDigest, Role: u.Role})
+	err := s.withTx(ctx, func(tx pgx.Tx, q *sqlc.Queries) error {
+		row, err := q.CreateUser(ctx, sqlc.CreateUserParams{Email: u.Email, PasswordDigest: u.PasswordDigest, Role: u.Role})
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -52,10 +53,6 @@ func (s *Store) RegisterUser(ctx context.Context, u domain.User) (domain.User, e
 		}
 		user = userFromRow(row)
 		if s.onUserRegistered != nil {
-			tx, ok := txOf(q)
-			if !ok {
-				return errors.New("models: onUserRegistered needs a transaction")
-			}
 			if err := s.onUserRegistered(ctx, tx, user); err != nil {
 				return fmt.Errorf("models: after user %d: %w", user.ID, err)
 			}

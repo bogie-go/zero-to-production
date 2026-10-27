@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // GetPriceRuleByName finds one price rule by its name.
@@ -74,7 +75,7 @@ func (s *Store) SetPriceRuleActive(ctx context.Context, id string, active bool) 
 	if err != nil {
 		return domain.PriceRule{}, domain.ErrNotFound
 	}
-	row, err := s.q.SetPriceRuleActive(ctx, SetPriceRuleActiveParams{ID: pk, Active: active})
+	row, err := s.q.SetPriceRuleActive(ctx, sqlc.SetPriceRuleActiveParams{ID: pk, Active: active})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.PriceRule{}, domain.ErrNotFound

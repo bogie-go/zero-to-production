@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // Carts, as the domain sees them. Each method converts domain.Cart to and from
@@ -66,7 +67,7 @@ func (s *Store) UpdateCart(ctx context.Context, c domain.Cart) (domain.Cart, err
 		return domain.Cart{}, err
 	}
 	pk := c.ID
-	row, err := s.q.UpdateCart(ctx, UpdateCartParams{ID: pk, Token: c.Token})
+	row, err := s.q.UpdateCart(ctx, sqlc.UpdateCartParams{ID: pk, Token: c.Token})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.Cart{}, domain.ErrNotFound
@@ -92,7 +93,7 @@ func (s *Store) DeleteCart(ctx context.Context, id string) error {
 	return nil
 }
 
-func cartFromRow(r Cart) domain.Cart {
+func cartFromRow(r sqlc.Cart) domain.Cart {
 	return domain.Cart{
 		ID:        r.ID,
 		Token:     r.Token,

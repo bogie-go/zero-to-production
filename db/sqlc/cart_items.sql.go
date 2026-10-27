@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: cart_items.sql
 
-package models
+package sqlc
 
 import (
 	"context"

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // AddCartItem adds quantity of a product to a cart, incrementing an
@@ -30,7 +31,7 @@ func (s *Store) AddCartItem(ctx context.Context, cartID, productID int64, quanti
 		return domain.CartItem{}, fmt.Errorf("%w: %s is no longer available", domain.ErrInvalid, product.Name)
 	}
 
-	existing, err := s.q.GetCartItemByCartAndProduct(ctx, GetCartItemByCartAndProductParams{CartID: cartID, ProductID: productID})
+	existing, err := s.q.GetCartItemByCartAndProduct(ctx, sqlc.GetCartItemByCartAndProductParams{CartID: cartID, ProductID: productID})
 	switch {
 	case err == nil:
 		quantity += existing.Quantity
@@ -64,7 +65,7 @@ func (s *Store) UpdateCartItemQuantity(ctx context.Context, cartID int64, id str
 	if err != nil {
 		return domain.CartItem{}, domain.ErrNotFound
 	}
-	row, err := s.q.GetCartItemForCart(ctx, GetCartItemForCartParams{ID: pk, CartID: cartID})
+	row, err := s.q.GetCartItemForCart(ctx, sqlc.GetCartItemForCartParams{ID: pk, CartID: cartID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.CartItem{}, domain.ErrNotFound
@@ -95,7 +96,7 @@ func (s *Store) DeleteCartItemForCart(ctx context.Context, cartID int64, id stri
 	if err != nil {
 		return domain.ErrNotFound
 	}
-	n, err := s.q.DeleteCartItemForCart(ctx, DeleteCartItemForCartParams{ID: pk, CartID: cartID})
+	n, err := s.q.DeleteCartItemForCart(ctx, sqlc.DeleteCartItemForCartParams{ID: pk, CartID: cartID})
 	if err != nil {
 		return fmt.Errorf("models: delete cart item %s for cart %d: %w", id, cartID, err)
 	}

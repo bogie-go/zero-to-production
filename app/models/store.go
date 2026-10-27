@@ -1,10 +1,11 @@
-// Package models is the database: the sqlc output compiled from
-// db/queries/*.sql, and the Store that wraps it.
+// Package models is the Store: the layer between app/domain and the database.
 //
-// Nothing here is hand-written SQL. The *.sql.go files are generated (make
-// sqlc) and speak pgtype; the Store's own methods speak app/domain, so nothing
-// above this package imports pgx. The sqlc-generated Queries is held
-// privately rather than embedded, so that boundary cannot leak by accident.
+// Nothing here is hand-written SQL. The queries are compiled by sqlc from
+// db/queries/*.sql into db/sqlc (make sqlc), whose types speak pgtype; the
+// Store's own methods speak app/domain, validate on save, and convert
+// between the two, so nothing above this package imports pgx. The sqlc
+// Queries is held privately rather than embedded, so that boundary cannot
+// leak by accident.
 package models
 
 import (
@@ -15,12 +16,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // Store wraps the connection pool and the generated queries.
 type Store struct {
 	pool *pgxpool.Pool
-	q    *Queries
+	q    *sqlc.Queries
 
 	// onOrderPlaced runs inside CreateOrderFromCart's transaction; see
 	// OnOrderPlaced in orders_extra.go.
@@ -41,7 +43,7 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 		pool.Close()
 		return nil, fmt.Errorf("models: ping database: %w", err)
 	}
-	return &Store{pool: pool, q: New(pool)}, nil
+	return &Store{pool: pool, q: sqlc.New(pool)}, nil
 }
 
 // Close releases the pool.
@@ -50,8 +52,10 @@ func (s *Store) Close() { s.pool.Close() }
 // Ping reports whether the database answers.
 func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 
-// withTx runs fn against a *Queries bound to one database transaction:
-// every call fn makes through it happens on the same connection and the
+// withTx runs fn against a *Queries bound to one database transaction, and
+// hands fn the transaction itself for the rare caller that needs to pass it
+// on (a hook enqueueing a job in the same transaction). Every call fn makes
+// through the queries happens on the same connection and the
 // same not-yet-committed transaction, however many tables it touches. If fn
 // returns an error, everything it did is rolled back as if none of it had
 // happened; only a nil return commits. This is Go's version of Rails'
@@ -64,12 +68,12 @@ func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 // app/models/, such as orders_extra.go, not from above this package.
 // CreateOrderFromCart (orders_extra.go) and DeleteCartAndItems
 // (carts_extra.go) both already do.
-func (s *Store) withTx(ctx context.Context, fn func(q *Queries) error) error {
+func (s *Store) withTx(ctx context.Context, fn func(tx pgx.Tx, q *sqlc.Queries) error) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("models: begin transaction: %w", err)
 	}
-	if err := fn(s.q.WithTx(tx)); err != nil {
+	if err := fn(tx, s.q.WithTx(tx)); err != nil {
 		if rbErr := tx.Rollback(ctx); rbErr != nil {
 			return fmt.Errorf("models: %w (rollback also failed: %v)", err, rbErr)
 		}

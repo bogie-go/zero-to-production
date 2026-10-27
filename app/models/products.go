@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"ecommerce/app/domain"
+	"ecommerce/db/sqlc"
 )
 
 // Products, as the domain sees them. Each method converts domain.Product to and from
@@ -25,7 +26,7 @@ func (s *Store) CreateProduct(ctx context.Context, p domain.Product) (domain.Pro
 	if err := p.Validate(); err != nil {
 		return domain.Product{}, err
 	}
-	row, err := s.q.CreateProduct(ctx, CreateProductParams{Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl, CategoryID: p.CategoryID})
+	row, err := s.q.CreateProduct(ctx, sqlc.CreateProductParams{Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl, CategoryID: p.CategoryID})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
@@ -71,7 +72,7 @@ func (s *Store) UpdateProduct(ctx context.Context, p domain.Product) (domain.Pro
 		return domain.Product{}, err
 	}
 	pk := p.ID
-	row, err := s.q.UpdateProduct(ctx, UpdateProductParams{ID: pk, Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl, CategoryID: p.CategoryID})
+	row, err := s.q.UpdateProduct(ctx, sqlc.UpdateProductParams{ID: pk, Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl, CategoryID: p.CategoryID})
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -104,7 +105,7 @@ func (s *Store) DeleteProduct(ctx context.Context, id string) error {
 	return nil
 }
 
-func productFromRow(r Product) domain.Product {
+func productFromRow(r sqlc.Product) domain.Product {
 	return domain.Product{
 		ID:          r.ID,
 		Name:        r.Name,

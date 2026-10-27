@@ -9,6 +9,7 @@ import (
 
 	"ecommerce/app/domain"
 	"ecommerce/app/pricing"
+	"ecommerce/db/sqlc"
 )
 
 // CreateOrderFromCart turns a cart into an order: one database transaction
@@ -43,9 +44,9 @@ func (s *Store) CreateOrderFromCart(ctx context.Context, userID int64, cartID in
 	}
 
 	var order domain.Order
-	err = s.withTx(ctx, func(q *Queries) error {
+	err = s.withTx(ctx, func(tx pgx.Tx, q *sqlc.Queries) error {
 		for _, l := range lines {
-			n, err := q.DecrementProductStock(ctx, DecrementProductStockParams{Stock: l.Quantity, ID: l.ProductID})
+			n, err := q.DecrementProductStock(ctx, sqlc.DecrementProductStockParams{Stock: l.Quantity, ID: l.ProductID})
 			if err != nil {
 				return fmt.Errorf("models: decrement stock for product %d: %w", l.ProductID, err)
 			}
@@ -64,7 +65,7 @@ func (s *Store) CreateOrderFromCart(ctx context.Context, userID int64, cartID in
 		if err := o.Validate(); err != nil {
 			return err
 		}
-		row, err := q.CreateOrder(ctx, CreateOrderParams{
+		row, err := q.CreateOrder(ctx, sqlc.CreateOrderParams{
 			UserID: o.UserID, Status: o.Status,
 			SubtotalCents: o.SubtotalCents, DiscountCents: o.DiscountCents, TotalCents: o.TotalCents,
 		})
@@ -81,7 +82,7 @@ func (s *Store) CreateOrderFromCart(ctx context.Context, userID int64, cartID in
 			if err := item.Validate(); err != nil {
 				return err
 			}
-			if _, err := q.CreateOrderItem(ctx, CreateOrderItemParams{
+			if _, err := q.CreateOrderItem(ctx, sqlc.CreateOrderItemParams{
 				OrderID: item.OrderID, ProductID: item.ProductID,
 				Quantity: item.Quantity, UnitPriceCents: item.UnitPriceCents,
 			}); err != nil {
@@ -97,10 +98,6 @@ func (s *Store) CreateOrderFromCart(ctx context.Context, userID int64, cartID in
 		// the confirmation email) commits with the order or not at all, and a
 		// hook that fails rolls the whole checkout back.
 		if s.onOrderPlaced != nil {
-			tx, ok := txOf(q)
-			if !ok {
-				return errors.New("models: onOrderPlaced needs a transaction")
-			}
 			if err := s.onOrderPlaced(ctx, tx, order); err != nil {
 				return fmt.Errorf("models: after order %d: %w", order.ID, err)
 			}
@@ -131,17 +128,11 @@ func (s *Store) OnOrderPlaced(fn func(ctx context.Context, tx pgx.Tx, order doma
 	s.onOrderPlaced = fn
 }
 
-// txOf is the transaction a withTx closure's Queries is bound to.
-func txOf(q *Queries) (pgx.Tx, bool) {
-	tx, ok := q.db.(pgx.Tx)
-	return tx, ok
-}
-
 // ListOrdersForUser returns a user's own orders, newest first — never
 // another user's, since every caller here names the user from their own
 // token (middlewares.Subject), never an id from the URL.
 func (s *Store) ListOrdersForUser(ctx context.Context, userID int64, limit int32) ([]domain.Order, error) {
-	rows, err := s.q.ListOrdersForUser(ctx, ListOrdersForUserParams{UserID: userID, Limit: limit})
+	rows, err := s.q.ListOrdersForUser(ctx, sqlc.ListOrdersForUserParams{UserID: userID, Limit: limit})
 	if err != nil {
 		return nil, fmt.Errorf("models: list orders for user %d: %w", userID, err)
 	}
@@ -160,7 +151,7 @@ func (s *Store) GetOrderForUser(ctx context.Context, userID int64, id string) (d
 	if err != nil {
 		return domain.Order{}, nil, domain.ErrNotFound
 	}
-	row, err := s.q.GetOrderForUser(ctx, GetOrderForUserParams{ID: pk, UserID: userID})
+	row, err := s.q.GetOrderForUser(ctx, sqlc.GetOrderForUserParams{ID: pk, UserID: userID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.Order{}, nil, domain.ErrNotFound
