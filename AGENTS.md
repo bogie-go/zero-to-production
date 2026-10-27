@@ -345,9 +345,10 @@ Every generated column is NOT NULL with a type-appropriate default, so sqlc
 emits plain Go types rather than pointers. A column that truly needs null is
 one edit to the migration.
 
-This app's id scheme is `uuid`, recorded in `bogie.toml` at `bogie
+This app's id scheme is `bigint`, recorded in `bogie.toml` at `bogie
 new` time: every `id` column and every `:references` foreign key is made of
-it, so `domain.Comment.ID` is a `string`. It is chosen once, app-wide — `bogie new NAME --id=uuid`
+it, so `domain.Comment.ID` is an
+`int64`. It is chosen once, app-wide — `bogie new NAME --id=uuid`
 picks uuid instead of the bigint default — and cannot be mixed per model.
 
 A hand-written addition to the store — a helper, a query wrapper, anything

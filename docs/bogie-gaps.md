@@ -55,17 +55,17 @@ mints; `app/middlewares/require_user.go` (generated) guards `/cart` and
 No real fix needed here — a guest and a signed-in user are "same shape,
 different stakes," not two mechanisms.
 
-## AGENTS.md's id scheme line doesn't update with `bogie.toml`
+## ~~AGENTS.md's id scheme line doesn't update with `bogie.toml`~~ — our own edit, fixed here
 
-`AGENTS.md` says "This app's id scheme is `uuid`," but `bogie.toml` has said
-`id = "bigint"` since the switch before Task C (`4ad24f6`). `bogie app:update`
-ran three times since (v0.2.9, v0.2.10, v0.2.11) and touched `AGENTS.md`
-every time, but never updated that line. Low stakes — a reader just sees a
-stale sentence, and `bogie.toml` is the actual source of truth — but it
-means `AGENTS.md`'s id-scheme paragraph isn't really regenerated from
-current settings on `app:update`, only on `bogie new`. Found while checking
-which column types `g model` supports before generating `price_rule`, not
-investigated further.
+`AGENTS.md` said "This app's id scheme is `uuid`" while `bogie.toml` said
+`id = "bigint"`. Not an `app:update` bug: the template renders
+`{{.IDScheme}}` correctly. The shop was made with `bogie new --id=uuid` and
+`bogie.toml` was then edited by hand to bigint. `app:update` renders both
+its "before" and "after" from the current `bogie.toml`, so both said bigint,
+saw no template change, and left the old line alone. The line was corrected
+by hand. The lesson for the book: the id scheme is chosen once at `bogie
+new`; changing it afterwards is a migration of the whole app, and
+`bogie.toml` alone does not do it.
 
 ## ~~`:uniq` duplicates surfaced as a raw 500~~ — fixed in Bogie v0.2.11
 
