@@ -16,7 +16,7 @@ import (
 // productsStore is the slice of the store this controller uses, declared next
 // to its caller and holding only the methods the actions call. The shop
 // only ever sees active products: an archived one is not found.
-// *db.Store satisfies it, and app/application.go passes it in; the
+// *adapter.Store satisfies it, and app/application.go passes it in; the
 // test's fake is a few lines.
 type productsStore interface {
 	GetActiveProduct(ctx context.Context, id string) (models.Product, error)

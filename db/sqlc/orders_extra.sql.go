@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: orders_extra.sql
 
-package db
+package sqlc
 
 import (
 	"context"

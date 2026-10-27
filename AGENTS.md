@@ -96,8 +96,9 @@ nobody's secrets and can never open the development database.
       migrate/                   goose SQL, timestamped; `bogie g model` writes the first
       seeds/                     seeds.go runs each file above // bogie:seeds, every
                                  time `db seed` runs; `bogie g seed` writes one
-      sqlc/                      package db: sqlc's generated queries (*.sql.go, make sqlc)
-                                 and the Store around them (validation, row <-> models)
+      sqlc/                      sqlc's generated queries (*.sql.go, make sqlc); never edited
+      adapter/                   package adapter: the Store between app/models and sqlc
+                                 (validation, row <-> models); `bogie g model` writes it
     public/                      404.html · 500.html, go:embedded; Rails's public/, API mode included
     lib/logger/
     test/                        what tests share: testdb (a clean test database),
@@ -331,7 +332,7 @@ service is for logic that is not CRUD; a plain resource needs none.
 
 writes the `create_comments` migration, `db/queries/comments.sql` with get,
 list, create, update and delete, `app/models/comment.go` with the type and an
-empty `Validate`, and `db/sqlc/comments.go`, the store methods that convert
+empty `Validate`, and `db/adapter/comments.go`, the store methods that convert
 sqlc's row type to `models.Comment`, run `Validate` before create and update,
 and map no-rows to `models.ErrNotFound`; then it runs sqlc. Types: string, text, integer, bigint, boolean, datetime,
 uuid, jsonb, references; `:index` or `:uniq` after a type. `post:references`
@@ -353,8 +354,8 @@ it, so `models.Comment.ID` is an
 picks uuid instead of the bigint default — and cannot be mixed per model.
 
 A hand-written addition to the store — a helper, a query wrapper, anything
-beyond what the generator writes — goes in a sibling file in `db/sqlc/`,
-such as `db/sqlc/comments_extra.go`, not inside the generated
+beyond what the generator writes — goes in a sibling file in `db/adapter/`,
+such as `db/adapter/comments_extra.go`, not inside the generated
 `comments.go`. Go merges every file in a package, so it sees the same
 `*Store` and `models.Comment` as the generated methods. Keeping it separate
 means a later `bogie g model comment <col>:<type>` only ever reports
@@ -408,7 +409,7 @@ then `make sqlc`, which writes `ListCommentsForPost` into
 `db/sqlc/comments.sql.go` with typed parameters, or fails if a column is
 misspelled. Then a store method that calls it and converts the rows with
 `commentFromRow`, as the generated methods do — written in
-`db/sqlc/comments_extra.go` too, not inside the generated
+`db/adapter/comments_extra.go` too, not inside the generated
 `comments.go`, so a later `g model comment <col>:<type>` never conflicts
 with either sibling file. Annotations: `:one`, `:many`, `:exec`,
 `:execrows`. The generated file is committed; `bin/ci` fails if it is
@@ -417,13 +418,13 @@ stale.
 ### Run a transaction
 
 A write that touches more than one table, and must not half-succeed, goes
-through `(*Store).withTx` — the one place `db/sqlc/store.go` wraps a real
+through `(*Store).withTx` — the one place `db/adapter/store.go` wraps a real
 database transaction, Go's version of Rails' `ActiveRecord::Base.transaction
 do ... end`:
 
     func (s *Store) CreateOrderFromCart(ctx context.Context, userID, cartID int64) (models.Order, error) {
         var order models.Order
-        err := s.withTx(ctx, func(tx pgx.Tx, q *Queries) error {
+        err := s.withTx(ctx, func(tx pgx.Tx, q *sqlc.Queries) error {
             // every call here runs on the same transaction; an error
             // from any of them rolls all of them back, nothing commits
             return nil
@@ -433,7 +434,7 @@ do ... end`:
 
 written in a hand-written method's own sibling file, such as
 `orders_extra.go`, the same place any other hand-written store method goes
-("Add a model", above). `withTx` is unexported: it is for `db/sqlc`
+("Add a model", above). `withTx` is unexported: it is for `db/adapter`
 itself to call, never for a controller to reach past the store with.
 
 ### Static files and error pages
@@ -459,7 +460,7 @@ Tests are **Ginkgo and Gomega** (`Describe`/`Context`/`It`, `Expect`), in
 external `_test` packages (`package models_test`), beside the code. One suite
 file per package, `<pkg>_suite_test.go`, runs the specs and owns the shared
 setup as a package variable rebuilt before every spec, as RSpec uses `let`:
-`app` in `app/controllers` and `test/requests`, `store` in `db/sqlc`. What
+`app` in `app/controllers` and `test/requests`, `store` in `db/adapter`. What
 the suites share lives in `test/`:
 
 - `test/testdb`: `testdb.Store(GinkgoT())` opens the TEST database, migrates it and

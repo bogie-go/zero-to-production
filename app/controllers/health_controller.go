@@ -10,7 +10,7 @@ import (
 )
 
 // healthStore is the slice of the store the readiness check uses, declared
-// here beside its user (rule 2). *db.Store satisfies it.
+// here beside its user (rule 2). *adapter.Store satisfies it.
 type healthStore interface {
 	Ping(ctx context.Context) error
 }

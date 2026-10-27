@@ -12,7 +12,7 @@ import (
 )
 
 // opsStore is the slice of the store this controller uses, declared next to
-// its caller (rule 2). *db.Store satisfies it.
+// its caller (rule 2). *adapter.Store satisfies it.
 type opsStore interface {
 	Ops(ctx context.Context) (models.Ops, error)
 }

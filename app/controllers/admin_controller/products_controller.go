@@ -14,7 +14,7 @@ import (
 
 // productsStore is the slice of the store this controller uses, declared
 // next to its caller (rule 2) and holding only the methods the actions
-// call. *db.Store satisfies it.
+// call. *adapter.Store satisfies it.
 type productsStore interface {
 	GetProduct(ctx context.Context, id string) (models.Product, error)
 	ListProductsPage(ctx context.Context, includeArchived bool, limit, offset int32) ([]models.Product, error)

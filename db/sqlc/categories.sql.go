@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: categories.sql
 
-package db
+package sqlc
 
 import (
 	"context"

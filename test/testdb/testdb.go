@@ -16,7 +16,7 @@ import (
 
 	"ecommerce/app/services/migrate"
 	"ecommerce/config"
-	"ecommerce/db/sqlc"
+	"ecommerce/db/adapter"
 )
 
 // T is the part of *testing.T the helpers need, so they also work with
@@ -38,7 +38,7 @@ var hint = "Is the database up, and the test database created? Run: make up && "
 // each test starts from nothing. The environment is forced to test here so
 // that `go test` run by hand in a development shell can never truncate
 // development data.
-func Store(t T) *db.Store {
+func Store(t T) *adapter.Store {
 	t.Helper()
 	url := testURL(t)
 	ctx := context.Background()
@@ -46,7 +46,7 @@ func Store(t T) *db.Store {
 	if err := migrate.Run(ctx, url, quiet); err != nil {
 		t.Fatalf("migrate: %v\n%s", err, hint)
 	}
-	store, err := db.Open(ctx, url)
+	store, err := adapter.Open(ctx, url)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, hint)
 	}

@@ -5,7 +5,7 @@
 // is in the wrong place and you will know immediately. Ids are plain
 // Go values here (int64, or string for uuid, per bogie.toml) and become the
 // database's key type at the store boundary; that conversion living in
-// db/sqlc is what lets this package stay dependency-free.
+// db/adapter is what lets this package stay dependency-free.
 //
 // `bogie g model` adds a type and its validations here, one file per model.
 // The two errors below are what every model's layers above map to HTTP

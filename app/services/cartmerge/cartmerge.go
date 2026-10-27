@@ -14,7 +14,7 @@ import (
 )
 
 // store is the slice of the store the merge uses, declared here beside its
-// user (rule 2). *db.Store satisfies it.
+// user (rule 2). *adapter.Store satisfies it.
 type store interface {
 	GetCartByToken(ctx context.Context, token string) (models.Cart, error)
 	FindOrCreateCartByToken(ctx context.Context, token string) (models.Cart, error)

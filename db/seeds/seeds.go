@@ -12,12 +12,12 @@ package seeds
 import (
 	"context"
 
-	"ecommerce/db/sqlc"
+	"ecommerce/db/adapter"
 )
 
 // Run applies every seed below, in order. The first failure stops the rest:
 // a later seed may depend on rows an earlier one inserted.
-func Run(ctx context.Context, s *db.Store) error {
+func Run(ctx context.Context, s *adapter.Store) error {
 	for _, seed := range []func() error{
 		func() error { return SeedProduct(ctx, s) },
 		func() error { return SeedPriceRules(ctx, s) },

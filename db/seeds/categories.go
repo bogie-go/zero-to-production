@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"ecommerce/app/models"
-	"ecommerce/db/sqlc"
+	"ecommerce/db/adapter"
 )
 
 // categorized is the demo catalog's categories and which seeded products
@@ -25,7 +25,7 @@ var categorized = []struct {
 // seed can run this any number of times: a category that exists is left alone,
 // and a product that already has a category (one an admin chose) is never
 // moved, so re-running cannot undo anyone's edit.
-func SeedCategories(ctx context.Context, s *db.Store) error {
+func SeedCategories(ctx context.Context, s *adapter.Store) error {
 	for _, c := range categorized {
 		category, err := s.FindOrCreateCategoryByName(ctx, models.Category{Name: c.name})
 		if err != nil {

@@ -17,7 +17,7 @@ sql:
     queries: "queries"
     gen:
       go:
-        package: "db"
+        package: "sqlc"
         out: "sqlc"
         sql_package: "pgx/v5"
         emit_json_tags: false

@@ -84,7 +84,7 @@ least one `:uniq` attr. Released as Bogie v0.2.11, with a new golden test
 
 ## ~~No generated transaction helper~~ — fixed upstream in Bogie v0.2.12
 
-`db/sqlc/store.go` is hand-written infrastructure (one per app, not
+`db/adapter/store.go` is hand-written infrastructure (one per app, not
 per model), and until Task E it only wrapped the pool: `Open`, `Close`,
 `Ping`. sqlc's own generated `Queries.WithTx(tx pgx.Tx) *Queries` has
 existed since `bogie new` — that part is free — but nothing above it ever
@@ -116,7 +116,7 @@ The generated `Delete` maps a foreign-key violation to `models.ErrInvalid`
 since v0.2.13, but `Create` and `Update` on a model with a `:references`
 column do not: a product pointed at a category that does not exist surfaced
 as a raw 500. Found building categories (2026-10-22) and fixed by hand in
-`db/sqlc/products.go` (SQLSTATE 23503 becomes `ErrInvalid`, "category does
+`db/adapter/products.go` (SQLSTATE 23503 becomes `ErrInvalid`, "category does
 not exist"). **Real fix:** the same mapping in `g model`'s `Create`/`Update`
 for any model with a `:references` attribute, named for the column.
 
@@ -124,7 +124,7 @@ for any model with a `:references` attribute, named for the column.
 
 A generator fix to the code `g model` writes (the `:uniq` mapping in v0.2.11,
 the foreign-key `Delete` in v0.2.13) reaches new models only. `app:update`
-merges the layout's template files and leaves `db/sqlc/<table>.go` alone,
+merges the layout's template files and leaves `db/adapter/<table>.go` alone,
 so an app that wants the fix applies it by hand (done here for `products.go`;
 the other models' `Delete` still has the old behavior). Re-running `g model`
 would overwrite hand edits, which is the point of the `_extra` convention but

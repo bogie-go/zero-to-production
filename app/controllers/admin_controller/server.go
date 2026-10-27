@@ -43,7 +43,7 @@ type Server struct {
 
 // NewServer builds the namespace. Its controllers are constructed and
 // assigned in app/application.go, where every dependency is wired. store
-// and tokens are the root Server's own *db.Store and Tokens() — the
+// and tokens are the root Server's own *adapter.Store and Tokens() — the
 // admin namespace shares both rather than minting a parallel login system;
 // a staff account is a user row like any other, just with Role ==
 // models.RoleStaff (see docs/bogie-gaps.md and db/seeds/users.go).

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"ecommerce/app/models"
-	"ecommerce/db/sqlc"
+	"ecommerce/db/adapter"
 )
 
 // products is the catalog SeedProduct inserts. Edit this list rather than
@@ -24,7 +24,7 @@ var products = []models.Product{
 // SeedProduct seeds product. db seed can run this any number of times:
 // FindOrCreateProductByName leaves anything already in the catalog alone, so
 // re-running only inserts what is missing.
-func SeedProduct(ctx context.Context, s *db.Store) error {
+func SeedProduct(ctx context.Context, s *adapter.Store) error {
 	for _, p := range products {
 		if _, err := s.FindOrCreateProductByName(ctx, p); err != nil {
 			return err

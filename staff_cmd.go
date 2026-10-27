@@ -9,7 +9,7 @@ import (
 	"ecommerce/app/models"
 	"ecommerce/app/services/database"
 	"ecommerce/config"
-	"ecommerce/db/sqlc"
+	"ecommerce/db/adapter"
 )
 
 const staffUsage = `Usage: ecommerce staff promote EMAIL
@@ -32,7 +32,7 @@ func runStaff(ctx context.Context, args []string) (err error) {
 		return err
 	}
 	defer func() { err = database.Hint(err, cfg.Database.URL) }()
-	store, err := db.Open(ctx, cfg.Database.URL)
+	store, err := adapter.Open(ctx, cfg.Database.URL)
 	if err != nil {
 		return err
 	}

@@ -6,7 +6,7 @@ import (
 
 	"ecommerce/app/models"
 	"ecommerce/app/pricing"
-	"ecommerce/db/sqlc"
+	"ecommerce/db/adapter"
 )
 
 // priceRule builds a models.PriceRule from one of pricing's own rule
@@ -35,7 +35,7 @@ var priceRules = []models.PriceRule{
 
 // SeedPriceRules seeds price_rules. db seed can run this any number of
 // times: FindOrCreatePriceRuleByName leaves anything already there alone.
-func SeedPriceRules(ctx context.Context, s *db.Store) error {
+func SeedPriceRules(ctx context.Context, s *adapter.Store) error {
 	for _, p := range priceRules {
 		if _, err := s.FindOrCreatePriceRuleByName(ctx, p); err != nil {
 			return err

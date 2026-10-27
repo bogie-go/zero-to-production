@@ -21,7 +21,7 @@ import (
 	"ecommerce/app/services/mailer"
 	"ecommerce/app/services/migrate"
 	"ecommerce/config"
-	"ecommerce/db/sqlc"
+	"ecommerce/db/adapter"
 	"ecommerce/lib/logger"
 )
 
@@ -29,7 +29,7 @@ import (
 type Application struct {
 	Config config.Config
 	Log    *slog.Logger
-	Store  *db.Store
+	Store  *adapter.Store
 	Server *controllers.Server
 
 	// Jobs enqueues background jobs from anywhere and, in the worker
@@ -70,7 +70,7 @@ func NewApplication(ctx context.Context) (*Application, error) {
 		}
 	}
 
-	store, err := db.Open(ctx, cfg.Database.URL)
+	store, err := adapter.Open(ctx, cfg.Database.URL)
 	if err != nil {
 		return nil, database.Hint(err, cfg.Database.URL)
 	}

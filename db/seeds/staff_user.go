@@ -8,7 +8,7 @@ import (
 	"ecommerce/app/models"
 	"ecommerce/app/services/password"
 	"ecommerce/config"
-	"ecommerce/db/sqlc"
+	"ecommerce/db/adapter"
 )
 
 // staffEmail and staffPassword are a development-only login: no admin UI
@@ -24,7 +24,7 @@ const (
 // number of times: FindOrCreateUserByEmail leaves it alone once it
 // exists, so re-running never resets a password or role changed by hand
 // since.
-func SeedStaffUser(ctx context.Context, s *db.Store) error {
+func SeedStaffUser(ctx context.Context, s *adapter.Store) error {
 	// A login whose password is in this repository must never exist on a
 	// deployed system (a deployment runs as production). A real
 	// environment promotes an account that signed up: ecommerce staff promote.
