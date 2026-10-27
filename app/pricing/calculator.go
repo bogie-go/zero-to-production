@@ -3,7 +3,7 @@ package pricing
 import (
 	"fmt"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 )
 
 // Result is a calculation's outcome: the price before and after every rule,
@@ -29,10 +29,10 @@ func (r *Result) SavingsPercentage() float64 {
 
 // Calculate runs rules in order against cents, the same pipeline the Rails
 // version runs: each rule sees the price the last one left behind. Rules are
-// domain.PriceRule rows, not already-decoded Rules, so a caller can load
+// models.PriceRule rows, not already-decoded Rules, so a caller can load
 // them straight from the store (ordered by priority, already filtered to
 // active and in-date) without decoding anything itself.
-func Calculate(cents int64, rules []domain.PriceRule, metadata map[string]any) (*Result, error) {
+func Calculate(cents int64, rules []models.PriceRule, metadata map[string]any) (*Result, error) {
 	return run(NewPriceContext(cents, metadata), rules)
 }
 
@@ -40,7 +40,7 @@ func Calculate(cents int64, rules []domain.PriceRule, metadata map[string]any) (
 // every rule also gets the lines themselves, so a rule that discounts a
 // particular product (buy 2, get 1 free) knows what that product costs.
 // Rules still run in the order given, each on what the last one left.
-func CalculateLines(lines []Line, rules []domain.PriceRule) (*Result, error) {
+func CalculateLines(lines []Line, rules []models.PriceRule) (*Result, error) {
 	var subtotal int64
 	for _, l := range lines {
 		subtotal += l.UnitCents * l.Quantity
@@ -52,7 +52,7 @@ func CalculateLines(lines []Line, rules []domain.PriceRule) (*Result, error) {
 
 // CartLines turns what the store returns for a cart into the lines the rules
 // price, so the cart and the checkout feed the engine the same way.
-func CartLines(cart []domain.CartLine) []Line {
+func CartLines(cart []models.CartLine) []Line {
 	lines := make([]Line, 0, len(cart))
 	for _, l := range cart {
 		lines = append(lines, Line{ProductID: l.ProductID, UnitCents: int64(l.UnitPriceCents), Quantity: int64(l.Quantity)})
@@ -60,7 +60,7 @@ func CartLines(cart []domain.CartLine) []Line {
 	return lines
 }
 
-func run(ctx *PriceContext, rules []domain.PriceRule) (*Result, error) {
+func run(ctx *PriceContext, rules []models.PriceRule) (*Result, error) {
 	for _, row := range rules {
 		rule, err := Load(row.Kind, row.Properties)
 		if err != nil {

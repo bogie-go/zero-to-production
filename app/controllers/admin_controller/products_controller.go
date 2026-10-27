@@ -8,22 +8,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // productsStore is the slice of the store this controller uses, declared
 // next to its caller (rule 2) and holding only the methods the actions
-// call. *models.Store satisfies it.
+// call. *db.Store satisfies it.
 type productsStore interface {
-	GetProduct(ctx context.Context, id string) (domain.Product, error)
-	ListProductsPage(ctx context.Context, includeArchived bool, limit, offset int32) ([]domain.Product, error)
+	GetProduct(ctx context.Context, id string) (models.Product, error)
+	ListProductsPage(ctx context.Context, includeArchived bool, limit, offset int32) ([]models.Product, error)
 	CountProducts(ctx context.Context, includeArchived bool) (int64, error)
-	CreateProduct(ctx context.Context, p domain.Product) (domain.Product, error)
-	UpdateProduct(ctx context.Context, p domain.Product) (domain.Product, error)
+	CreateProduct(ctx context.Context, p models.Product) (models.Product, error)
+	UpdateProduct(ctx context.Context, p models.Product) (models.Product, error)
 	DeleteProduct(ctx context.Context, id string) error
-	ArchiveProduct(ctx context.Context, id string) (domain.Product, error)
-	RestoreProduct(ctx context.Context, id string) (domain.Product, error)
+	ArchiveProduct(ctx context.Context, id string) (models.Product, error)
+	RestoreProduct(ctx context.Context, id string) (models.Product, error)
 }
 
 // The admin list's page size, as the shop's catalog but a little longer.
@@ -99,7 +99,7 @@ func (ctl *ProductsController) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
 	}
-	product, err := ctl.Store.CreateProduct(c.Request.Context(), domain.Product{
+	product, err := ctl.Store.CreateProduct(c.Request.Context(), models.Product{
 		Name: req.Name, Description: req.Description, PriceCents: req.PriceCents, Stock: req.Stock, ImageUrl: req.ImageUrl,
 		CategoryID: req.CategoryID,
 	})
@@ -174,9 +174,9 @@ func (ctl *ProductsController) Restore(c *gin.Context) {
 // 500 without leaking its text.
 func (ctl *ProductsController) fail(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		c.JSON(http.StatusNotFound, views.ErrorMessage("no such product"))
-	case errors.Is(err, domain.ErrInvalid):
+	case errors.Is(err, models.ErrInvalid):
 		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
 	default:
 		ctl.Log.ErrorContext(c.Request.Context(), "admin/products: request failed",
@@ -186,12 +186,12 @@ func (ctl *ProductsController) fail(c *gin.Context, err error) {
 }
 
 // The controller converts between the domain and the wire. views never
-// imports domain, so this is where the conversions live — the same split
+// imports models, so this is where the conversions live — the same split
 // the public ProductsController uses, duplicated rather than shared, since
 // admin_controller and controllers are different packages and this is the
 // only place it's needed twice.
 
-func productView(p domain.Product) views.ProductResponse {
+func productView(p models.Product) views.ProductResponse {
 	return views.ProductResponse{
 		ID:          p.ID,
 		Name:        p.Name,
@@ -206,7 +206,7 @@ func productView(p domain.Product) views.ProductResponse {
 	}
 }
 
-func productsView(products []domain.Product, pagination views.Pagination) views.ProductsResponse {
+func productsView(products []models.Product, pagination views.Pagination) views.ProductsResponse {
 	out := views.ProductsResponse{Products: make([]views.ProductResponse, 0, len(products)), Pagination: pagination}
 	for _, p := range products {
 		out.Products = append(out.Products, productView(p))

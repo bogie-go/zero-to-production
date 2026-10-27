@@ -1,0 +1,15 @@
+package db
+
+import "strconv"
+
+// The models speak strings on the way in, from a URL path, and int64 on
+// the way out, the same as Postgres's bigint. Converting here rather than
+// in app/models is what lets that package import nothing third-party.
+
+// The store of every generated model calls parseID; until the first
+// g model there is none, and this keeps golangci-lint's unused check quiet.
+var _ = parseID
+
+func parseID(s string) (int64, error) {
+	return strconv.ParseInt(s, 10, 64)
+}

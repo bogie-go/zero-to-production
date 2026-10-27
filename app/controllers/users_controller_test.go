@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
@@ -38,7 +38,7 @@ var _ = Describe("POST /users", func() {
 			var me views.MeResponse
 			app.Get("/me").WithAuthorization("Bearer " + login.Token).Do().Status(http.StatusOK).JSON(&me)
 			Expect(me.Email).To(Equal("ada@example.com"))
-			Expect(me.Role).To(Equal(domain.RoleCustomer))
+			Expect(me.Role).To(Equal(models.RoleCustomer))
 		})
 
 		It("refuses a taken email", func() {

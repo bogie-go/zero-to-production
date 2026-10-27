@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
@@ -31,12 +31,12 @@ var _ = Describe("GET /products", func() {
 	})
 
 	Context("with a category", func() {
-		var audio domain.Category
-		var inAudio domain.Product
+		var audio models.Category
+		var inAudio models.Product
 
 		BeforeEach(func() {
 			audio = factories.Category(GinkgoT(), app.Store)
-			inAudio = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.CategoryID = &audio.ID })
+			inAudio = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.CategoryID = &audio.ID })
 			factories.Product(GinkgoT(), app.Store)
 		})
 
@@ -50,7 +50,7 @@ var _ = Describe("GET /products", func() {
 	})
 
 	Context("when a product is archived", func() {
-		var gone domain.Product
+		var gone models.Product
 
 		BeforeEach(func() {
 			gone = factories.Product(GinkgoT(), app.Store)
@@ -103,7 +103,7 @@ var _ = Describe("GET /products", func() {
 
 	Describe("GET /products/:id", func() {
 		Context("with a product", func() {
-			var p domain.Product
+			var p models.Product
 
 			BeforeEach(func() {
 				p = factories.Product(GinkgoT(), app.Store)

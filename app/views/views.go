@@ -2,7 +2,7 @@
 //
 // It earns its place for a reason beyond tidiness: these are published
 // contracts, and a domain struct doubling as a wire struct means renaming a
-// field silently changes an API. Nothing in here imports the domain; the
+// field silently changes an API. Nothing in here imports app/models; the
 // controller converts.
 package views
 

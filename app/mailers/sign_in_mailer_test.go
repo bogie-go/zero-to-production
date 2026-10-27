@@ -7,17 +7,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/mailers"
+	"ecommerce/app/models"
 	"ecommerce/app/services/mailer"
 )
 
-var signIn = domain.SignIn{UserID: 3, At: time.Date(2026, 10, 22, 14, 30, 0, 0, time.UTC), IP: "203.0.113.9", UserAgent: "Mozilla/5.0 (Mac)"}
+var signIn = models.SignIn{UserID: 3, At: time.Date(2026, 10, 22, 14, 30, 0, 0, time.UTC), IP: "203.0.113.9", UserAgent: "Mozilla/5.0 (Mac)"}
 
 var _ = Describe("SignInAlert", func() {
 	var (
 		m       mailer.Message
-		request domain.SignIn
+		request models.SignIn
 	)
 
 	BeforeEach(func() {
@@ -25,7 +25,7 @@ var _ = Describe("SignInAlert", func() {
 	})
 
 	JustBeforeEach(func() {
-		m = mailers.SignInAlert(domain.User{Email: "ann@example.com"}, request)
+		m = mailers.SignInAlert(models.User{Email: "ann@example.com"}, request)
 	})
 
 	Context("with a full sign-in", func() {

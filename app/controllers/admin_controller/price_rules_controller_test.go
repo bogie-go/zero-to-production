@@ -8,13 +8,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
 
 var _ = Describe("/admin/price_rules", func() {
-	var staff domain.User
+	var staff models.User
 
 	Context("with a staff account", func() {
 		BeforeEach(func() {
@@ -37,10 +37,10 @@ var _ = Describe("/admin/price_rules", func() {
 			Context("with a live, an off, a scheduled and an ended rule", func() {
 				BeforeEach(func() {
 					later, earlier := time.Now().Add(24*time.Hour), time.Now().Add(-24*time.Hour)
-					factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) { r.Name = "live" })
-					factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) { r.Name = "off"; r.Active = false })
-					factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) { r.Name = "soon"; r.StartsAt = &later })
-					factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) { r.Name = "over"; r.EndsAt = &earlier })
+					factories.PriceRule(GinkgoT(), app.Store, func(r *models.PriceRule) { r.Name = "live" })
+					factories.PriceRule(GinkgoT(), app.Store, func(r *models.PriceRule) { r.Name = "off"; r.Active = false })
+					factories.PriceRule(GinkgoT(), app.Store, func(r *models.PriceRule) { r.Name = "soon"; r.StartsAt = &later })
+					factories.PriceRule(GinkgoT(), app.Store, func(r *models.PriceRule) { r.Name = "over"; r.EndsAt = &earlier })
 				})
 
 				It("says where each rule stands: active, off, scheduled or ended", func() {
@@ -58,7 +58,7 @@ var _ = Describe("/admin/price_rules", func() {
 		})
 
 		Context("with a rule", func() {
-			var rule domain.PriceRule
+			var rule models.PriceRule
 			var path string
 
 			BeforeEach(func() {
@@ -92,7 +92,7 @@ var _ = Describe("/admin/price_rules", func() {
 		})
 
 		Context("with a customer", func() {
-			var customer domain.User
+			var customer models.User
 
 			BeforeEach(func() {
 				customer = factories.User(GinkgoT(), app.Store)

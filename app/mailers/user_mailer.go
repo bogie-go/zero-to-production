@@ -5,13 +5,13 @@ import (
 	"html"
 	"strings"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/services/mailer"
 )
 
 // Welcome is the email a person gets right after signing up. shopURL is where
 // the shop lives (config site.url), so the link works in every environment.
-func Welcome(user domain.User, shopURL string) mailer.Message {
+func Welcome(user models.User, shopURL string) mailer.Message {
 	shop := strings.TrimRight(shopURL, "/")
 	return mailer.Message{
 		To:      user.Email,

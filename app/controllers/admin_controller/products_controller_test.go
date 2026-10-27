@@ -7,13 +7,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
 
 var _ = Describe("/admin/products", func() {
-	var staff domain.User
+	var staff models.User
 
 	Context("with a staff account", func() {
 		BeforeEach(func() {
@@ -26,7 +26,7 @@ var _ = Describe("/admin/products", func() {
 			})
 
 			Context("with a category", func() {
-				var category domain.Category
+				var category models.Category
 				var request views.ProductRequest
 
 				BeforeEach(func() {
@@ -80,7 +80,7 @@ var _ = Describe("/admin/products", func() {
 		})
 
 		Describe("one at a time", func() {
-			var product domain.Product
+			var product models.Product
 			var path string
 
 			Context("with a product", func() {
@@ -140,7 +140,7 @@ var _ = Describe("/admin/products", func() {
 				})
 
 				Context("with a customer", func() {
-					var customer domain.User
+					var customer models.User
 
 					BeforeEach(func() {
 						customer = factories.User(GinkgoT(), app.Store)

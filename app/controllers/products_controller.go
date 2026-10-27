@@ -9,18 +9,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // productsStore is the slice of the store this controller uses, declared next
 // to its caller and holding only the methods the actions call. The shop
 // only ever sees active products: an archived one is not found.
-// *models.Store satisfies it, and app/application.go passes it in; the
+// *db.Store satisfies it, and app/application.go passes it in; the
 // test's fake is a few lines.
 type productsStore interface {
-	GetActiveProduct(ctx context.Context, id string) (domain.Product, error)
-	ListActiveProducts(ctx context.Context, categoryID *int64, limit, offset int32) ([]domain.Product, error)
+	GetActiveProduct(ctx context.Context, id string) (models.Product, error)
+	ListActiveProducts(ctx context.Context, categoryID *int64, limit, offset int32) ([]models.Product, error)
 	CountActiveProducts(ctx context.Context, categoryID *int64) (int64, error)
 }
 
@@ -106,7 +106,7 @@ func (ctl *ProductsController) Show(c *gin.Context) {
 // leaking its text.
 func (ctl *ProductsController) fail(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		c.JSON(http.StatusNotFound, views.ErrorMessage("no such product"))
 	default:
 		ctl.Log.ErrorContext(c.Request.Context(), "products: request failed",
@@ -116,9 +116,9 @@ func (ctl *ProductsController) fail(c *gin.Context, err error) {
 }
 
 // The controller converts between the domain and the wire. views never
-// imports domain, so this is where ProductResponse is built.
+// imports models, so this is where ProductResponse is built.
 
-func productView(p domain.Product) views.ProductResponse {
+func productView(p models.Product) views.ProductResponse {
 	return views.ProductResponse{
 		ID:           p.ID,
 		Name:         p.Name,
@@ -134,7 +134,7 @@ func productView(p domain.Product) views.ProductResponse {
 	}
 }
 
-func productsView(products []domain.Product, pagination views.Pagination) views.ProductsResponse {
+func productsView(products []models.Product, pagination views.Pagination) views.ProductsResponse {
 	out := views.ProductsResponse{Products: make([]views.ProductResponse, 0, len(products)), Pagination: pagination}
 	for _, p := range products {
 		out.Products = append(out.Products, productView(p))

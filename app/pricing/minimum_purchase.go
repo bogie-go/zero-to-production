@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 )
 
 // MinimumPurchaseRule gives a fixed discount, but only once the price so
@@ -18,7 +18,7 @@ func init() {
 	Register("minimum_purchase", func(properties json.RawMessage) (Rule, error) {
 		var r MinimumPurchaseRule
 		if err := json.Unmarshal(properties, &r); err != nil {
-			return nil, fmt.Errorf("%w: %s", domain.ErrInvalid, err)
+			return nil, fmt.Errorf("%w: %s", models.ErrInvalid, err)
 		}
 		return r, r.validate()
 	})
@@ -26,7 +26,7 @@ func init() {
 
 func (r MinimumPurchaseRule) validate() error {
 	if r.MinimumCents < 0 || r.DiscountCents < 0 {
-		return fmt.Errorf("%w: minimum_cents and discount_cents must not be negative", domain.ErrInvalid)
+		return fmt.Errorf("%w: minimum_cents and discount_cents must not be negative", models.ErrInvalid)
 	}
 	return nil
 }

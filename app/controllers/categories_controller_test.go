@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
@@ -18,12 +18,12 @@ var _ = Describe("GET /categories", func() {
 	})
 
 	Context("with a category holding a live and an archived product, and an empty one", func() {
-		var audio, empty domain.Category
+		var audio, empty models.Category
 
 		BeforeEach(func() {
 			audio, empty = factories.Category(GinkgoT(), app.Store), factories.Category(GinkgoT(), app.Store)
-			factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.CategoryID = &audio.ID })
-			gone := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.CategoryID = &audio.ID })
+			factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.CategoryID = &audio.ID })
+			gone := factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.CategoryID = &audio.ID })
 			_, err := app.Store.ArchiveProduct(GinkgoT().Context(), strconv.FormatInt(gone.ID, 10))
 			Expect(err).NotTo(HaveOccurred())
 		})

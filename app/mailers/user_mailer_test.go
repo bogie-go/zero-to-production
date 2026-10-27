@@ -4,14 +4,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/mailers"
+	"ecommerce/app/models"
 	"ecommerce/app/services/mailer"
 )
 
 var _ = Describe("Welcome", func() {
 	var (
-		user    domain.User
+		user    models.User
 		shopURL string
 		m       mailer.Message
 	)
@@ -23,7 +23,7 @@ var _ = Describe("Welcome", func() {
 	// A trailing slash on the configured address does not double up.
 	Context("with a shop URL ending in a slash", func() {
 		BeforeEach(func() {
-			user = domain.User{Email: "ann@example.com"}
+			user = models.User{Email: "ann@example.com"}
 			shopURL = "https://shop.example.com/"
 		})
 
@@ -37,7 +37,7 @@ var _ = Describe("Welcome", func() {
 
 	Context("with an email containing HTML", func() {
 		BeforeEach(func() {
-			user = domain.User{Email: `a"<b>@example.com`}
+			user = models.User{Email: `a"<b>@example.com`}
 			shopURL = "http://x"
 		})
 

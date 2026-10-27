@@ -8,20 +8,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // cartItemsStore is the slice of the store this controller uses, declared
 // next to its caller (rule 2) and holding only the methods the actions call.
 type cartItemsStore interface {
-	FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error)
-	AddCartItem(ctx context.Context, cartID, productID int64, quantity int32) (domain.CartItem, error)
-	UpdateCartItemQuantity(ctx context.Context, cartID int64, id string, quantity int32) (domain.CartItem, error)
+	FindOrCreateCartByToken(ctx context.Context, token string) (models.Cart, error)
+	AddCartItem(ctx context.Context, cartID, productID int64, quantity int32) (models.CartItem, error)
+	UpdateCartItemQuantity(ctx context.Context, cartID int64, id string, quantity int32) (models.CartItem, error)
 	DeleteCartItemForCart(ctx context.Context, cartID int64, id string) error
-	CartContents(ctx context.Context, cartID int64) ([]domain.CartLine, error)
-	ListActivePriceRules(ctx context.Context) ([]domain.PriceRule, error)
+	CartContents(ctx context.Context, cartID int64) ([]models.CartLine, error)
+	ListActivePriceRules(ctx context.Context) ([]models.PriceRule, error)
 }
 
 // CartItemsController is the HTTP surface of a cart's line items: adding,
@@ -136,9 +136,9 @@ func (ctl *CartItemsController) respondWithCart(c *gin.Context, status int, cart
 // is logged and answered 500 without leaking its text.
 func (ctl *CartItemsController) fail(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		c.JSON(http.StatusNotFound, views.ErrorMessage("no such cart item"))
-	case errors.Is(err, domain.ErrInvalid):
+	case errors.Is(err, models.ErrInvalid):
 		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
 	default:
 		ctl.Log.ErrorContext(c.Request.Context(), "cart_items: request failed",

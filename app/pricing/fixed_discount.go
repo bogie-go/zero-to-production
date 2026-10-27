@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 )
 
 // FixedDiscountRule subtracts a fixed amount from the price — "$50 off".
@@ -16,7 +16,7 @@ func init() {
 	Register("fixed_discount", func(properties json.RawMessage) (Rule, error) {
 		var r FixedDiscountRule
 		if err := json.Unmarshal(properties, &r); err != nil {
-			return nil, fmt.Errorf("%w: %s", domain.ErrInvalid, err)
+			return nil, fmt.Errorf("%w: %s", models.ErrInvalid, err)
 		}
 		return r, r.validate()
 	})
@@ -24,7 +24,7 @@ func init() {
 
 func (r FixedDiscountRule) validate() error {
 	if r.AmountCents < 0 {
-		return fmt.Errorf("%w: amount_cents must not be negative", domain.ErrInvalid)
+		return fmt.Errorf("%w: amount_cents must not be negative", models.ErrInvalid)
 	}
 	return nil
 }

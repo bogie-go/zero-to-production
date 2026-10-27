@@ -1,7 +1,7 @@
 // Package password hashes and checks passwords with bcrypt — kept out of
-// app/domain, which imports nothing third-party (AGENTS.md rule 3), the
+// app/models, which imports nothing third-party (AGENTS.md rule 3), the
 // same way Bogie's own api_key shape keeps bcrypt in its own service
-// package rather than on domain.ApiKey. A domain.User only ever holds the
+// package rather than on models.ApiKey. A models.User only ever holds the
 // digest this package produces; it never sees a plain password.
 package password
 
@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 )
 
 // minLength is Rails' has_secure_password default; good enough here too.
@@ -20,7 +20,7 @@ const minLength = 8
 // Hash bcrypt-hashes plain, for storing as a User's PasswordDigest.
 func Hash(plain string) (string, error) {
 	if len(plain) < minLength {
-		return "", fmt.Errorf("%w: password must be at least %d characters", domain.ErrInvalid, minLength)
+		return "", fmt.Errorf("%w: password must be at least %d characters", models.ErrInvalid, minLength)
 	}
 	digest, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
 	if err != nil {

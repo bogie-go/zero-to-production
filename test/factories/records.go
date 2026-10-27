@@ -3,18 +3,18 @@ package factories
 import (
 	"context"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/models"
+	"ecommerce/db/sqlc"
 )
 
 // User is a customer with a unique email. The password digest is a stand-in,
 // not a real hash: use password.Hash in the test when logging in matters.
-func User(t T, s *models.Store, with ...func(*domain.User)) domain.User {
+func User(t T, s *db.Store, with ...func(*models.User)) models.User {
 	t.Helper()
-	u := domain.User{
+	u := models.User{
 		Email:          Sequence("user") + "@example.com",
 		PasswordDigest: "digest",
-		Role:           domain.RoleCustomer,
+		Role:           models.RoleCustomer,
 	}
 	for _, f := range with {
 		f(&u)
@@ -27,15 +27,15 @@ func User(t T, s *models.Store, with ...func(*domain.User)) domain.User {
 }
 
 // Staff is a User with the staff role.
-func Staff(t T, s *models.Store, with ...func(*domain.User)) domain.User {
+func Staff(t T, s *db.Store, with ...func(*models.User)) models.User {
 	t.Helper()
-	return User(t, s, append([]func(*domain.User){func(u *domain.User) { u.Role = domain.RoleStaff }}, with...)...)
+	return User(t, s, append([]func(*models.User){func(u *models.User) { u.Role = models.RoleStaff }}, with...)...)
 }
 
 // Category has a unique name.
-func Category(t T, s *models.Store, with ...func(*domain.Category)) domain.Category {
+func Category(t T, s *db.Store, with ...func(*models.Category)) models.Category {
 	t.Helper()
-	c := domain.Category{Name: Sequence("Category ")}
+	c := models.Category{Name: Sequence("Category ")}
 	for _, f := range with {
 		f(&c)
 	}
@@ -47,9 +47,9 @@ func Category(t T, s *models.Store, with ...func(*domain.Category)) domain.Categ
 }
 
 // Product is in stock, uncategorized, and costs $10.00.
-func Product(t T, s *models.Store, with ...func(*domain.Product)) domain.Product {
+func Product(t T, s *db.Store, with ...func(*models.Product)) models.Product {
 	t.Helper()
-	p := domain.Product{
+	p := models.Product{
 		Name:        Sequence("Product "),
 		Description: "a product",
 		PriceCents:  1000,
@@ -67,9 +67,9 @@ func Product(t T, s *models.Store, with ...func(*domain.Product)) domain.Product
 }
 
 // Cart is an empty cart with a unique token.
-func Cart(t T, s *models.Store, with ...func(*domain.Cart)) domain.Cart {
+func Cart(t T, s *db.Store, with ...func(*models.Cart)) models.Cart {
 	t.Helper()
-	c := domain.Cart{Token: Sequence("cart-")}
+	c := models.Cart{Token: Sequence("cart-")}
 	for _, f := range with {
 		f(&c)
 	}
@@ -81,9 +81,9 @@ func Cart(t T, s *models.Store, with ...func(*domain.Cart)) domain.Cart {
 }
 
 // PriceRule is an active $1.00 fixed discount.
-func PriceRule(t T, s *models.Store, with ...func(*domain.PriceRule)) domain.PriceRule {
+func PriceRule(t T, s *db.Store, with ...func(*models.PriceRule)) models.PriceRule {
 	t.Helper()
-	r := domain.PriceRule{
+	r := models.PriceRule{
 		Name:       Sequence("Rule "),
 		Kind:       "fixed_discount",
 		Properties: []byte(`{"amount_cents":100}`),

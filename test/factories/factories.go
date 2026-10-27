@@ -4,7 +4,7 @@
 // any error, so a test reads as its arrangement and nothing else.
 //
 //	cheap := factories.Product(t, store)
-//	sold := factories.Product(t, store, func(p *domain.Product) { p.Stock = 0 })
+//	sold := factories.Product(t, store, func(p *models.Product) { p.Stock = 0 })
 //
 // Unique columns (emails, names, tokens) come from Sequence, so two records
 // made in one test never collide.

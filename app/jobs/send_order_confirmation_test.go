@@ -11,27 +11,27 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/jobs"
+	"ecommerce/app/models"
 	"ecommerce/app/services/mailer"
 )
 
 type fakeConfirmationStore struct {
-	user     domain.User
+	user     models.User
 	userErr  error
-	order    domain.Order
-	lines    []domain.OrderLine
+	order    models.Order
+	lines    []models.OrderLine
 	orderErr error
 
 	gotUserID  int64
 	gotOrderID string
 }
 
-func (f *fakeConfirmationStore) GetUser(_ context.Context, id string) (domain.User, error) {
+func (f *fakeConfirmationStore) GetUser(_ context.Context, id string) (models.User, error) {
 	return f.user, f.userErr
 }
 
-func (f *fakeConfirmationStore) GetOrderForUser(_ context.Context, userID int64, id string) (domain.Order, []domain.OrderLine, error) {
+func (f *fakeConfirmationStore) GetOrderForUser(_ context.Context, userID int64, id string) (models.Order, []models.OrderLine, error) {
 	f.gotUserID, f.gotOrderID = userID, id
 	return f.order, f.lines, f.orderErr
 }
@@ -60,9 +60,9 @@ func work(store *fakeConfirmationStore, mail *fakeSender) error {
 
 func goodStore() *fakeConfirmationStore {
 	return &fakeConfirmationStore{
-		user:  domain.User{ID: 3, Email: "ann@example.com"},
-		order: domain.Order{ID: 7, SubtotalCents: 500, TotalCents: 500},
-		lines: []domain.OrderLine{{ProductName: "Widget", UnitPriceCents: 500, Quantity: 1}},
+		user:  models.User{ID: 3, Email: "ann@example.com"},
+		order: models.Order{ID: 7, SubtotalCents: 500, TotalCents: 500},
+		lines: []models.OrderLine{{ProductName: "Widget", UnitPriceCents: 500, Quantity: 1}},
 	}
 }
 
@@ -113,7 +113,7 @@ var _ = Describe("SendOrderConfirmationWorker", func() {
 	// An order that is gone can never be emailed: cancel, do not retry 25 times.
 	Context("when the order is gone", func() {
 		BeforeEach(func() {
-			store.orderErr = domain.ErrNotFound
+			store.orderErr = models.ErrNotFound
 			err = work(store, mail)
 		})
 
@@ -125,7 +125,7 @@ var _ = Describe("SendOrderConfirmationWorker", func() {
 
 	Context("when the user is gone", func() {
 		BeforeEach(func() {
-			store.userErr = domain.ErrNotFound
+			store.userErr = models.ErrNotFound
 			err = work(store, mail)
 		})
 

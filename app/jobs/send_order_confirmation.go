@@ -9,8 +9,8 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/mailers"
+	"ecommerce/app/models"
 	"ecommerce/app/services/mailer"
 )
 
@@ -28,10 +28,10 @@ type SendOrderConfirmationArgs struct {
 func (SendOrderConfirmationArgs) Kind() string { return "send_order_confirmation" }
 
 // confirmationStore is the slice of the store this worker uses, declared here
-// beside its user (rule 2). *models.Store satisfies it.
+// beside its user (rule 2). *db.Store satisfies it.
 type confirmationStore interface {
-	GetUser(ctx context.Context, id string) (domain.User, error)
-	GetOrderForUser(ctx context.Context, userID int64, id string) (domain.Order, []domain.OrderLine, error)
+	GetUser(ctx context.Context, id string) (models.User, error)
+	GetOrderForUser(ctx context.Context, userID int64, id string) (models.Order, []models.OrderLine, error)
 }
 
 // sender is the slice of the mailer service this worker uses.
@@ -62,14 +62,14 @@ type SendOrderConfirmationWorker struct {
 func (w *SendOrderConfirmationWorker) Work(ctx context.Context, job *river.Job[SendOrderConfirmationArgs]) error {
 	args := job.Args
 	user, err := w.Store.GetUser(ctx, strconv.FormatInt(args.UserID, 10))
-	if errors.Is(err, domain.ErrNotFound) {
+	if errors.Is(err, models.ErrNotFound) {
 		return river.JobCancel(fmt.Errorf("user %d no longer exists", args.UserID))
 	}
 	if err != nil {
 		return err
 	}
 	order, lines, err := w.Store.GetOrderForUser(ctx, user.ID, strconv.FormatInt(args.OrderID, 10))
-	if errors.Is(err, domain.ErrNotFound) {
+	if errors.Is(err, models.ErrNotFound) {
 		return river.JobCancel(fmt.Errorf("order %d no longer exists", args.OrderID))
 	}
 	if err != nil {

@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 	"ecommerce/test/testapp"
@@ -98,13 +98,13 @@ var _ = Describe("POST /sessions", func() {
 		})
 
 		Context("with a guest cart where one line's product was archived", func() {
-			var keep domain.Product
+			var keep models.Product
 
 			BeforeEach(func() {
-				var gone domain.Product
+				var gone models.Product
 				keep, gone = factories.Product(GinkgoT(), app.Store), factories.Product(GinkgoT(), app.Store)
 				app.Post("/guest_sessions", nil).Do().Status(http.StatusCreated).JSON(&guest)
-				for _, p := range []domain.Product{gone, keep} {
+				for _, p := range []models.Product{gone, keep} {
 					app.Post("/cart_items", views.AddCartItemRequest{ProductID: p.ID, Quantity: 1}).
 						WithAuthorization("Bearer " + guest.Token).Do().Status(http.StatusCreated)
 				}

@@ -7,14 +7,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // opsStore is the slice of the store this controller uses, declared next to
-// its caller (rule 2). *models.Store satisfies it.
+// its caller (rule 2). *db.Store satisfies it.
 type opsStore interface {
-	Ops(ctx context.Context) (domain.Ops, error)
+	Ops(ctx context.Context) (models.Ops, error)
 }
 
 // OpsController shows an operator whether the system is healthy. Only

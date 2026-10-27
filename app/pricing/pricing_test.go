@@ -6,19 +6,19 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/pricing"
 )
 
-func rule(id int64, name, kind string, properties any) domain.PriceRule {
+func rule(id int64, name, kind string, properties any) models.PriceRule {
 	b, err := json.Marshal(properties)
 	Expect(err).NotTo(HaveOccurred())
-	return domain.PriceRule{ID: id, Name: name, Kind: kind, Properties: b, Active: true}
+	return models.PriceRule{ID: id, Name: name, Kind: kind, Properties: b, Active: true}
 }
 
 var _ = Describe("Calculate", func() {
 	DescribeTable("final price and applied rules",
-		func(startCents int64, rules []domain.PriceRule, metadata map[string]any, wantFinal int64, wantRules int) {
+		func(startCents int64, rules []models.PriceRule, metadata map[string]any, wantFinal int64, wantRules int) {
 			result, err := pricing.Calculate(startCents, rules, metadata)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.FinalCents).To(Equal(wantFinal))
@@ -27,41 +27,41 @@ var _ = Describe("Calculate", func() {
 		Entry("no rules leaves the price alone",
 			int64(1000), nil, nil, int64(1000), 0),
 		Entry("percentage discount",
-			int64(1000), []domain.PriceRule{rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 20})}, nil, int64(800), 1),
+			int64(1000), []models.PriceRule{rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 20})}, nil, int64(800), 1),
 		Entry("fixed discount",
-			int64(1000), []domain.PriceRule{rule(1, "Early Bird", "fixed_discount", pricing.FixedDiscountRule{AmountCents: 50})}, nil, int64(950), 1),
+			int64(1000), []models.PriceRule{rule(1, "Early Bird", "fixed_discount", pricing.FixedDiscountRule{AmountCents: 50})}, nil, int64(950), 1),
 		Entry("fixed discount never goes below zero",
-			int64(30), []domain.PriceRule{rule(1, "Early Bird", "fixed_discount", pricing.FixedDiscountRule{AmountCents: 50})}, nil, int64(0), 1),
+			int64(30), []models.PriceRule{rule(1, "Early Bird", "fixed_discount", pricing.FixedDiscountRule{AmountCents: 50})}, nil, int64(0), 1),
 		Entry("minimum purchase below threshold does not apply",
-			int64(1000), []domain.PriceRule{rule(1, "Big Spender", "minimum_purchase", pricing.MinimumPurchaseRule{MinimumCents: 50000, DiscountCents: 7500})}, nil, int64(1000), 0),
+			int64(1000), []models.PriceRule{rule(1, "Big Spender", "minimum_purchase", pricing.MinimumPurchaseRule{MinimumCents: 50000, DiscountCents: 7500})}, nil, int64(1000), 0),
 		Entry("minimum purchase at threshold applies",
-			int64(50000), []domain.PriceRule{rule(1, "Big Spender", "minimum_purchase", pricing.MinimumPurchaseRule{MinimumCents: 50000, DiscountCents: 7500})}, nil, int64(42500), 1),
+			int64(50000), []models.PriceRule{rule(1, "Big Spender", "minimum_purchase", pricing.MinimumPurchaseRule{MinimumCents: 50000, DiscountCents: 7500})}, nil, int64(42500), 1),
 		Entry("buy x get y with no cart lines has nothing to discount",
-			int64(1000), []domain.PriceRule{rule(1, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1})}, nil, int64(1000), 0),
+			int64(1000), []models.PriceRule{rule(1, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1})}, nil, int64(1000), 0),
 		// 1000 -> 800 (20% off) -> 725 (meets the $5 minimum, -$0.75)
 		Entry("stacking two rules in order",
-			int64(1000), []domain.PriceRule{
+			int64(1000), []models.PriceRule{
 				rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 20}),
 				rule(2, "Big Spender", "minimum_purchase", pricing.MinimumPurchaseRule{MinimumCents: 500, DiscountCents: 75}),
 			}, nil, int64(725), 2),
 		// 1000 -> 950 -> 760
 		Entry("order changes the result: fixed then percentage",
-			int64(1000), []domain.PriceRule{
+			int64(1000), []models.PriceRule{
 				rule(1, "Early Bird", "fixed_discount", pricing.FixedDiscountRule{AmountCents: 50}),
 				rule(2, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 20}),
 			}, nil, int64(760), 2),
 	)
 
 	Context("with a rule of an unknown kind", func() {
-		var rules []domain.PriceRule
+		var rules []models.PriceRule
 
 		BeforeEach(func() {
-			rules = []domain.PriceRule{rule(1, "Mystery", "no_such_kind", map[string]any{})}
+			rules = []models.PriceRule{rule(1, "Mystery", "no_such_kind", map[string]any{})}
 		})
 
 		It("treats it as invalid", func() {
 			_, err := pricing.Calculate(1000, rules, nil)
-			Expect(err).To(MatchError(domain.ErrInvalid))
+			Expect(err).To(MatchError(models.ErrInvalid))
 		})
 	})
 })
@@ -70,8 +70,8 @@ var _ = Describe("Calculate", func() {
 // product, so the rule needs each line's unit price, which a single subtotal
 // does not carry.
 var _ = Describe("CalculateLines", func() {
-	bogo := func(buy, free int32) []domain.PriceRule {
-		return []domain.PriceRule{rule(1, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: buy, FreeQuantity: free})}
+	bogo := func(buy, free int32) []models.PriceRule {
+		return []models.PriceRule{rule(1, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: buy, FreeQuantity: free})}
 	}
 	line := func(product, unit, quantity int64) pricing.Line {
 		return pricing.Line{ProductID: product, UnitCents: unit, Quantity: quantity}
@@ -123,7 +123,7 @@ var _ = Describe("CalculateLines", func() {
 
 	Context("after another rule has already lowered the total", func() {
 		It("takes the free units off the running total, in priority order", func() {
-			rules := []domain.PriceRule{
+			rules := []models.PriceRule{
 				rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 20}),
 				rule(2, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1}),
 			}
@@ -135,7 +135,7 @@ var _ = Describe("CalculateLines", func() {
 		})
 
 		It("never takes more than what is left", func() {
-			rules := []domain.PriceRule{
+			rules := []models.PriceRule{
 				rule(1, "Early Bird", "fixed_discount", pricing.FixedDiscountRule{AmountCents: 5000}),
 				rule(2, "BOGO", "buy_x_get_y", pricing.BuyXGetYRule{RequiredQuantity: 2, FreeQuantity: 1}),
 			}
@@ -156,7 +156,7 @@ var _ = Describe("Result", func() {
 
 	Context("after a 25% discount on 1000 cents", func() {
 		BeforeEach(func() {
-			result, err = pricing.Calculate(1000, []domain.PriceRule{rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 25})}, nil)
+			result, err = pricing.Calculate(1000, []models.PriceRule{rule(1, "Flash Sale", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 25})}, nil)
 		})
 
 		It("reports the savings", func() {
@@ -173,7 +173,7 @@ var _ = Describe("Load", func() {
 			b, err := json.Marshal(properties)
 			Expect(err).NotTo(HaveOccurred())
 			_, err = pricing.Load(kind, b)
-			Expect(err).To(MatchError(domain.ErrInvalid))
+			Expect(err).To(MatchError(models.ErrInvalid))
 		},
 		Entry("negative fixed amount", "fixed_discount", pricing.FixedDiscountRule{AmountCents: -1}),
 		Entry("zero percentage", "percentage_discount", pricing.PercentageDiscountRule{Percentage: 0}),

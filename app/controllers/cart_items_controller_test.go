@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 	"ecommerce/test/testapp"
@@ -21,7 +21,7 @@ var _ = Describe("Cart items", func() {
 
 		Context("in a guest's cart", func() {
 			BeforeEach(func() {
-				product := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 300; p.Stock = 5 })
+				product := factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.PriceCents = 300; p.Stock = 5 })
 				app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 1}).AsGuest("owner").Do().Status(http.StatusCreated).JSON(&cart)
 				line = "/cart_items/" + strconv.FormatInt(cart.Items[0].ID, 10)
 			})
@@ -65,11 +65,11 @@ var _ = Describe("Cart items", func() {
 	})
 
 	Describe("POST /cart_items", func() {
-		var product, archived domain.Product
+		var product, archived models.Product
 
 		Context("with a product with two in stock and an archived product", func() {
 			BeforeEach(func() {
-				product = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.Stock = 2 })
+				product = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.Stock = 2 })
 				archived = factories.Product(GinkgoT(), app.Store)
 				_, err := app.Store.ArchiveProduct(GinkgoT().Context(), strconv.FormatInt(archived.ID, 10))
 				Expect(err).NotTo(HaveOccurred())

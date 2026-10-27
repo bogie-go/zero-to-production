@@ -7,13 +7,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
 
 var _ = Describe("/admin/categories", func() {
-	var staff domain.User
+	var staff models.User
 
 	Context("with a staff account", func() {
 		BeforeEach(func() {
@@ -55,12 +55,12 @@ var _ = Describe("/admin/categories", func() {
 		})
 
 		Context("with a category holding a product", func() {
-			var category domain.Category
-			var product domain.Product
+			var category models.Category
+			var product models.Product
 
 			BeforeEach(func() {
 				category = factories.Category(GinkgoT(), app.Store)
-				product = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.CategoryID = &category.ID })
+				product = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.CategoryID = &category.ID })
 			})
 
 			It("lists categories with their product counts", func() {
@@ -81,7 +81,7 @@ var _ = Describe("/admin/categories", func() {
 		})
 
 		Context("when a customer or nobody tries to create one", func() {
-			var customer domain.User
+			var customer models.User
 
 			BeforeEach(func() {
 				customer = factories.User(GinkgoT(), app.Store)

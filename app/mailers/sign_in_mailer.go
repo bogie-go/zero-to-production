@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"html"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/services/mailer"
 )
 
@@ -15,7 +15,7 @@ const maxUserAgent = 200
 // request came from) and with what (the browser's own description), so the
 // owner can tell their own login from someone else's. Both come from the
 // request and are untrusted, so the HTML part escapes them.
-func SignInAlert(user domain.User, s domain.SignIn) mailer.Message {
+func SignInAlert(user models.User, s models.SignIn) mailer.Message {
 	when := s.At.UTC().Format("Mon, 2 Jan 2006 15:04 MST")
 	ip := orUnknown(s.IP)
 	agent := orUnknown(truncate(s.UserAgent, maxUserAgent))

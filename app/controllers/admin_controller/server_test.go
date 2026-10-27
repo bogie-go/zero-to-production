@@ -5,12 +5,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/test/factories"
 )
 
 var _ = Describe("/admin", func() {
-	var customer, staff domain.User
+	var customer, staff models.User
 
 	Context("with a customer and a staff account", func() {
 		BeforeEach(func() {

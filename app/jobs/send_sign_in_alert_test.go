@@ -12,8 +12,8 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/jobs"
+	"ecommerce/app/models"
 )
 
 func alert(store fakeWelcomeStore, mail *fakeSender) error {
@@ -46,7 +46,7 @@ var _ = Describe("SendSignInAlertWorker", func() {
 
 	Context("when the user exists", func() {
 		BeforeEach(func() {
-			err = alert(fakeWelcomeStore{user: domain.User{ID: 3, Email: "ann@example.com"}}, mail)
+			err = alert(fakeWelcomeStore{user: models.User{ID: 3, Email: "ann@example.com"}}, mail)
 		})
 
 		It("sends who, when and from where", func() {
@@ -65,7 +65,7 @@ var _ = Describe("SendSignInAlertWorker", func() {
 		BeforeEach(func() {
 			boom = errors.New("connection refused")
 			mail.err = boom
-			err = alert(fakeWelcomeStore{user: domain.User{ID: 3, Email: "a@example.com"}}, mail)
+			err = alert(fakeWelcomeStore{user: models.User{ID: 3, Email: "a@example.com"}}, mail)
 		})
 
 		It("returns the error so the job is retried", func() {
@@ -76,7 +76,7 @@ var _ = Describe("SendSignInAlertWorker", func() {
 
 	Context("when the user is gone", func() {
 		BeforeEach(func() {
-			err = alert(fakeWelcomeStore{err: domain.ErrNotFound}, mail)
+			err = alert(fakeWelcomeStore{err: models.ErrNotFound}, mail)
 		})
 
 		It("cancels without sending", func() {
@@ -98,7 +98,7 @@ var _ = Describe("SignInAlerts", func() {
 		BeforeEach(func() {
 			q = &fakeQueue{}
 			at = time.Date(2026, 10, 22, 14, 30, 0, 0, time.UTC)
-			err = (jobs.SignInAlerts{Queue: q}).SignedIn(context.Background(), domain.SignIn{UserID: 3, At: at, IP: "1.2.3.4", UserAgent: "UA"})
+			err = (jobs.SignInAlerts{Queue: q}).SignedIn(context.Background(), models.SignIn{UserID: 3, At: at, IP: "1.2.3.4", UserAgent: "UA"})
 		})
 
 		It("enqueues one job with the request's facts", func() {

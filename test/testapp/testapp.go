@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"ecommerce/app"
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/test/testdb"
 )
 
@@ -97,7 +97,7 @@ func (r *Request) Body(body any) *Request {
 }
 
 // AsUser signs the request in as that account.
-func (r *Request) AsUser(u domain.User) *Request { return r.as(strconv.FormatInt(u.ID, 10)) }
+func (r *Request) AsUser(u models.User) *Request { return r.as(strconv.FormatInt(u.ID, 10)) }
 
 // AsGuest signs the request in as a guest with that id, which is its cart's
 // token. Any id will do; the server never looks a guest up.

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 )
 
 // PercentageDiscountRule takes a percentage off the price so far — "20%
@@ -17,7 +17,7 @@ func init() {
 	Register("percentage_discount", func(properties json.RawMessage) (Rule, error) {
 		var r PercentageDiscountRule
 		if err := json.Unmarshal(properties, &r); err != nil {
-			return nil, fmt.Errorf("%w: %s", domain.ErrInvalid, err)
+			return nil, fmt.Errorf("%w: %s", models.ErrInvalid, err)
 		}
 		return r, r.validate()
 	})
@@ -25,7 +25,7 @@ func init() {
 
 func (r PercentageDiscountRule) validate() error {
 	if r.Percentage <= 0 || r.Percentage > 100 {
-		return fmt.Errorf("%w: percentage must be between 0 and 100", domain.ErrInvalid)
+		return fmt.Errorf("%w: percentage must be between 0 and 100", models.ErrInvalid)
 	}
 	return nil
 }

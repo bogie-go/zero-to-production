@@ -7,14 +7,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // categoriesStore is the slice of the store this controller uses, declared
-// next to its caller (rule 2). *models.Store satisfies it.
+// next to its caller (rule 2). *db.Store satisfies it.
 type categoriesStore interface {
-	ListCategoriesWithCounts(ctx context.Context) ([]domain.Category, error)
+	ListCategoriesWithCounts(ctx context.Context) ([]models.Category, error)
 }
 
 // CategoriesController is the shop's read-only view of categories: what the

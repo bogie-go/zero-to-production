@@ -9,18 +9,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // ordersStore is the slice of the store this controller uses, declared next
 // to its caller (rule 2) and holding only the methods the actions call.
 type ordersStore interface {
-	FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error)
-	CreateOrderFromCart(ctx context.Context, userID, cartID int64) (domain.Order, []domain.OrderLine, error)
-	ListOrdersForUser(ctx context.Context, userID int64, limit int32) ([]domain.Order, error)
-	GetOrderForUser(ctx context.Context, userID int64, id string) (domain.Order, []domain.OrderLine, error)
+	FindOrCreateCartByToken(ctx context.Context, token string) (models.Cart, error)
+	CreateOrderFromCart(ctx context.Context, userID, cartID int64) (models.Order, []models.OrderLine, error)
+	ListOrdersForUser(ctx context.Context, userID int64, limit int32) ([]models.Order, error)
+	GetOrderForUser(ctx context.Context, userID int64, id string) (models.Order, []models.OrderLine, error)
 }
 
 // OrdersController is the HTTP surface of checkout and order history.
@@ -114,7 +114,7 @@ func (ctl *OrdersController) userID(c *gin.Context) (int64, bool) {
 }
 
 // orderView converts an order and its lines to the wire shape.
-func orderView(o domain.Order, lines []domain.OrderLine) views.OrderResponse {
+func orderView(o models.Order, lines []models.OrderLine) views.OrderResponse {
 	items := make([]views.OrderLineResponse, 0, len(lines))
 	for _, l := range lines {
 		items = append(items, views.OrderLineResponse{
@@ -142,9 +142,9 @@ func orderView(o domain.Order, lines []domain.OrderLine) views.OrderResponse {
 // leaking its text.
 func (ctl *OrdersController) fail(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		c.JSON(http.StatusNotFound, views.ErrorMessage("no such order"))
-	case errors.Is(err, domain.ErrInvalid):
+	case errors.Is(err, models.ErrInvalid):
 		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
 	default:
 		ctl.Log.ErrorContext(c.Request.Context(), "orders: request failed",

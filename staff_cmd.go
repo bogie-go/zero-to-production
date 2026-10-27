@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/models"
 	"ecommerce/app/services/database"
 	"ecommerce/config"
+	"ecommerce/db/sqlc"
 )
 
 const staffUsage = `Usage: ecommerce staff promote EMAIL
@@ -32,14 +32,14 @@ func runStaff(ctx context.Context, args []string) (err error) {
 		return err
 	}
 	defer func() { err = database.Hint(err, cfg.Database.URL) }()
-	store, err := models.Open(ctx, cfg.Database.URL)
+	store, err := db.Open(ctx, cfg.Database.URL)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
 
 	user, err := store.PromoteToStaff(ctx, args[1])
-	if errors.Is(err, domain.ErrNotFound) {
+	if errors.Is(err, models.ErrNotFound) {
 		return fmt.Errorf("staff: no account with the email %s; they must sign up first", args[1])
 	}
 	if err != nil {

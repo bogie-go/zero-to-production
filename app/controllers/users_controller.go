@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/services/password"
 	"ecommerce/app/views"
 )
@@ -18,7 +18,7 @@ import (
 // usersStore is the slice of the store this controller uses, declared next
 // to its caller (rule 2) and holding only the methods the actions call.
 type usersStore interface {
-	RegisterUser(ctx context.Context, u domain.User) (domain.User, error)
+	RegisterUser(ctx context.Context, u models.User) (models.User, error)
 }
 
 // userTokenMaker is the slice of the token service this controller uses.
@@ -70,8 +70,8 @@ func (ctl *UsersController) Create(c *gin.Context) {
 	// way into the staff role is the seed (db/seeds/users.go) or a direct
 	// UpdateUser, never anything a signup request can reach. RegisterUser, not
 	// CreateUser: it enqueues the welcome email in the same transaction.
-	user, err := ctl.Store.RegisterUser(c.Request.Context(), domain.User{
-		Email: req.Email, PasswordDigest: digest, Role: domain.RoleCustomer,
+	user, err := ctl.Store.RegisterUser(c.Request.Context(), models.User{
+		Email: req.Email, PasswordDigest: digest, Role: models.RoleCustomer,
 	})
 	if err != nil {
 		ctl.fail(c, err)
@@ -94,12 +94,12 @@ func (ctl *UsersController) Create(c *gin.Context) {
 }
 
 // fail maps a domain error to a status: a validation failure (bad email, a
-// password that's too short, an email already taken — all domain.ErrInvalid,
+// password that's too short, an email already taken — all models.ErrInvalid,
 // per AGENTS.md's new :uniq behavior) is 422 as in Rails, anything else is
 // logged and answered 500 without leaking its text.
 func (ctl *UsersController) fail(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, domain.ErrInvalid):
+	case errors.Is(err, models.ErrInvalid):
 		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
 	default:
 		ctl.Log.ErrorContext(c.Request.Context(), "users: request failed",

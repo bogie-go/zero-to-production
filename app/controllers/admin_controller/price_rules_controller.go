@@ -11,20 +11,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/pricing"
 	"ecommerce/app/views"
 )
 
 // priceRulesStore is the slice of the store this controller uses, declared
-// next to its caller (rule 2). *models.Store satisfies it.
+// next to its caller (rule 2). *db.Store satisfies it.
 type priceRulesStore interface {
-	ListAllPriceRules(ctx context.Context) ([]domain.PriceRule, error)
-	GetPriceRule(ctx context.Context, id string) (domain.PriceRule, error)
-	CreatePriceRule(ctx context.Context, p domain.PriceRule) (domain.PriceRule, error)
-	UpdatePriceRule(ctx context.Context, p domain.PriceRule) (domain.PriceRule, error)
+	ListAllPriceRules(ctx context.Context) ([]models.PriceRule, error)
+	GetPriceRule(ctx context.Context, id string) (models.PriceRule, error)
+	CreatePriceRule(ctx context.Context, p models.PriceRule) (models.PriceRule, error)
+	UpdatePriceRule(ctx context.Context, p models.PriceRule) (models.PriceRule, error)
 	DeletePriceRule(ctx context.Context, id string) error
-	SetPriceRuleActive(ctx context.Context, id string, active bool) (domain.PriceRule, error)
+	SetPriceRuleActive(ctx context.Context, id string, active bool) (models.PriceRule, error)
 }
 
 // PriceRulesController is the admin surface of price rules: the engine's
@@ -112,7 +112,7 @@ func (ctl *PriceRulesController) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
 	}
-	rule, err := ruleFromRequest(domain.PriceRule{}, req)
+	rule, err := ruleFromRequest(models.PriceRule{}, req)
 	if err != nil {
 		ctl.fail(c, err)
 		return
@@ -183,21 +183,21 @@ func (ctl *PriceRulesController) setActive(c *gin.Context, active bool) {
 // kind's own decoder (pricing.Load), and what is stored is that decoded rule
 // written back out, so unknown keys in the request never reach the database
 // and the JSON is always in the shape the engine reads.
-func ruleFromRequest(base domain.PriceRule, req views.PriceRuleRequest) (domain.PriceRule, error) {
+func ruleFromRequest(base models.PriceRule, req views.PriceRuleRequest) (models.PriceRule, error) {
 	props := req.Properties
 	if len(props) == 0 {
 		props = json.RawMessage(`{}`)
 	}
 	if props[0] != '{' {
-		return domain.PriceRule{}, fmt.Errorf("%w: properties must be an object", domain.ErrInvalid)
+		return models.PriceRule{}, fmt.Errorf("%w: properties must be an object", models.ErrInvalid)
 	}
 	loaded, err := pricing.Load(req.Kind, props)
 	if err != nil {
-		return domain.PriceRule{}, err
+		return models.PriceRule{}, err
 	}
 	canonical, err := json.Marshal(loaded)
 	if err != nil {
-		return domain.PriceRule{}, err
+		return models.PriceRule{}, err
 	}
 	base.Name, base.Kind, base.Properties = req.Name, req.Kind, canonical
 	base.Active, base.Priority, base.StartsAt, base.EndsAt = req.Active, req.Priority, req.StartsAt, req.EndsAt
@@ -205,7 +205,7 @@ func ruleFromRequest(base domain.PriceRule, req views.PriceRuleRequest) (domain.
 }
 
 // status says where a rule stands at now.
-func status(r domain.PriceRule, now time.Time) string {
+func status(r models.PriceRule, now time.Time) string {
 	switch {
 	case !r.Active:
 		return "off"
@@ -217,7 +217,7 @@ func status(r domain.PriceRule, now time.Time) string {
 	return "active"
 }
 
-func (ctl *PriceRulesController) view(r domain.PriceRule) views.PriceRuleResponse {
+func (ctl *PriceRulesController) view(r models.PriceRule) views.PriceRuleResponse {
 	label := r.Kind
 	for _, s := range pricing.Specs() {
 		if s.Kind == r.Kind {
@@ -237,9 +237,9 @@ func (ctl *PriceRulesController) view(r domain.PriceRule) views.PriceRuleRespons
 // logged and answered 500 without leaking its text.
 func (ctl *PriceRulesController) fail(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		c.JSON(http.StatusNotFound, views.ErrorMessage("no such price rule"))
-	case errors.Is(err, domain.ErrInvalid):
+	case errors.Is(err, models.ErrInvalid):
 		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
 	default:
 		ctl.Log.ErrorContext(c.Request.Context(), "admin/price_rules: request failed",

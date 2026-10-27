@@ -8,17 +8,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // categoriesStore is the slice of the store this controller uses, declared
-// next to its caller (rule 2). *models.Store satisfies it.
+// next to its caller (rule 2). *db.Store satisfies it.
 type categoriesStore interface {
-	ListCategoriesWithCounts(ctx context.Context) ([]domain.Category, error)
-	GetCategory(ctx context.Context, id string) (domain.Category, error)
-	CreateCategory(ctx context.Context, c domain.Category) (domain.Category, error)
-	UpdateCategory(ctx context.Context, c domain.Category) (domain.Category, error)
+	ListCategoriesWithCounts(ctx context.Context) ([]models.Category, error)
+	GetCategory(ctx context.Context, id string) (models.Category, error)
+	CreateCategory(ctx context.Context, c models.Category) (models.Category, error)
+	UpdateCategory(ctx context.Context, c models.Category) (models.Category, error)
 	DeleteCategory(ctx context.Context, id string) error
 }
 
@@ -77,7 +77,7 @@ func (ctl *CategoriesController) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
 	}
-	cat, err := ctl.Store.CreateCategory(c.Request.Context(), domain.Category{Name: req.Name})
+	cat, err := ctl.Store.CreateCategory(c.Request.Context(), models.Category{Name: req.Name})
 	if err != nil {
 		ctl.fail(c, err)
 		return
@@ -120,9 +120,9 @@ func (ctl *CategoriesController) Destroy(c *gin.Context) {
 // anything else is logged and answered 500 without leaking its text.
 func (ctl *CategoriesController) fail(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		c.JSON(http.StatusNotFound, views.ErrorMessage("no such category"))
-	case errors.Is(err, domain.ErrInvalid):
+	case errors.Is(err, models.ErrInvalid):
 		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
 	default:
 		ctl.Log.ErrorContext(c.Request.Context(), "admin/categories: request failed",
@@ -131,6 +131,6 @@ func (ctl *CategoriesController) fail(c *gin.Context, err error) {
 	}
 }
 
-func categoryView(c domain.Category) views.CategoryResponse {
+func categoryView(c models.Category) views.CategoryResponse {
 	return views.CategoryResponse{ID: c.ID, Name: c.Name, ProductCount: c.ProductCount}
 }

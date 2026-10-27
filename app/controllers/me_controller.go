@@ -8,15 +8,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // meStore is the slice of the store this controller uses, declared next to
 // its caller (rule 2).
 type meStore interface {
-	GetUser(ctx context.Context, id string) (domain.User, error)
+	GetUser(ctx context.Context, id string) (models.User, error)
 }
 
 // MeController answers one question for the UI: who is the bearer token
@@ -46,7 +46,7 @@ func (ctl *MeController) SetupRoutes(router *gin.RouterGroup) {
 func (ctl *MeController) Index(c *gin.Context) {
 	user, err := ctl.Store.GetUser(c.Request.Context(), middlewares.Subject(c))
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		c.JSON(http.StatusForbidden, views.ErrorMessage("create an account to continue"))
 		return
 	case err != nil:

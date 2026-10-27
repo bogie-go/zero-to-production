@@ -7,15 +7,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 	"ecommerce/test/testdb"
 )
 
 var _ = Describe("POST /orders", func() {
-	var product domain.Product
-	var user domain.User
+	var product models.Product
+	var user models.User
 
 	It("needs a token to check out", func() {
 		app.Post("/orders", nil).Do().Status(http.StatusUnauthorized)
@@ -27,7 +27,7 @@ var _ = Describe("POST /orders", func() {
 
 	Context("when the stock is taken between adding to the cart and paying", func() {
 		BeforeEach(func() {
-			product = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.Stock = 5 })
+			product = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.Stock = 5 })
 			user = factories.User(GinkgoT(), app.Store)
 			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 5}).AsUser(user).Do().Status(http.StatusCreated)
 			// The cart refuses more than is in stock when adding, so someone
@@ -52,12 +52,12 @@ var _ = Describe("POST /orders", func() {
 
 var _ = Describe("POST /orders with a buy 2 get 1 free rule", func() {
 	Context("when the cart holds three of a product", func() {
-		var user domain.User
+		var user models.User
 		var order views.OrderResponse
 
 		BeforeEach(func() {
-			product := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 1000 })
-			factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) {
+			product := factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.PriceCents = 1000 })
+			factories.PriceRule(GinkgoT(), app.Store, func(r *models.PriceRule) {
 				r.Kind, r.Properties = "buy_x_get_y", []byte(`{"required_quantity":2,"free_quantity":1}`)
 			})
 			user = factories.User(GinkgoT(), app.Store)
@@ -75,7 +75,7 @@ var _ = Describe("POST /orders with a buy 2 get 1 free rule", func() {
 })
 
 var _ = Describe("GET /orders/:id", func() {
-	var ada, grace domain.User
+	var ada, grace models.User
 	var path string
 
 	Context("with an order placed by a customer", func() {

@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
@@ -17,7 +17,7 @@ import (
 // declared next to its caller (rule 2) and holding only the method the
 // action calls.
 type guestSessionsStore interface {
-	FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error)
+	FindOrCreateCartByToken(ctx context.Context, token string) (models.Cart, error)
 }
 
 // guestTokenMaker is the one method this controller needs from a

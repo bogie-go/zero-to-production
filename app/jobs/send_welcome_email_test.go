@@ -11,16 +11,16 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/jobs"
+	"ecommerce/app/models"
 )
 
 type fakeWelcomeStore struct {
-	user domain.User
+	user models.User
 	err  error
 }
 
-func (f fakeWelcomeStore) GetUser(context.Context, string) (domain.User, error) { return f.user, f.err }
+func (f fakeWelcomeStore) GetUser(context.Context, string) (models.User, error) { return f.user, f.err }
 
 func welcome(store fakeWelcomeStore, mail *fakeSender) error {
 	w := &jobs.SendWelcomeEmailWorker{
@@ -44,7 +44,7 @@ var _ = Describe("SendWelcomeEmailWorker", func() {
 
 	Context("when the user exists", func() {
 		BeforeEach(func() {
-			err = welcome(fakeWelcomeStore{user: domain.User{ID: 3, Email: "ann@example.com"}}, mail)
+			err = welcome(fakeWelcomeStore{user: models.User{ID: 3, Email: "ann@example.com"}}, mail)
 		})
 
 		It("sends the email with the shop link", func() {
@@ -61,7 +61,7 @@ var _ = Describe("SendWelcomeEmailWorker", func() {
 		BeforeEach(func() {
 			boom = errors.New("connection refused")
 			mail.err = boom
-			err = welcome(fakeWelcomeStore{user: domain.User{ID: 3, Email: "a@example.com"}}, mail)
+			err = welcome(fakeWelcomeStore{user: models.User{ID: 3, Email: "a@example.com"}}, mail)
 		})
 
 		It("returns the error so the job is retried", func() {
@@ -72,7 +72,7 @@ var _ = Describe("SendWelcomeEmailWorker", func() {
 
 	Context("when the user is gone", func() {
 		BeforeEach(func() {
-			err = welcome(fakeWelcomeStore{err: domain.ErrNotFound}, mail)
+			err = welcome(fakeWelcomeStore{err: models.ErrNotFound}, mail)
 		})
 
 		It("cancels without sending", func() {

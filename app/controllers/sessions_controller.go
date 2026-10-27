@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/services/password"
 	"ecommerce/app/views"
 )
@@ -19,7 +19,7 @@ import (
 // next to its caller (rule 2) and holding only the methods the actions
 // call.
 type sessionsStore interface {
-	GetUserByEmail(ctx context.Context, email string) (domain.User, error)
+	GetUserByEmail(ctx context.Context, email string) (models.User, error)
 }
 
 // cartMerger folds the guest cart a request carries into an account's cart;
@@ -32,7 +32,7 @@ type cartMerger interface {
 // enqueues an email job (app/application.go); it is declared here so this
 // controller knows nothing about jobs.
 type signInAlerter interface {
-	SignedIn(ctx context.Context, signIn domain.SignIn) error
+	SignedIn(ctx context.Context, signIn models.SignIn) error
 }
 
 // SessionsController is the HTTP surface of logging in.
@@ -71,13 +71,13 @@ func (ctl *SessionsController) Create(c *gin.Context) {
 		return
 	}
 	user, err := ctl.Store.GetUserByEmail(c.Request.Context(), req.Email)
-	if errors.Is(err, domain.ErrNotFound) {
+	if errors.Is(err, models.ErrNotFound) {
 		// Take the time a real check takes, so an unknown email is not
 		// answered faster than a wrong password (see password.DummyCheck).
 		password.DummyCheck(req.Password)
 	}
 	if err != nil || !password.Check(user.PasswordDigest, req.Password) {
-		if err != nil && !errors.Is(err, domain.ErrNotFound) {
+		if err != nil && !errors.Is(err, models.ErrNotFound) {
 			ctl.fail(c, err)
 			return
 		}
@@ -100,7 +100,7 @@ func (ctl *SessionsController) Create(c *gin.Context) {
 	// Tell the owner, after the login has succeeded. Best effort: an alert
 	// that cannot be queued is logged, never a reason to refuse a correct
 	// password.
-	if err := ctl.Alerts.SignedIn(c.Request.Context(), domain.SignIn{
+	if err := ctl.Alerts.SignedIn(c.Request.Context(), models.SignIn{
 		UserID: user.ID, At: time.Now().UTC(), IP: c.ClientIP(), UserAgent: c.Request.UserAgent(),
 	}); err != nil {
 		ctl.Log.WarnContext(c.Request.Context(), "sessions: could not queue the sign-in alert", "user_id", user.ID, "err", err)

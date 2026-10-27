@@ -6,11 +6,11 @@ import (
 	"os"
 	"strconv"
 
-	"ecommerce/app/models"
 	"ecommerce/app/services/database"
 	"ecommerce/app/services/migrate"
 	"ecommerce/config"
 	"ecommerce/db/seeds"
+	"ecommerce/db/sqlc"
 	"ecommerce/lib/logger"
 )
 
@@ -186,7 +186,7 @@ func runDB(ctx context.Context, args []string) (err error) {
 // runSeed opens the store, applies every seed in db/seeds, and closes it.
 // Separate from runDB's switch because db prepare calls it too.
 func runSeed(ctx context.Context, url string) error {
-	store, err := models.Open(ctx, url)
+	store, err := db.Open(ctx, url)
 	if err != nil {
 		return err
 	}

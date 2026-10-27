@@ -14,7 +14,6 @@ import (
 
 	"ecommerce/app/controllers"
 	"ecommerce/app/controllers/admin_controller"
-	"ecommerce/app/domain"
 	"ecommerce/app/jobs"
 	"ecommerce/app/models"
 	"ecommerce/app/services/cartmerge"
@@ -22,6 +21,7 @@ import (
 	"ecommerce/app/services/mailer"
 	"ecommerce/app/services/migrate"
 	"ecommerce/config"
+	"ecommerce/db/sqlc"
 	"ecommerce/lib/logger"
 )
 
@@ -29,7 +29,7 @@ import (
 type Application struct {
 	Config config.Config
 	Log    *slog.Logger
-	Store  *models.Store
+	Store  *db.Store
 	Server *controllers.Server
 
 	// Jobs enqueues background jobs from anywhere and, in the worker
@@ -70,7 +70,7 @@ func NewApplication(ctx context.Context) (*Application, error) {
 		}
 	}
 
-	store, err := models.Open(ctx, cfg.Database.URL)
+	store, err := db.Open(ctx, cfg.Database.URL)
 	if err != nil {
 		return nil, database.Hint(err, cfg.Database.URL)
 	}
@@ -98,13 +98,13 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	// so the job exists if and only if the order does: the hook runs after the
 	// order is written and before it commits, and an enqueue that fails rolls
 	// the order back with it.
-	store.OnOrderPlaced(func(ctx context.Context, tx pgx.Tx, order domain.Order) error {
+	store.OnOrderPlaced(func(ctx context.Context, tx pgx.Tx, order models.Order) error {
 		_, err := queue.InsertTx(ctx, tx, jobs.SendOrderConfirmationArgs{UserID: order.UserID, OrderID: order.ID}, nil)
 		return err
 	})
 	// The same for signing up: the welcome email's job exists if and only if
 	// the account does.
-	store.OnUserRegistered(func(ctx context.Context, tx pgx.Tx, user domain.User) error {
+	store.OnUserRegistered(func(ctx context.Context, tx pgx.Tx, user models.User) error {
 		_, err := queue.InsertTx(ctx, tx, jobs.SendWelcomeEmailArgs{UserID: user.ID}, nil)
 		return err
 	})

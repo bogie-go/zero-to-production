@@ -10,16 +10,16 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
+	"ecommerce/app/models"
 )
 
 type fakeStaffStore struct {
-	user domain.User
+	user models.User
 	err  error
 }
 
-func (f fakeStaffStore) GetUser(_ context.Context, id string) (domain.User, error) {
+func (f fakeStaffStore) GetUser(_ context.Context, id string) (models.User, error) {
 	return f.user, f.err
 }
 
@@ -57,7 +57,7 @@ var _ = Describe("RequireStaff", func() {
 
 	Context("when the user is staff", func() {
 		BeforeEach(func() {
-			store = fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleStaff}}
+			store = fakeStaffStore{user: models.User{ID: 7, Role: models.RoleStaff}}
 			auth = mint("7")
 		})
 
@@ -69,7 +69,7 @@ var _ = Describe("RequireStaff", func() {
 
 	Context("when the user is a customer", func() {
 		BeforeEach(func() {
-			store = fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleCustomer}}
+			store = fakeStaffStore{user: models.User{ID: 7, Role: models.RoleCustomer}}
 			auth = mint("7")
 		})
 
@@ -82,7 +82,7 @@ var _ = Describe("RequireStaff", func() {
 	// as an unknown or malformed subject would.
 	Context("with a guest token", func() {
 		BeforeEach(func() {
-			store = fakeStaffStore{err: domain.ErrNotFound}
+			store = fakeStaffStore{err: models.ErrNotFound}
 			auth = mint("a-guest-uuid")
 		})
 
@@ -94,7 +94,7 @@ var _ = Describe("RequireStaff", func() {
 	// No token at all never reaches RequireStaff; RequireUser answers first.
 	Context("without a token", func() {
 		BeforeEach(func() {
-			store = fakeStaffStore{user: domain.User{ID: 7, Role: domain.RoleStaff}}
+			store = fakeStaffStore{user: models.User{ID: 7, Role: models.RoleStaff}}
 			auth = ""
 		})
 

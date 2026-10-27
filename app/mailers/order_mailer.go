@@ -10,14 +10,14 @@ import (
 	"html"
 	"strings"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/services/mailer"
 )
 
 // OrderConfirmation is the email a customer gets after placing an order: what
 // they ordered, at the prices saved with the order (never today's), and the
 // total.
-func OrderConfirmation(user domain.User, order domain.Order, lines []domain.OrderLine) mailer.Message {
+func OrderConfirmation(user models.User, order models.Order, lines []models.OrderLine) mailer.Message {
 	var text, rows strings.Builder
 	for _, l := range lines {
 		fmt.Fprintf(&text, "  %s x %d    %s\n", l.ProductName, l.Quantity, money(l.UnitPriceCents*l.Quantity))

@@ -3,15 +3,15 @@ package seeds
 import (
 	"context"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/models"
+	"ecommerce/db/sqlc"
 )
 
 // products is the catalog SeedProduct inserts. Edit this list rather than
 // the loop below when the catalog changes. Images live in
 // public/images/products, embedded into the binary like everything else
 // under public/ (see public/public.go), so they need no network to load.
-var products = []domain.Product{
+var products = []models.Product{
 	{Name: "Bogie Logo Sticker", Description: "Die-cut vinyl sticker, 3 inches wide. Waterproof and laptop-safe.", PriceCents: 300, Stock: 500, ImageUrl: "/images/products/bogie-logo-sticker.webp"},
 	{Name: "Bogie Sticker Pack", Description: "Six vinyl stickers: the logo, the mine cart, and four more from the Bogie track.", PriceCents: 800, Stock: 300, ImageUrl: "/images/products/bogie-sticker-pack.webp"},
 	{Name: "Bogie Ceramic Mug", Description: "11 oz white ceramic mug with the Bogie logo. Dishwasher and microwave safe.", PriceCents: 1400, Stock: 150, ImageUrl: "/images/products/bogie-ceramic-mug.webp"},
@@ -24,7 +24,7 @@ var products = []domain.Product{
 // SeedProduct seeds product. db seed can run this any number of times:
 // FindOrCreateProductByName leaves anything already in the catalog alone, so
 // re-running only inserts what is missing.
-func SeedProduct(ctx context.Context, s *models.Store) error {
+func SeedProduct(ctx context.Context, s *db.Store) error {
 	for _, p := range products {
 		if _, err := s.FindOrCreateProductByName(ctx, p); err != nil {
 			return err

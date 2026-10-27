@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
+	"ecommerce/app/models"
 	"ecommerce/app/services/token"
 )
 
@@ -18,7 +18,7 @@ import (
 // uses, declared here (rule 2) rather than in any one controller, since
 // WithStaff below guards the whole /admin group, not one resource.
 type staffStore interface {
-	GetUser(ctx context.Context, id string) (domain.User, error)
+	GetUser(ctx context.Context, id string) (models.User, error)
 }
 
 // staffTokens is the slice of the token service WithStaff uses.
@@ -43,10 +43,10 @@ type Server struct {
 
 // NewServer builds the namespace. Its controllers are constructed and
 // assigned in app/application.go, where every dependency is wired. store
-// and tokens are the root Server's own *models.Store and Tokens() — the
+// and tokens are the root Server's own *db.Store and Tokens() — the
 // admin namespace shares both rather than minting a parallel login system;
 // a staff account is a user row like any other, just with Role ==
-// domain.RoleStaff (see docs/bogie-gaps.md and db/seeds/users.go).
+// models.RoleStaff (see docs/bogie-gaps.md and db/seeds/users.go).
 func NewServer(store staffStore, tokens staffTokens, log *slog.Logger) *Server {
 	return &Server{Store: store, Tokens: tokens, Log: log}
 }

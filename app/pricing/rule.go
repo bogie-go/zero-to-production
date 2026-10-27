@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 )
 
 // Rule is one pricing rule: given the price so far, it decides whether it
@@ -42,7 +42,7 @@ func Register(kind string, decode Decoder) {
 func Load(kind string, properties json.RawMessage) (Rule, error) {
 	decode, ok := registry[kind]
 	if !ok {
-		return nil, fmt.Errorf("%w: no such price rule kind %q", domain.ErrInvalid, kind)
+		return nil, fmt.Errorf("%w: no such price rule kind %q", models.ErrInvalid, kind)
 	}
 	return decode(properties)
 }

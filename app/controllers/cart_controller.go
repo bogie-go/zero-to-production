@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/middlewares"
+	"ecommerce/app/models"
 	"ecommerce/app/pricing"
 	"ecommerce/app/views"
 )
@@ -17,9 +17,9 @@ import (
 // cartStore is the slice of the store this controller uses, declared next
 // to its caller (rule 2) and holding only the methods the actions call.
 type cartStore interface {
-	FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error)
-	CartContents(ctx context.Context, cartID int64) ([]domain.CartLine, error)
-	ListActivePriceRules(ctx context.Context) ([]domain.PriceRule, error)
+	FindOrCreateCartByToken(ctx context.Context, token string) (models.Cart, error)
+	CartContents(ctx context.Context, cartID int64) ([]models.CartLine, error)
+	ListActivePriceRules(ctx context.Context) ([]models.PriceRule, error)
 }
 
 // CartController is the HTTP surface of the current cart: one cart per
@@ -80,9 +80,9 @@ func (ctl *CartController) Index(c *gin.Context) {
 // else is logged and answered 500 without leaking its text.
 func (ctl *CartController) fail(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		c.JSON(http.StatusNotFound, views.ErrorMessage("no such cart"))
-	case errors.Is(err, domain.ErrInvalid):
+	case errors.Is(err, models.ErrInvalid):
 		c.JSON(http.StatusUnprocessableEntity, views.Error(err))
 	default:
 		ctl.Log.ErrorContext(c.Request.Context(), "cart: request failed",
@@ -95,7 +95,7 @@ func (ctl *CartController) fail(c *gin.Context, err error) {
 // the lines' total, computing every derived value here rather than storing
 // any of them. Shared by CartController and CartItemsController, which both
 // answer with a cart.
-func cartView(lines []domain.CartLine, rules []domain.PriceRule) (views.CartResponse, error) {
+func cartView(lines []models.CartLine, rules []models.PriceRule) (views.CartResponse, error) {
 	items := make([]views.CartLineResponse, 0, len(lines))
 	var subtotal int32
 	for _, l := range lines {

@@ -9,8 +9,8 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/mailers"
+	"ecommerce/app/models"
 )
 
 // SendWelcomeEmailArgs is what a send_welcome_email job carries: the new
@@ -24,9 +24,9 @@ type SendWelcomeEmailArgs struct {
 func (SendWelcomeEmailArgs) Kind() string { return "send_welcome_email" }
 
 // welcomeStore is the slice of the store this worker uses, declared here
-// beside its user (rule 2). *models.Store satisfies it.
+// beside its user (rule 2). *db.Store satisfies it.
 type welcomeStore interface {
-	GetUser(ctx context.Context, id string) (domain.User, error)
+	GetUser(ctx context.Context, id string) (models.User, error)
 }
 
 // SendWelcomeEmailWorker emails a new account its welcome. Like the order
@@ -47,7 +47,7 @@ type SendWelcomeEmailWorker struct {
 // help.
 func (w *SendWelcomeEmailWorker) Work(ctx context.Context, job *river.Job[SendWelcomeEmailArgs]) error {
 	user, err := w.Store.GetUser(ctx, strconv.FormatInt(job.Args.UserID, 10))
-	if errors.Is(err, domain.ErrNotFound) {
+	if errors.Is(err, models.ErrNotFound) {
 		return river.JobCancel(fmt.Errorf("user %d no longer exists", job.Args.UserID))
 	}
 	if err != nil {

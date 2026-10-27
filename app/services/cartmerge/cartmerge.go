@@ -9,17 +9,17 @@ import (
 	"log/slog"
 	"strings"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/services/token"
 )
 
 // store is the slice of the store the merge uses, declared here beside its
-// user (rule 2). *models.Store satisfies it.
+// user (rule 2). *db.Store satisfies it.
 type store interface {
-	GetCartByToken(ctx context.Context, token string) (domain.Cart, error)
-	FindOrCreateCartByToken(ctx context.Context, token string) (domain.Cart, error)
-	CartContents(ctx context.Context, cartID int64) ([]domain.CartLine, error)
-	AddCartItem(ctx context.Context, cartID, productID int64, quantity int32) (domain.CartItem, error)
+	GetCartByToken(ctx context.Context, token string) (models.Cart, error)
+	FindOrCreateCartByToken(ctx context.Context, token string) (models.Cart, error)
+	CartContents(ctx context.Context, cartID int64) ([]models.CartLine, error)
+	AddCartItem(ctx context.Context, cartID, productID int64, quantity int32) (models.CartItem, error)
 	DeleteCartAndItems(ctx context.Context, cartID int64) error
 }
 
@@ -55,7 +55,7 @@ func (m Merger) FromAuthorization(ctx context.Context, authorization, newSubject
 
 	oldCart, err := m.Store.GetCartByToken(ctx, claims.Subject)
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, models.ErrNotFound):
 		return nil
 	case err != nil:
 		return err

@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 )
 
 var _ = Describe("Hash and Check", func() {
@@ -36,7 +36,7 @@ var _ = Describe("Hash and Check", func() {
 		})
 
 		It("rejects it", func() {
-			Expect(hashErr).To(MatchError(domain.ErrInvalid))
+			Expect(hashErr).To(MatchError(models.ErrInvalid))
 		})
 	})
 })

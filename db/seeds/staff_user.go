@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/models"
 	"ecommerce/app/services/password"
 	"ecommerce/config"
+	"ecommerce/db/sqlc"
 )
 
 // staffEmail and staffPassword are a development-only login: no admin UI
@@ -24,7 +24,7 @@ const (
 // number of times: FindOrCreateUserByEmail leaves it alone once it
 // exists, so re-running never resets a password or role changed by hand
 // since.
-func SeedStaffUser(ctx context.Context, s *models.Store) error {
+func SeedStaffUser(ctx context.Context, s *db.Store) error {
 	// A login whose password is in this repository must never exist on a
 	// deployed system (a deployment runs as production). A real
 	// environment promotes an account that signed up: ecommerce staff promote.
@@ -35,8 +35,8 @@ func SeedStaffUser(ctx context.Context, s *models.Store) error {
 	if err != nil {
 		return fmt.Errorf("seeds: hash staff password: %w", err)
 	}
-	_, err = s.FindOrCreateUserByEmail(ctx, domain.User{
-		Email: staffEmail, PasswordDigest: digest, Role: domain.RoleStaff,
+	_, err = s.FindOrCreateUserByEmail(ctx, models.User{
+		Email: staffEmail, PasswordDigest: digest, Role: models.RoleStaff,
 	})
 	return err
 }

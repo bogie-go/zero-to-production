@@ -6,14 +6,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 )
 
 // staffStore is the slice of the store RequireStaff uses, declared here
 // (rule 2).
 type staffStore interface {
-	GetUser(ctx context.Context, id string) (domain.User, error)
+	GetUser(ctx context.Context, id string) (models.User, error)
 }
 
 // RequireStaff guards a route for a signed-in user whose role is staff. It
@@ -32,7 +32,7 @@ type staffStore interface {
 func RequireStaff(store staffStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, err := store.GetUser(c.Request.Context(), Subject(c))
-		if err != nil || user.Role != domain.RoleStaff {
+		if err != nil || user.Role != models.RoleStaff {
 			c.AbortWithStatusJSON(http.StatusForbidden, views.ErrorMessage("staff access required"))
 			return
 		}

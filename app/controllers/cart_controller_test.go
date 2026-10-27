@@ -7,20 +7,20 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
 
 var _ = Describe("GET /cart", func() {
-	var user, staff domain.User
-	var product domain.Product
-	var rule domain.PriceRule
+	var user, staff models.User
+	var product models.Product
+	var rule models.PriceRule
 	var cart views.CartResponse
 
 	Context("with an active price rule and two of a product in the cart", func() {
 		BeforeEach(func() {
-			product = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 1000 })
+			product = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.PriceCents = 1000 })
 			factories.PriceRule(GinkgoT(), app.Store) // active, $1.00 off
 			user = factories.User(GinkgoT(), app.Store)
 			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 2}).AsUser(user).Do().Status(http.StatusCreated)
@@ -37,8 +37,8 @@ var _ = Describe("GET /cart", func() {
 
 	Context("with a buy 2 get 1 free rule and three of a product in the cart", func() {
 		BeforeEach(func() {
-			product = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 1000 })
-			factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) {
+			product = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.PriceCents = 1000 })
+			factories.PriceRule(GinkgoT(), app.Store, func(r *models.PriceRule) {
 				r.Name, r.Kind, r.Properties = "Buy 2 Get 1 Free", "buy_x_get_y", []byte(`{"required_quantity":2,"free_quantity":1}`)
 			})
 			user = factories.User(GinkgoT(), app.Store)
@@ -58,8 +58,8 @@ var _ = Describe("GET /cart", func() {
 	Context("with an inactive price rule and a guest's line", func() {
 		BeforeEach(func() {
 			staff = factories.Staff(GinkgoT(), app.Store)
-			product = factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 1000 })
-			rule = factories.PriceRule(GinkgoT(), app.Store, func(r *domain.PriceRule) { r.Active = false })
+			product = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.PriceCents = 1000 })
+			rule = factories.PriceRule(GinkgoT(), app.Store, func(r *models.PriceRule) { r.Active = false })
 			app.Post("/cart_items", views.AddCartItemRequest{ProductID: product.ID, Quantity: 1}).AsGuest("g").Do().Status(http.StatusCreated)
 		})
 

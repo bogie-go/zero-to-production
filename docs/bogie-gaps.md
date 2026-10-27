@@ -77,14 +77,14 @@ where a duplicate signup is an everyday, expected case, not a rare one like
 `api_key`'s random collision-proof prefix.
 
 **Fixed upstream**, not worked around: `internal/generate/model.go` now has
-`Create`/`Update` catch error code `23505` and return `domain.ErrInvalid`
+`Create`/`Update` catch error code `23505` and return `models.ErrInvalid`
 with a readable message ("email is already taken") for any model with at
 least one `:uniq` attr. Released as Bogie v0.2.11, with a new golden test
 (`model_user`) covering the path no existing fixture exercised.
 
 ## ~~No generated transaction helper~~ — fixed upstream in Bogie v0.2.12
 
-`app/models/store.go` is hand-written infrastructure (one per app, not
+`db/sqlc/store.go` is hand-written infrastructure (one per app, not
 per model), and until Task E it only wrapped the pool: `Open`, `Close`,
 `Ping`. sqlc's own generated `Queries.WithTx(tx pgx.Tx) *Queries` has
 existed since `bogie new` — that part is free — but nothing above it ever
@@ -112,11 +112,11 @@ kept the template's, since it's slightly more general).
 
 ## Generated `Create`/`Update` do not classify a foreign-key violation
 
-The generated `Delete` maps a foreign-key violation to `domain.ErrInvalid`
+The generated `Delete` maps a foreign-key violation to `models.ErrInvalid`
 since v0.2.13, but `Create` and `Update` on a model with a `:references`
 column do not: a product pointed at a category that does not exist surfaced
 as a raw 500. Found building categories (2026-10-22) and fixed by hand in
-`app/models/products.go` (SQLSTATE 23503 becomes `ErrInvalid`, "category does
+`db/sqlc/products.go` (SQLSTATE 23503 becomes `ErrInvalid`, "category does
 not exist"). **Real fix:** the same mapping in `g model`'s `Create`/`Update`
 for any model with a `:references` attribute, named for the column.
 
@@ -124,7 +124,7 @@ for any model with a `:references` attribute, named for the column.
 
 A generator fix to the code `g model` writes (the `:uniq` mapping in v0.2.11,
 the foreign-key `Delete` in v0.2.13) reaches new models only. `app:update`
-merges the layout's template files and leaves `app/models/<table>.go` alone,
+merges the layout's template files and leaves `db/sqlc/<table>.go` alone,
 so an app that wants the fix applies it by hand (done here for `products.go`;
 the other models' `Delete` still has the old behavior). Re-running `g model`
 would overwrite hand edits, which is the point of the `_extra` convention but

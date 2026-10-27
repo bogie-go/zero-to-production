@@ -11,8 +11,8 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/mailers"
+	"ecommerce/app/models"
 )
 
 // SendSignInAlertArgs is what a send_sign_in_alert job carries. Unlike the
@@ -31,9 +31,9 @@ type SendSignInAlertArgs struct {
 func (SendSignInAlertArgs) Kind() string { return "send_sign_in_alert" }
 
 // alertStore is the slice of the store this worker uses, declared here beside
-// its user (rule 2). *models.Store satisfies it.
+// its user (rule 2). *db.Store satisfies it.
 type alertStore interface {
-	GetUser(ctx context.Context, id string) (domain.User, error)
+	GetUser(ctx context.Context, id string) (models.User, error)
 }
 
 // SendSignInAlertWorker emails an account's owner that someone signed in.
@@ -50,13 +50,13 @@ type SendSignInAlertWorker struct {
 func (w *SendSignInAlertWorker) Work(ctx context.Context, job *river.Job[SendSignInAlertArgs]) error {
 	a := job.Args
 	user, err := w.Store.GetUser(ctx, strconv.FormatInt(a.UserID, 10))
-	if errors.Is(err, domain.ErrNotFound) {
+	if errors.Is(err, models.ErrNotFound) {
 		return river.JobCancel(fmt.Errorf("user %d no longer exists", a.UserID))
 	}
 	if err != nil {
 		return err
 	}
-	msg := mailers.SignInAlert(user, domain.SignIn{UserID: a.UserID, At: a.At, IP: a.IP, UserAgent: a.UserAgent})
+	msg := mailers.SignInAlert(user, models.SignIn{UserID: a.UserID, At: a.At, IP: a.IP, UserAgent: a.UserAgent})
 	if err := w.Mail.Send(ctx, msg); err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ type inserter interface {
 type SignInAlerts struct{ Queue inserter }
 
 // SignedIn queues the alert for one login.
-func (a SignInAlerts) SignedIn(ctx context.Context, s domain.SignIn) error {
+func (a SignInAlerts) SignedIn(ctx context.Context, s models.SignIn) error {
 	_, err := a.Queue.Insert(ctx, SendSignInAlertArgs{UserID: s.UserID, At: s.At, IP: s.IP, UserAgent: s.UserAgent}, nil)
 	return err
 }

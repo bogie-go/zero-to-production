@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 )
 
 // BuyXGetYRule is "buy 2, get 1 free": in every group of X+Y units of the
@@ -28,7 +28,7 @@ func init() {
 	Register("buy_x_get_y", func(properties json.RawMessage) (Rule, error) {
 		var r BuyXGetYRule
 		if err := json.Unmarshal(properties, &r); err != nil {
-			return nil, fmt.Errorf("%w: %s", domain.ErrInvalid, err)
+			return nil, fmt.Errorf("%w: %s", models.ErrInvalid, err)
 		}
 		return r, r.validate()
 	})
@@ -36,7 +36,7 @@ func init() {
 
 func (r BuyXGetYRule) validate() error {
 	if r.RequiredQuantity <= 0 || r.FreeQuantity <= 0 {
-		return fmt.Errorf("%w: required_quantity and free_quantity must be positive", domain.ErrInvalid)
+		return fmt.Errorf("%w: required_quantity and free_quantity must be positive", models.ErrInvalid)
 	}
 	return nil
 }

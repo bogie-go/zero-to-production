@@ -4,14 +4,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
 	"ecommerce/app/mailers"
+	"ecommerce/app/models"
 	"ecommerce/app/services/mailer"
 )
 
 var (
-	ann   = domain.User{ID: 3, Email: "ann@example.com"}
-	lines = []domain.OrderLine{
+	ann   = models.User{ID: 3, Email: "ann@example.com"}
+	lines = []models.OrderLine{
 		{ProductName: "Wireless Mouse", UnitPriceCents: 1999, Quantity: 2},
 		{ProductName: "Tom & <Jerry> Mug", UnitPriceCents: 500, Quantity: 1},
 	}
@@ -22,7 +22,7 @@ var _ = Describe("OrderConfirmation", func() {
 
 	Context("with discounts", func() {
 		BeforeEach(func() {
-			order := domain.Order{ID: 7, SubtotalCents: 4498, DiscountCents: 898, TotalCents: 3600}
+			order := models.Order{ID: 7, SubtotalCents: 4498, DiscountCents: 898, TotalCents: 3600}
 			m = mailers.OrderConfirmation(ann, order, lines)
 		})
 
@@ -40,7 +40,7 @@ var _ = Describe("OrderConfirmation", func() {
 	// A product name comes from the admin, so the HTML part must escape it.
 	Context("with a product name containing HTML", func() {
 		BeforeEach(func() {
-			m = mailers.OrderConfirmation(ann, domain.Order{ID: 1, TotalCents: 500}, lines[1:])
+			m = mailers.OrderConfirmation(ann, models.Order{ID: 1, TotalCents: 500}, lines[1:])
 		})
 
 		It("escapes HTML", func() {
@@ -51,7 +51,7 @@ var _ = Describe("OrderConfirmation", func() {
 
 	Context("without discounts", func() {
 		BeforeEach(func() {
-			m = mailers.OrderConfirmation(ann, domain.Order{ID: 1, SubtotalCents: 500, TotalCents: 500}, lines[1:])
+			m = mailers.OrderConfirmation(ann, models.Order{ID: 1, SubtotalCents: 500, TotalCents: 500}, lines[1:])
 		})
 
 		It("omits the discounts line", func() {

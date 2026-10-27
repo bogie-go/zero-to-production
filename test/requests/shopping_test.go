@@ -7,14 +7,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
 
 var _ = Describe("Shopping", func() {
 
-	stockOf := func(p domain.Product) int32 {
+	stockOf := func(p models.Product) int32 {
 		left, err := app.Store.GetProduct(GinkgoT().Context(), strconv.FormatInt(p.ID, 10))
 		Expect(err).NotTo(HaveOccurred())
 		return left.Stock
@@ -22,7 +22,7 @@ var _ = Describe("Shopping", func() {
 
 	// The whole customer journey, through HTTP only.
 	It("takes a guest from an empty cart, through signup, to a placed order", func() {
-		product := factories.Product(GinkgoT(), app.Store, func(p *domain.Product) { p.PriceCents = 500; p.Stock = 10 })
+		product := factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.PriceCents = 500; p.Stock = 10 })
 
 		var guest views.GuestSessionResponse
 		app.Post("/guest_sessions", nil).Do().Status(http.StatusCreated).JSON(&guest)

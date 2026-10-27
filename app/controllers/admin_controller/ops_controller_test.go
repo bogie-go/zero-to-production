@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"ecommerce/app/domain"
+	"ecommerce/app/models"
 	"ecommerce/app/views"
 	"ecommerce/test/factories"
 )
@@ -26,7 +26,7 @@ var _ = Describe("GET /admin/ops", func() {
 	})
 
 	Context("as staff", func() {
-		var staff domain.User
+		var staff models.User
 		var ops views.OpsResponse
 
 		BeforeEach(func() {
