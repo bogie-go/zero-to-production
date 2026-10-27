@@ -21,20 +21,36 @@ func ruleNames(rules []domain.PriceRule) []string {
 
 var _ = Describe("Price rules", func() {
 
-	DescribeTable("an unknown rule is not found",
-		func(id string) {
-			_, err := store.GetPriceRule(GinkgoT().Context(), id)
-			Expect(err).To(MatchError(domain.ErrNotFound))
-			Expect(store.DeletePriceRule(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
-		},
-		Entry("a malformed id", "nope"),
-		Entry("an empty id", ""),
-		Entry("a well-formed id that names nothing", "999999999"),
-	)
+	Describe("GetPriceRule", func() {
+		DescribeTable("is not found for",
+			func(id string) {
+				_, err := store.GetPriceRule(GinkgoT().Context(), id)
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			},
+			Entry("a malformed id", "nope"),
+			Entry("an empty id", ""),
+			Entry("a well-formed id that names nothing", "999999999"),
+		)
+	})
 
-	It("cannot update one that is not there", func() {
-		_, err := store.UpdatePriceRule(GinkgoT().Context(), domain.PriceRule{ID: 999999999, Name: "Nope", Kind: "fixed_discount", Properties: []byte(`{}`)})
-		Expect(err).To(MatchError(domain.ErrNotFound))
+	Describe("UpdatePriceRule", func() {
+		Context("when the rule is not there", func() {
+			It("is not found", func() {
+				_, err := store.UpdatePriceRule(GinkgoT().Context(), domain.PriceRule{ID: 999999999, Name: "Nope", Kind: "fixed_discount", Properties: []byte(`{}`)})
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
+		})
+	})
+
+	Describe("DeletePriceRule", func() {
+		DescribeTable("is not found for",
+			func(id string) {
+				Expect(store.DeletePriceRule(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
+			},
+			Entry("a malformed id", "nope"),
+			Entry("an empty id", ""),
+			Entry("a well-formed id that names nothing", "999999999"),
+		)
 	})
 
 	Describe("listing", func() {

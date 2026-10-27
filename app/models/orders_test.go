@@ -11,70 +11,117 @@ import (
 )
 
 var _ = Describe("Orders", func() {
+	// An order belongs to a user, so one has to be saved first.
+	create := func() domain.Order {
+		user := factories.User(GinkgoT(), store)
+		order, err := store.CreateOrder(GinkgoT().Context(), domain.Order{UserID: user.ID, Status: "pending", SubtotalCents: 1000, DiscountCents: 100, TotalCents: 900})
+		Expect(err).NotTo(HaveOccurred())
+		return order
+	}
 
-	DescribeTable("an unknown order is not found",
-		func(id string) {
-			_, err := store.GetOrder(GinkgoT().Context(), id)
-			Expect(err).To(MatchError(domain.ErrNotFound))
-			Expect(store.DeleteOrder(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
-		},
-		Entry("a malformed id", "nope"),
-		Entry("an empty id", ""),
-		Entry("a well-formed id that names nothing", "999999999"),
-	)
+	Describe("GetOrder", func() {
+		DescribeTable("is not found for",
+			func(id string) {
+				_, err := store.GetOrder(GinkgoT().Context(), id)
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			},
+			Entry("a malformed id", "nope"),
+			Entry("an empty id", ""),
+			Entry("a well-formed id that names nothing", "999999999"),
+		)
 
-	It("cannot update one that is not there", func() {
-		// A valid-looking order (UserID need not name a real user: no row
-		// matches, so the foreign key is never checked), so Validate passes.
-		_, err := store.UpdateOrder(GinkgoT().Context(), domain.Order{ID: 999999999, UserID: 1, Status: "pending"})
-		Expect(err).To(MatchError(domain.ErrNotFound))
-	})
-
-	Context("with a user", func() {
-		var user domain.User
-		var order domain.Order
-
-		BeforeEach(func() {
-			user = factories.User(GinkgoT(), store)
-			order = domain.Order{UserID: user.ID, Status: "pending", SubtotalCents: 1000, DiscountCents: 100, TotalCents: 900}
-		})
-
-		It("creates an order", func() {
-			created, err := store.CreateOrder(GinkgoT().Context(), order)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(created.ID).NotTo(BeZero())
-		})
-
-		Context("with a created order", func() {
-			var created domain.Order
-			var id string
+		Context("with a saved order", func() {
+			var order domain.Order
 
 			BeforeEach(func() {
-				var err error
-				created, err = store.CreateOrder(GinkgoT().Context(), order)
-				Expect(err).NotTo(HaveOccurred())
-				id = strconv.FormatInt(created.ID, 10)
+				order = create()
 			})
 
-			It("reads it", func() {
-				Expect(store.GetOrder(GinkgoT().Context(), id)).To(Equal(created))
+			It("finds the order by id", func() {
+				Expect(store.GetOrder(GinkgoT().Context(), strconv.FormatInt(order.ID, 10))).To(Equal(order))
+			})
+		})
+	})
+
+	Describe("ListOrders", func() {
+		Context("with a saved order", func() {
+			var order domain.Order
+
+			BeforeEach(func() {
+				order = create()
 			})
 
-			It("lists it", func() {
+			It("includes the saved order", func() {
 				all, err := store.ListOrders(GinkgoT().Context(), 10)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(all).To(HaveLen(1))
-				Expect(all[0].ID).To(Equal(created.ID))
+				Expect(all[0].ID).To(Equal(order.ID))
+			})
+		})
+	})
+
+	Describe("CreateOrder", func() {
+		Context("with a user", func() {
+			var user domain.User
+
+			BeforeEach(func() {
+				user = factories.User(GinkgoT(), store)
 			})
 
-			It("updates it", func() {
-				created.Status = "paid"
-				updated, err := store.UpdateOrder(GinkgoT().Context(), created)
+			It("saves the order with an id", func() {
+				created, err := store.CreateOrder(GinkgoT().Context(), domain.Order{UserID: user.ID, Status: "pending", SubtotalCents: 1000, DiscountCents: 100, TotalCents: 900})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(created.ID).NotTo(BeZero())
+			})
+		})
+	})
+
+	Describe("UpdateOrder", func() {
+		Context("with a saved order", func() {
+			var order domain.Order
+
+			BeforeEach(func() {
+				order = create()
+			})
+
+			It("stores the change", func() {
+				order.Status = "paid"
+				updated, err := store.UpdateOrder(GinkgoT().Context(), order)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updated.Status).To(Equal("paid"))
 			})
+		})
 
-			It("deletes it", func() {
+		Context("when the order is not there", func() {
+			It("is not found", func() {
+				// A valid-looking order (UserID need not name a real user: no
+				// row matches, so the foreign key is never checked), so
+				// Validate passes.
+				_, err := store.UpdateOrder(GinkgoT().Context(), domain.Order{ID: 999999999, UserID: 1, Status: "pending"})
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
+		})
+	})
+
+	Describe("DeleteOrder", func() {
+		DescribeTable("is not found for",
+			func(id string) {
+				Expect(store.DeleteOrder(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
+			},
+			Entry("a malformed id", "nope"),
+			Entry("an empty id", ""),
+			Entry("a well-formed id that names nothing", "999999999"),
+		)
+
+		Context("with a saved order", func() {
+			var order domain.Order
+
+			BeforeEach(func() {
+				order = create()
+			})
+
+			It("removes the order", func() {
+				id := strconv.FormatInt(order.ID, 10)
 				Expect(store.DeleteOrder(GinkgoT().Context(), id)).To(Succeed())
 				_, err := store.GetOrder(GinkgoT().Context(), id)
 				Expect(err).To(MatchError(domain.ErrNotFound))

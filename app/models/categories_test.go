@@ -7,72 +7,111 @@ import (
 	. "github.com/onsi/gomega"
 
 	"ecommerce/app/domain"
+	"ecommerce/test/factories"
 )
 
 var _ = Describe("Categories", func() {
+	Describe("GetCategory", func() {
+		DescribeTable("is not found for",
+			func(id string) {
+				_, err := store.GetCategory(GinkgoT().Context(), id)
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			},
+			Entry("a malformed id", "nope"),
+			Entry("an empty id", ""),
+			Entry("a well-formed id that names nothing", "999999999"),
+		)
 
-	DescribeTable("an unknown category is not found",
-		func(id string) {
-			_, err := store.GetCategory(GinkgoT().Context(), id)
-			Expect(err).To(MatchError(domain.ErrNotFound))
-			Expect(store.DeleteCategory(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
-		},
-		Entry("a malformed id", "nope"),
-		Entry("an empty id", ""),
-		Entry("a well-formed id that names nothing", "999999999"),
-	)
+		Context("with a saved category", func() {
+			var category domain.Category
 
-	It("cannot update one that is not there", func() {
-		_, err := store.UpdateCategory(GinkgoT().Context(), domain.Category{ID: 999999999, Name: "Nope"})
-		Expect(err).To(MatchError(domain.ErrNotFound))
+			BeforeEach(func() {
+				category = factories.Category(GinkgoT(), store)
+			})
+
+			It("finds the category by id", func() {
+				Expect(store.GetCategory(GinkgoT().Context(), strconv.FormatInt(category.ID, 10))).To(Equal(category))
+			})
+		})
 	})
 
 	Describe("CreateCategory", func() {
-		It("creates a category", func() {
-			created, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(created.ID).NotTo(BeZero())
+		Context("with a name", func() {
+			It("saves the category with an id", func() {
+				created, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(created.ID).NotTo(BeZero())
+			})
+		})
+
+		Context("with a blank name", func() {
+			It("is refused", func() {
+				_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "  "})
+				Expect(err).To(MatchError(domain.ErrInvalid))
+			})
+		})
+
+		Context("with a name another category already has", func() {
+			var existing domain.Category
+
+			BeforeEach(func() {
+				existing = factories.Category(GinkgoT(), store)
+			})
+
+			It("is refused", func() {
+				_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: existing.Name})
+				Expect(err).To(MatchError(domain.ErrInvalid))
+			})
 		})
 	})
 
-	Context("with a created category", func() {
-		var created domain.Category
-		var id string
+	Describe("UpdateCategory", func() {
+		Context("with a saved category", func() {
+			var category domain.Category
 
-		BeforeEach(func() {
-			var err error
-			created, err = store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
-			Expect(err).NotTo(HaveOccurred())
-			id = strconv.FormatInt(created.ID, 10)
+			BeforeEach(func() {
+				category = factories.Category(GinkgoT(), store)
+			})
+
+			It("stores the new name", func() {
+				category.Name = "Sound"
+				updated, err := store.UpdateCategory(GinkgoT().Context(), category)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(updated.Name).To(Equal("Sound"))
+			})
 		})
 
-		It("reads it", func() {
-			Expect(store.GetCategory(GinkgoT().Context(), id)).To(Equal(created))
-		})
-
-		It("renames it", func() {
-			created.Name = "Sound"
-			updated, err := store.UpdateCategory(GinkgoT().Context(), created)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(updated.Name).To(Equal("Sound"))
-		})
-
-		It("deletes it", func() {
-			Expect(store.DeleteCategory(GinkgoT().Context(), id)).To(Succeed())
-			_, err := store.GetCategory(GinkgoT().Context(), id)
-			Expect(err).To(MatchError(domain.ErrNotFound))
-		})
-
-		It("refuses a second category with the same name", func() {
-			_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "Audio"})
-			Expect(err).To(MatchError(domain.ErrInvalid))
+		Context("when the category is not there", func() {
+			It("is not found", func() {
+				_, err := store.UpdateCategory(GinkgoT().Context(), domain.Category{ID: 999999999, Name: "Nope"})
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
 		})
 	})
 
-	Describe("the name", func() {
-		It("is required", func() {
-			_, err := store.CreateCategory(GinkgoT().Context(), domain.Category{Name: "  "})
-			Expect(err).To(MatchError(domain.ErrInvalid))
+	Describe("DeleteCategory", func() {
+		DescribeTable("is not found for",
+			func(id string) {
+				Expect(store.DeleteCategory(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
+			},
+			Entry("a malformed id", "nope"),
+			Entry("an empty id", ""),
+			Entry("a well-formed id that names nothing", "999999999"),
+		)
+
+		Context("with a saved category", func() {
+			var category domain.Category
+
+			BeforeEach(func() {
+				category = factories.Category(GinkgoT(), store)
+			})
+
+			It("removes the category", func() {
+				id := strconv.FormatInt(category.ID, 10)
+				Expect(store.DeleteCategory(GinkgoT().Context(), id)).To(Succeed())
+				_, err := store.GetCategory(GinkgoT().Context(), id)
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
 		})
 	})
 })

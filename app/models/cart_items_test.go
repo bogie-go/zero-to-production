@@ -11,71 +11,119 @@ import (
 )
 
 var _ = Describe("Cart items", func() {
-
-	DescribeTable("an unknown cart item is not found",
-		func(id string) {
-			_, err := store.GetCartItem(GinkgoT().Context(), id)
-			Expect(err).To(MatchError(domain.ErrNotFound))
-			Expect(store.DeleteCartItem(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
-		},
-		Entry("a malformed id", "nope"),
-		Entry("an empty id", ""),
-		Entry("a well-formed id that names nothing", "999999999"),
-	)
-
-	It("cannot update one that is not there", func() {
-		// A valid-looking line, so Validate passes and the not-found check is
-		// what gets exercised.
-		_, err := store.UpdateCartItem(GinkgoT().Context(), domain.CartItem{ID: 999999999, CartID: 1, ProductID: 1, Quantity: 1})
-		Expect(err).To(MatchError(domain.ErrNotFound))
-	})
-
 	// A cart item names a cart and a product, so both have to exist.
-	Context("with a cart and a product", func() {
-		var cart domain.Cart
-		var product domain.Product
+	create := func() domain.CartItem {
+		cart := factories.Cart(GinkgoT(), store)
+		product := factories.Product(GinkgoT(), store)
+		item, err := store.CreateCartItem(GinkgoT().Context(), domain.CartItem{CartID: cart.ID, ProductID: product.ID, Quantity: 2})
+		Expect(err).NotTo(HaveOccurred())
+		return item
+	}
 
-		BeforeEach(func() {
-			cart = factories.Cart(GinkgoT(), store)
-			product = factories.Product(GinkgoT(), store)
-		})
+	Describe("GetCartItem", func() {
+		DescribeTable("is not found for",
+			func(id string) {
+				_, err := store.GetCartItem(GinkgoT().Context(), id)
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			},
+			Entry("a malformed id", "nope"),
+			Entry("an empty id", ""),
+			Entry("a well-formed id that names nothing", "999999999"),
+		)
 
-		It("creates a cart item", func() {
-			created, err := store.CreateCartItem(GinkgoT().Context(), domain.CartItem{CartID: cart.ID, ProductID: product.ID, Quantity: 2})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(created.ID).NotTo(BeZero())
-		})
-
-		Context("with a created cart item", func() {
-			var created domain.CartItem
-			var id string
+		Context("with a saved cart item", func() {
+			var item domain.CartItem
 
 			BeforeEach(func() {
-				var err error
-				created, err = store.CreateCartItem(GinkgoT().Context(), domain.CartItem{CartID: cart.ID, ProductID: product.ID, Quantity: 2})
-				Expect(err).NotTo(HaveOccurred())
-				id = strconv.FormatInt(created.ID, 10)
+				item = create()
 			})
 
-			It("reads it", func() {
-				Expect(store.GetCartItem(GinkgoT().Context(), id)).To(Equal(created))
+			It("finds the cart item by id", func() {
+				Expect(store.GetCartItem(GinkgoT().Context(), strconv.FormatInt(item.ID, 10))).To(Equal(item))
+			})
+		})
+	})
+
+	Describe("ListCartItems", func() {
+		Context("with a saved cart item", func() {
+			var item domain.CartItem
+
+			BeforeEach(func() {
+				item = create()
 			})
 
-			It("lists it", func() {
+			It("includes the saved cart item", func() {
 				all, err := store.ListCartItems(GinkgoT().Context(), 10)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(all).To(HaveLen(1))
-				Expect(all[0].ID).To(Equal(created.ID))
+				Expect(all[0].ID).To(Equal(item.ID))
+			})
+		})
+	})
+
+	Describe("CreateCartItem", func() {
+		Context("with a cart and a product", func() {
+			var cart domain.Cart
+			var product domain.Product
+
+			BeforeEach(func() {
+				cart = factories.Cart(GinkgoT(), store)
+				product = factories.Product(GinkgoT(), store)
 			})
 
-			It("updates it", func() {
-				created.Quantity = 5
-				updated, err := store.UpdateCartItem(GinkgoT().Context(), created)
+			It("saves the cart item with an id", func() {
+				created, err := store.CreateCartItem(GinkgoT().Context(), domain.CartItem{CartID: cart.ID, ProductID: product.ID, Quantity: 2})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(created.ID).NotTo(BeZero())
+			})
+		})
+	})
+
+	Describe("UpdateCartItem", func() {
+		Context("with a saved cart item", func() {
+			var item domain.CartItem
+
+			BeforeEach(func() {
+				item = create()
+			})
+
+			It("stores the change", func() {
+				item.Quantity = 5
+				updated, err := store.UpdateCartItem(GinkgoT().Context(), item)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(updated.Quantity).To(BeEquivalentTo(5))
 			})
+		})
 
-			It("deletes it", func() {
+		Context("when the cart item is not there", func() {
+			It("is not found", func() {
+				// A valid-looking line, so Validate passes and the not-found
+				// check is what gets exercised.
+				_, err := store.UpdateCartItem(GinkgoT().Context(), domain.CartItem{ID: 999999999, CartID: 1, ProductID: 1, Quantity: 1})
+				Expect(err).To(MatchError(domain.ErrNotFound))
+			})
+		})
+	})
+
+	Describe("DeleteCartItem", func() {
+		DescribeTable("is not found for",
+			func(id string) {
+				Expect(store.DeleteCartItem(GinkgoT().Context(), id)).To(MatchError(domain.ErrNotFound))
+			},
+			Entry("a malformed id", "nope"),
+			Entry("an empty id", ""),
+			Entry("a well-formed id that names nothing", "999999999"),
+		)
+
+		Context("with a saved cart item", func() {
+			var item domain.CartItem
+
+			BeforeEach(func() {
+				item = create()
+			})
+
+			It("removes the cart item", func() {
+				id := strconv.FormatInt(item.ID, 10)
 				Expect(store.DeleteCartItem(GinkgoT().Context(), id)).To(Succeed())
 				_, err := store.GetCartItem(GinkgoT().Context(), id)
 				Expect(err).To(MatchError(domain.ErrNotFound))
