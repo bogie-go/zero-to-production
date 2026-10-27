@@ -14,7 +14,7 @@ import (
 )
 
 // cartItemsStore is the slice of the store this controller uses, declared
-// next to its caller (rule 2) and holding only the methods the actions call.
+// next to its caller and holding only the methods the actions call.
 type cartItemsStore interface {
 	FindOrCreateCartByToken(ctx context.Context, token string) (models.Cart, error)
 	AddCartItem(ctx context.Context, cartID, productID int64, quantity int32) (models.CartItem, error)

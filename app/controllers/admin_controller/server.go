@@ -15,7 +15,7 @@ import (
 )
 
 // staffStore is the slice of the store the namespace's own auth check
-// uses, declared here (rule 2) rather than in any one controller, since
+// uses, declared here rather than in any one controller, since
 // WithStaff below guards the whole /admin group, not one resource.
 type staffStore interface {
 	GetUser(ctx context.Context, id string) (models.User, error)

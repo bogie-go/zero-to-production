@@ -14,14 +14,14 @@ import (
 )
 
 // guestSessionsStore is the slice of the store this controller uses,
-// declared next to its caller (rule 2) and holding only the method the
+// declared next to its caller and holding only the method the
 // action calls.
 type guestSessionsStore interface {
 	FindOrCreateCartByToken(ctx context.Context, token string) (models.Cart, error)
 }
 
 // guestTokenMaker is the one method this controller needs from a
-// token.Maker (rule 2): mint a bearer token for a subject. *Server.Tokens()
+// token.Maker: mint a bearer token for a subject. *Server.Tokens()
 // satisfies it, the same Maker RequireUser verifies against.
 type guestTokenMaker interface {
 	Mint(subject string, ttl time.Duration) (string, error)

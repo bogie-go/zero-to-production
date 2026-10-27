@@ -57,7 +57,7 @@ func (ctl *ProductsController) SetupRoutes(router *gin.RouterGroup) {
 //
 // A handler converts HTTP into domain values, calls one service function,
 // and converts the result back. Nothing below app/controllers sees
-// *gin.Context (rule 5).
+// *gin.Context.
 func (ctl *ProductsController) Index(c *gin.Context) {
 	// ?category_id=N narrows the catalog to one category; without it, all.
 	var categoryID *int64
@@ -91,7 +91,7 @@ func (ctl *ProductsController) Index(c *gin.Context) {
 //
 // A handler converts HTTP into domain values, calls one service function,
 // and converts the result back. Nothing below app/controllers sees
-// *gin.Context (rule 5).
+// *gin.Context.
 func (ctl *ProductsController) Show(c *gin.Context) {
 	product, err := ctl.Store.GetActiveProduct(c.Request.Context(), c.Param("id"))
 	if err != nil {

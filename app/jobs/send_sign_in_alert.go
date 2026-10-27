@@ -31,7 +31,7 @@ type SendSignInAlertArgs struct {
 func (SendSignInAlertArgs) Kind() string { return "send_sign_in_alert" }
 
 // alertStore is the slice of the store this worker uses, declared here beside
-// its user (rule 2). *adapter.Store satisfies it.
+// its user. *adapter.Store satisfies it.
 type alertStore interface {
 	GetUser(ctx context.Context, id string) (models.User, error)
 }

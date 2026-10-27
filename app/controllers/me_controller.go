@@ -14,7 +14,7 @@ import (
 )
 
 // meStore is the slice of the store this controller uses, declared next to
-// its caller (rule 2).
+// its caller.
 type meStore interface {
 	GetUser(ctx context.Context, id string) (models.User, error)
 }

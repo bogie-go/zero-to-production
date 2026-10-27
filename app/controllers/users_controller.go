@@ -16,7 +16,7 @@ import (
 )
 
 // usersStore is the slice of the store this controller uses, declared next
-// to its caller (rule 2) and holding only the methods the actions call.
+// to its caller and holding only the methods the actions call.
 type usersStore interface {
 	RegisterUser(ctx context.Context, u models.User) (models.User, error)
 }

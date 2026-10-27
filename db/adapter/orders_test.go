@@ -20,14 +20,14 @@ var _ = Describe("Orders", func() {
 	}
 
 	Describe("GetOrder", func() {
-		DescribeTable("is not found for",
+		DescribeTable("returns ErrNotFound",
 			func(id string) {
 				_, err := store.GetOrder(GinkgoT().Context(), id)
 				Expect(err).To(MatchError(models.ErrNotFound))
 			},
-			Entry("a malformed id", "nope"),
-			Entry("an empty id", ""),
-			Entry("a well-formed id that names nothing", "999999999"),
+			Entry("when the id is not a number", "nope"),
+			Entry("when the id is empty", ""),
+			Entry("when no order has that id", "999999999"),
 		)
 
 		Context("with a saved order", func() {
@@ -104,13 +104,13 @@ var _ = Describe("Orders", func() {
 	})
 
 	Describe("DeleteOrder", func() {
-		DescribeTable("is not found for",
+		DescribeTable("returns ErrNotFound",
 			func(id string) {
 				Expect(store.DeleteOrder(GinkgoT().Context(), id)).To(MatchError(models.ErrNotFound))
 			},
-			Entry("a malformed id", "nope"),
-			Entry("an empty id", ""),
-			Entry("a well-formed id that names nothing", "999999999"),
+			Entry("when the id is not a number", "nope"),
+			Entry("when the id is empty", ""),
+			Entry("when no order has that id", "999999999"),
 		)
 
 		Context("with a saved order", func() {

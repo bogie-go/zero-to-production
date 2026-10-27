@@ -8,7 +8,7 @@ import (
 
 // User is a user. PasswordDigest is bcrypt's digest of the password, never
 // the password itself — set and checked by app/services/password, kept out
-// of here since this package imports nothing third-party (rule 3).
+// of here since this package imports nothing third-party.
 type User struct {
 	ID             int64
 	Email          string

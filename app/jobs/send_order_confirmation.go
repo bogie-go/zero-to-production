@@ -28,7 +28,7 @@ type SendOrderConfirmationArgs struct {
 func (SendOrderConfirmationArgs) Kind() string { return "send_order_confirmation" }
 
 // confirmationStore is the slice of the store this worker uses, declared here
-// beside its user (rule 2). *adapter.Store satisfies it.
+// beside its user. *adapter.Store satisfies it.
 type confirmationStore interface {
 	GetUser(ctx context.Context, id string) (models.User, error)
 	GetOrderForUser(ctx context.Context, userID int64, id string) (models.Order, []models.OrderLine, error)

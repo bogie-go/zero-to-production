@@ -14,14 +14,14 @@ var _ = Describe("Carts", func() {
 	// Whatever the id looks like, a cart that is not there is ErrNotFound, and
 	// a caller cannot tell a malformed id from one that names nothing.
 	Describe("GetCart", func() {
-		DescribeTable("is not found for",
+		DescribeTable("returns ErrNotFound",
 			func(id string) {
 				_, err := store.GetCart(GinkgoT().Context(), id)
 				Expect(err).To(MatchError(models.ErrNotFound))
 			},
-			Entry("a malformed id", "nope"),
-			Entry("an empty id", ""),
-			Entry("a well-formed id that names nothing", "999999999"),
+			Entry("when the id is not a number", "nope"),
+			Entry("when the id is empty", ""),
+			Entry("when no cart has that id", "999999999"),
 		)
 
 		Context("with a saved cart", func() {
@@ -89,13 +89,13 @@ var _ = Describe("Carts", func() {
 	})
 
 	Describe("DeleteCart", func() {
-		DescribeTable("is not found for",
+		DescribeTable("returns ErrNotFound",
 			func(id string) {
 				Expect(store.DeleteCart(GinkgoT().Context(), id)).To(MatchError(models.ErrNotFound))
 			},
-			Entry("a malformed id", "nope"),
-			Entry("an empty id", ""),
-			Entry("a well-formed id that names nothing", "999999999"),
+			Entry("when the id is not a number", "nope"),
+			Entry("when the id is empty", ""),
+			Entry("when no cart has that id", "999999999"),
 		)
 
 		Context("with a saved cart", func() {

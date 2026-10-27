@@ -11,7 +11,7 @@ import (
 )
 
 // userTokens is the slice of the token service this middleware uses,
-// declared here (rule 2). token.Maker satisfies it.
+// declared here. token.Maker satisfies it.
 type userTokens interface {
 	Verify(raw string) (token.Claims, error)
 }

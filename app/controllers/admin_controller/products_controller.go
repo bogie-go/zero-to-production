@@ -13,7 +13,7 @@ import (
 )
 
 // productsStore is the slice of the store this controller uses, declared
-// next to its caller (rule 2) and holding only the methods the actions
+// next to its caller and holding only the methods the actions
 // call. *adapter.Store satisfies it.
 type productsStore interface {
 	GetProduct(ctx context.Context, id string) (models.Product, error)

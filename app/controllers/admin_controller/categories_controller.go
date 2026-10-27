@@ -13,7 +13,7 @@ import (
 )
 
 // categoriesStore is the slice of the store this controller uses, declared
-// next to its caller (rule 2). *adapter.Store satisfies it.
+// next to its caller. *adapter.Store satisfies it.
 type categoriesStore interface {
 	ListCategoriesWithCounts(ctx context.Context) ([]models.Category, error)
 	GetCategory(ctx context.Context, id string) (models.Category, error)

@@ -81,15 +81,17 @@ var _ = Describe("Archiving products", func() {
 		})
 	})
 
-	DescribeTable("an unknown product cannot be archived",
-		func(id string) {
-			_, err := store.ArchiveProduct(GinkgoT().Context(), id)
-			Expect(err).To(MatchError(models.ErrNotFound))
-		},
-		Entry("a malformed id", "nope"),
-		Entry("an empty id", ""),
-		Entry("a well-formed id that names nothing", "999999999"),
-	)
+	Describe("ArchiveProduct", func() {
+		DescribeTable("returns ErrNotFound",
+			func(id string) {
+				_, err := store.ArchiveProduct(GinkgoT().Context(), id)
+				Expect(err).To(MatchError(models.ErrNotFound))
+			},
+			Entry("when the id is not a number", "nope"),
+			Entry("when the id is empty", ""),
+			Entry("when no product has that id", "999999999"),
+		)
+	})
 
 	Describe("a product in a cart or an order", func() {
 		var user models.User

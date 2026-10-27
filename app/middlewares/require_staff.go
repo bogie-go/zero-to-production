@@ -10,8 +10,7 @@ import (
 	"ecommerce/app/views"
 )
 
-// staffStore is the slice of the store RequireStaff uses, declared here
-// (rule 2).
+// staffStore is the slice of the store RequireStaff uses, declared here, where it is used.
 type staffStore interface {
 	GetUser(ctx context.Context, id string) (models.User, error)
 }

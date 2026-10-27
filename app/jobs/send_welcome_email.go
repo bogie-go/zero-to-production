@@ -24,7 +24,7 @@ type SendWelcomeEmailArgs struct {
 func (SendWelcomeEmailArgs) Kind() string { return "send_welcome_email" }
 
 // welcomeStore is the slice of the store this worker uses, declared here
-// beside its user (rule 2). *adapter.Store satisfies it.
+// beside its user. *adapter.Store satisfies it.
 type welcomeStore interface {
 	GetUser(ctx context.Context, id string) (models.User, error)
 }

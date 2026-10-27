@@ -22,14 +22,14 @@ func ruleNames(rules []models.PriceRule) []string {
 var _ = Describe("PriceRules", func() {
 
 	Describe("GetPriceRule", func() {
-		DescribeTable("is not found for",
+		DescribeTable("returns ErrNotFound",
 			func(id string) {
 				_, err := store.GetPriceRule(GinkgoT().Context(), id)
 				Expect(err).To(MatchError(models.ErrNotFound))
 			},
-			Entry("a malformed id", "nope"),
-			Entry("an empty id", ""),
-			Entry("a well-formed id that names nothing", "999999999"),
+			Entry("when the id is not a number", "nope"),
+			Entry("when the id is empty", ""),
+			Entry("when no price rule has that id", "999999999"),
 		)
 	})
 
@@ -43,13 +43,13 @@ var _ = Describe("PriceRules", func() {
 	})
 
 	Describe("DeletePriceRule", func() {
-		DescribeTable("is not found for",
+		DescribeTable("returns ErrNotFound",
 			func(id string) {
 				Expect(store.DeletePriceRule(GinkgoT().Context(), id)).To(MatchError(models.ErrNotFound))
 			},
-			Entry("a malformed id", "nope"),
-			Entry("an empty id", ""),
-			Entry("a well-formed id that names nothing", "999999999"),
+			Entry("when the id is not a number", "nope"),
+			Entry("when the id is empty", ""),
+			Entry("when no price rule has that id", "999999999"),
 		)
 	})
 
