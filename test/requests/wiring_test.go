@@ -11,7 +11,8 @@ import (
 // specs say it is all connected: nothing left unconstructed, nothing declared
 // and not mounted.
 var _ = Describe("The wired server", func() {
-	// nilFields names every pointer field of s that was never assigned.
+	// nilFields names every pointer field of s that was never assigned. A namespace
+	// (admin_controllers.Server) is entered.
 	var nilFields func(prefix string, s any) []string
 	nilFields = func(prefix string, s any) []string {
 		var missing []string
