@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestDomain(t *testing.T) {
+func TestModels(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Domain")
+	RunSpecs(t, "Models")
 }
