@@ -71,7 +71,7 @@ func (s *Store) UpdateCartItemQuantity(ctx context.Context, cartID int64, id str
 	case err != nil:
 		return models.CartItem{}, fmt.Errorf("store: get cart item %s for cart %d: %w", id, cartID, err)
 	}
-	item := cart_itemFromRow(row)
+	item := cartItemFromRow(row)
 	product, err := s.q.GetProduct(ctx, item.ProductID)
 	if err != nil {
 		return models.CartItem{}, fmt.Errorf("store: get product %d: %w", item.ProductID, err)

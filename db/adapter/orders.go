@@ -18,7 +18,7 @@ import (
 // Written by `bogie g model`: overwritten whole on the next run. A
 // hand-written addition goes in orders_extra.go, not here.
 
-// CreateOrder validates a order, inserts it, and returns it with its id and
+// CreateOrder validates an order, inserts it, and returns it with its id and
 // timestamps. Validation runs on save, so every caller
 // gets it and none can forget it.
 func (s *Store) CreateOrder(ctx context.Context, o models.Order) (models.Order, error) {
@@ -61,7 +61,7 @@ func (s *Store) ListOrders(ctx context.Context, limit int32) ([]models.Order, er
 	return out, nil
 }
 
-// UpdateOrder validates a order, writes its columns, and returns the stored row.
+// UpdateOrder validates an order, writes its columns, and returns the stored row.
 func (s *Store) UpdateOrder(ctx context.Context, o models.Order) (models.Order, error) {
 	if err := o.Validate(); err != nil {
 		return models.Order{}, err
@@ -77,7 +77,7 @@ func (s *Store) UpdateOrder(ctx context.Context, o models.Order) (models.Order, 
 	return orderFromRow(row), nil
 }
 
-// DeleteOrder removes a order, and says so if there was none.
+// DeleteOrder removes an order, and says so if there was none.
 func (s *Store) DeleteOrder(ctx context.Context, id string) error {
 	pk, err := parseID(id)
 	if err != nil {

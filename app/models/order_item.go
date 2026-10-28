@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// OrderItem is a order_item. Imports nothing third-party: ids are int64s here
+// OrderItem is an order_item. Imports nothing third-party: ids are int64s here
 // and become bigint at the store boundary.
 //
 // UnitPriceCents is the product's price at the moment it was ordered, copied

@@ -20,7 +20,7 @@ func (s *Store) GetPriceRuleByName(ctx context.Context, name string) (models.Pri
 	case err != nil:
 		return models.PriceRule{}, fmt.Errorf("store: get price rule by name %q: %w", name, err)
 	}
-	return price_ruleFromRow(row), nil
+	return priceRuleFromRow(row), nil
 }
 
 // FindOrCreatePriceRuleByName returns the price rule named p.Name, creating
@@ -49,7 +49,7 @@ func (s *Store) ListActivePriceRules(ctx context.Context) ([]models.PriceRule, e
 	}
 	out := make([]models.PriceRule, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, price_ruleFromRow(r))
+		out = append(out, priceRuleFromRow(r))
 	}
 	return out, nil
 }
@@ -63,7 +63,7 @@ func (s *Store) ListAllPriceRules(ctx context.Context) ([]models.PriceRule, erro
 	}
 	out := make([]models.PriceRule, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, price_ruleFromRow(r))
+		out = append(out, priceRuleFromRow(r))
 	}
 	return out, nil
 }
@@ -82,5 +82,5 @@ func (s *Store) SetPriceRuleActive(ctx context.Context, id string, active bool) 
 	case err != nil:
 		return models.PriceRule{}, fmt.Errorf("store: set price rule %s active: %w", id, err)
 	}
-	return price_ruleFromRow(row), nil
+	return priceRuleFromRow(row), nil
 }

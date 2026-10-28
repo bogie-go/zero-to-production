@@ -43,10 +43,10 @@ func NewCartItemsController(store cartItemsStore, log *slog.Logger) *CartItemsCo
 // whole controller needs goes here; which group it sits in, and so how it is
 // exposed, is decided by the routes.go that calls this.
 func (ctl *CartItemsController) SetupRoutes(router *gin.RouterGroup) {
-	cart_items := router.Group("/cart_items")
-	cart_items.POST("", ctl.Create)
-	cart_items.PATCH("/:id", ctl.Update)
-	cart_items.DELETE("/:id", ctl.Destroy)
+	cartItems := router.Group("/cart_items")
+	cartItems.POST("", ctl.Create)
+	cartItems.PATCH("/:id", ctl.Update)
+	cartItems.DELETE("/:id", ctl.Destroy)
 }
 
 // Create handles POST /cart_items: add a product to the current cart, or

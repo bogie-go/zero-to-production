@@ -31,7 +31,7 @@ func (s *Store) CreatePriceRule(ctx context.Context, p models.PriceRule) (models
 	if err != nil {
 		return models.PriceRule{}, fmt.Errorf("store: create price_rule: %w", err)
 	}
-	return price_ruleFromRow(row), nil
+	return priceRuleFromRow(row), nil
 }
 
 // GetPriceRule finds one price_rule. An id that is not a valid id is simply not found.
@@ -47,7 +47,7 @@ func (s *Store) GetPriceRule(ctx context.Context, id string) (models.PriceRule, 
 	case err != nil:
 		return models.PriceRule{}, fmt.Errorf("store: get price_rule %s: %w", id, err)
 	}
-	return price_ruleFromRow(row), nil
+	return priceRuleFromRow(row), nil
 }
 
 // ListPriceRules returns the newest price_rules first, at most limit of them.
@@ -58,7 +58,7 @@ func (s *Store) ListPriceRules(ctx context.Context, limit int32) ([]models.Price
 	}
 	out := make([]models.PriceRule, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, price_ruleFromRow(r))
+		out = append(out, priceRuleFromRow(r))
 	}
 	return out, nil
 }
@@ -76,7 +76,7 @@ func (s *Store) UpdatePriceRule(ctx context.Context, p models.PriceRule) (models
 	case err != nil:
 		return models.PriceRule{}, fmt.Errorf("store: update price_rule %v: %w", p.ID, err)
 	}
-	return price_ruleFromRow(row), nil
+	return priceRuleFromRow(row), nil
 }
 
 // DeletePriceRule removes a price_rule, and says so if there was none.
@@ -95,7 +95,7 @@ func (s *Store) DeletePriceRule(ctx context.Context, id string) error {
 	return nil
 }
 
-func price_ruleFromRow(r sqlc.PriceRule) models.PriceRule {
+func priceRuleFromRow(r sqlc.PriceRule) models.PriceRule {
 	return models.PriceRule{
 		ID:         r.ID,
 		Name:       r.Name,

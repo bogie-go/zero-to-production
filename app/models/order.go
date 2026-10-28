@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Order is a order. Imports nothing third-party: ids are int64s here and
+// Order is an order. Imports nothing third-party: ids are int64s here and
 // become bigint at the store boundary.
 //
 // SubtotalCents, DiscountCents and TotalCents are the cart's totals at the
