@@ -1,4 +1,4 @@
-package admin_controller
+package admin_controllers
 
 import (
 	"context"
@@ -188,7 +188,7 @@ func (ctl *ProductsController) fail(c *gin.Context, err error) {
 // The controller converts between the domain and the wire. views never
 // imports models, so this is where the conversions live — the same split
 // the public ProductsController uses, duplicated rather than shared, since
-// admin_controller and controllers are different packages and this is the
+// admin_controllers and controllers are different packages and this is the
 // only place it's needed twice.
 
 func productView(p models.Product) views.ProductResponse {

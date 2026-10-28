@@ -1,7 +1,7 @@
-// Package admin_controller is the admin namespace: the controllers mounted under
+// Package admin_controllers is the admin namespace: the controllers mounted under
 // /admin. One file per
 // controller; the group and its shared middleware in routes.go.
-package admin_controller
+package admin_controllers
 
 import (
 	"context"

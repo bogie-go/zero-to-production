@@ -1,4 +1,4 @@
-package admin_controller
+package admin_controllers
 
 import (
 	"context"

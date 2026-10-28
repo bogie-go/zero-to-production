@@ -18,7 +18,7 @@ type categoriesStore interface {
 }
 
 // CategoriesController is the shop's read-only view of categories: what the
-// catalog's filter lists. Managing them is the admin's (admin_controller).
+// catalog's filter lists. Managing them is the admin's (admin_controllers).
 type CategoriesController struct {
 	Store categoriesStore
 	Log   *slog.Logger

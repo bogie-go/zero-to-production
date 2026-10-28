@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"ecommerce/app/controllers/admin_controller"
+	"ecommerce/app/controllers/admin_controllers"
 	"ecommerce/config"
 )
 
@@ -34,7 +34,7 @@ type Server struct {
 	Users         *UsersController
 	Sessions      *SessionsController
 	Orders        *OrdersController
-	Admin         *admin_controller.Server
+	Admin         *admin_controllers.Server
 	Me            *MeController
 	Categories    *CategoriesController
 	Health        *HealthController

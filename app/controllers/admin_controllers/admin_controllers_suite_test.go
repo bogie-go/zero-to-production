@@ -1,4 +1,4 @@
-package admin_controller_test
+package admin_controllers_test
 
 import (
 	"testing"

@@ -13,7 +13,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"ecommerce/app/controllers"
-	"ecommerce/app/controllers/admin_controller"
+	"ecommerce/app/controllers/admin_controllers"
 	"ecommerce/app/jobs"
 	"ecommerce/app/models"
 	"ecommerce/app/services/cartmerge"
@@ -126,14 +126,14 @@ func NewApplication(ctx context.Context) (*Application, error) {
 	server.Users = controllers.NewUsersController(store, server.Tokens(), merger, log)
 	server.Sessions = controllers.NewSessionsController(store, server.Tokens(), merger, jobs.SignInAlerts{Queue: queue}, log)
 	server.Orders = controllers.NewOrdersController(store, log)
-	server.Admin = admin_controller.NewServer(store, server.Tokens(), log)
-	server.Admin.Products = admin_controller.NewProductsController(store, log)
+	server.Admin = admin_controllers.NewServer(store, server.Tokens(), log)
+	server.Admin.Products = admin_controllers.NewProductsController(store, log)
 	server.Me = controllers.NewMeController(store, log)
 	server.Categories = controllers.NewCategoriesController(store, log)
 	server.Health = controllers.NewHealthController(store, log)
-	server.Admin.Categories = admin_controller.NewCategoriesController(store, log)
-	server.Admin.PriceRules = admin_controller.NewPriceRulesController(store, log)
-	server.Admin.Ops = admin_controller.NewOpsController(store, log, cfg.Server.Version, cfg.Env)
+	server.Admin.Categories = admin_controllers.NewCategoriesController(store, log)
+	server.Admin.PriceRules = admin_controllers.NewPriceRulesController(store, log)
+	server.Admin.Ops = admin_controllers.NewOpsController(store, log, cfg.Server.Version, cfg.Env)
 	// bogie:wire
 	server.SetupRoutes()
 
