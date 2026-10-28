@@ -1,7 +1,7 @@
 // Package views shapes what goes out over HTTP, and what comes in.
 //
 // It earns its place for a reason beyond tidiness: these are published
-// contracts, and a domain struct doubling as a wire struct means renaming a
+// contracts, and a model struct doubling as a wire struct means renaming a
 // field silently changes an API. Nothing in here imports app/models; the
 // controller converts.
 package views
