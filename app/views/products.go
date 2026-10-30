@@ -27,15 +27,3 @@ type ProductsResponse struct {
 	Products   []ProductResponse `json:"products"`
 	Pagination Pagination        `json:"pagination"`
 }
-
-// ProductRequest is the body of POST and PATCH /admin/products. A PATCH
-// sends every field, not a partial update — there is no merge-with-existing
-// here, the same as every other write in this app.
-type ProductRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	PriceCents  int32  `json:"price_cents"`
-	Stock       int32  `json:"stock"`
-	ImageUrl    string `json:"image_url"`
-	CategoryID  *int64 `json:"category_id"`
-}

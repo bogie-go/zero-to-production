@@ -94,7 +94,7 @@ func (ctl *ProductsController) Show(c *gin.Context) {
 
 // Create handles POST /admin/products.
 func (ctl *ProductsController) Create(c *gin.Context) {
-	var req views.ProductRequest
+	var req views.AdminProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
@@ -112,7 +112,7 @@ func (ctl *ProductsController) Create(c *gin.Context) {
 
 // Update handles PATCH /admin/products/:id.
 func (ctl *ProductsController) Update(c *gin.Context) {
-	var req views.ProductRequest
+	var req views.AdminProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
@@ -191,8 +191,8 @@ func (ctl *ProductsController) fail(c *gin.Context, err error) {
 // admin_controllers and controllers are different packages and this is the
 // only place it's needed twice.
 
-func productView(p models.Product) views.ProductResponse {
-	return views.ProductResponse{
+func productView(p models.Product) views.AdminProductResponse {
+	return views.AdminProductResponse{
 		ID:          p.ID,
 		Name:        p.Name,
 		Description: p.Description,
@@ -206,8 +206,8 @@ func productView(p models.Product) views.ProductResponse {
 	}
 }
 
-func productsView(products []models.Product, pagination views.Pagination) views.ProductsResponse {
-	out := views.ProductsResponse{Products: make([]views.ProductResponse, 0, len(products)), Pagination: pagination}
+func productsView(products []models.Product, pagination views.Pagination) views.AdminProductsResponse {
+	out := views.AdminProductsResponse{Products: make([]views.AdminProductResponse, 0, len(products)), Pagination: pagination}
 	for _, p := range products {
 		out.Products = append(out.Products, productView(p))
 	}

@@ -53,7 +53,7 @@ func (ctl *CategoriesController) Index(c *gin.Context) {
 		ctl.fail(c, err)
 		return
 	}
-	out := views.CategoriesResponse{Categories: make([]views.CategoryResponse, 0, len(categories))}
+	out := views.AdminCategoriesResponse{Categories: make([]views.AdminCategoryResponse, 0, len(categories))}
 	for _, cat := range categories {
 		out.Categories = append(out.Categories, categoryView(cat))
 	}
@@ -72,7 +72,7 @@ func (ctl *CategoriesController) Show(c *gin.Context) {
 
 // Create handles POST /admin/categories.
 func (ctl *CategoriesController) Create(c *gin.Context) {
-	var req views.CategoryRequest
+	var req views.AdminCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
@@ -87,7 +87,7 @@ func (ctl *CategoriesController) Create(c *gin.Context) {
 
 // Update handles PATCH /admin/categories/:id.
 func (ctl *CategoriesController) Update(c *gin.Context) {
-	var req views.CategoryRequest
+	var req views.AdminCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
@@ -131,6 +131,6 @@ func (ctl *CategoriesController) fail(c *gin.Context, err error) {
 	}
 }
 
-func categoryView(c models.Category) views.CategoryResponse {
-	return views.CategoryResponse{ID: c.ID, Name: c.Name, ProductCount: c.ProductCount}
+func categoryView(c models.Category) views.AdminCategoryResponse {
+	return views.AdminCategoryResponse{ID: c.ID, Name: c.Name, ProductCount: c.ProductCount}
 }

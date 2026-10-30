@@ -72,7 +72,7 @@ func (ctl *PriceRulesController) Index(c *gin.Context) {
 		ctl.fail(c, err)
 		return
 	}
-	out := views.PriceRulesResponse{PriceRules: make([]views.PriceRuleResponse, 0, len(rules))}
+	out := views.AdminPriceRulesResponse{PriceRules: make([]views.AdminPriceRuleResponse, 0, len(rules))}
 	for _, r := range rules {
 		out.PriceRules = append(out.PriceRules, ctl.view(r))
 	}
@@ -107,7 +107,7 @@ func (ctl *PriceRulesController) Show(c *gin.Context) {
 
 // Create handles POST /admin/price_rules.
 func (ctl *PriceRulesController) Create(c *gin.Context) {
-	var req views.PriceRuleRequest
+	var req views.AdminPriceRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
@@ -128,7 +128,7 @@ func (ctl *PriceRulesController) Create(c *gin.Context) {
 // Update handles PATCH /admin/price_rules/:id. Every field is sent, as for
 // every other write here; the id and timestamps carry over.
 func (ctl *PriceRulesController) Update(c *gin.Context) {
-	var req views.PriceRuleRequest
+	var req views.AdminPriceRuleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, views.Error(err))
 		return
@@ -183,7 +183,7 @@ func (ctl *PriceRulesController) setActive(c *gin.Context, active bool) {
 // kind's own decoder (pricing.Load), and what is stored is that decoded rule
 // written back out, so unknown keys in the request never reach the database
 // and the JSON is always in the shape the engine reads.
-func ruleFromRequest(base models.PriceRule, req views.PriceRuleRequest) (models.PriceRule, error) {
+func ruleFromRequest(base models.PriceRule, req views.AdminPriceRuleRequest) (models.PriceRule, error) {
 	props := req.Properties
 	if len(props) == 0 {
 		props = json.RawMessage(`{}`)
@@ -217,14 +217,14 @@ func status(r models.PriceRule, now time.Time) string {
 	return "active"
 }
 
-func (ctl *PriceRulesController) view(r models.PriceRule) views.PriceRuleResponse {
+func (ctl *PriceRulesController) view(r models.PriceRule) views.AdminPriceRuleResponse {
 	label := r.Kind
 	for _, s := range pricing.Specs() {
 		if s.Kind == r.Kind {
 			label = s.Label
 		}
 	}
-	return views.PriceRuleResponse{
+	return views.AdminPriceRuleResponse{
 		ID: r.ID, Name: r.Name, Kind: r.Kind, KindLabel: label, Summary: pricing.Summarize(r.Kind, r.Properties),
 		Properties: r.Properties, Active: r.Active, Priority: r.Priority, StartsAt: r.StartsAt, EndsAt: r.EndsAt,
 		Status: status(r, ctl.now()),

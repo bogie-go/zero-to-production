@@ -5,11 +5,11 @@ import (
 	"time"
 )
 
-// PriceRuleResponse is one price rule on the wire. Summary is the rule in a
+// AdminPriceRuleResponse is one price rule on the wire. Summary is the rule in a
 // sentence ("20% off"), and Status where it stands right now: "active",
 // "off" (switched off), "scheduled" (on, but not started) or "ended" (on, but
 // past its end).
-type PriceRuleResponse struct {
+type AdminPriceRuleResponse struct {
 	ID         int64           `json:"id"`
 	Name       string          `json:"name"`
 	Kind       string          `json:"kind"`
@@ -23,15 +23,15 @@ type PriceRuleResponse struct {
 	Status     string          `json:"status"`
 }
 
-// PriceRulesResponse is a listing, in the order the engine runs the rules.
-type PriceRulesResponse struct {
-	PriceRules []PriceRuleResponse `json:"price_rules"`
+// AdminPriceRulesResponse is a listing, in the order the engine runs the rules.
+type AdminPriceRulesResponse struct {
+	PriceRules []AdminPriceRuleResponse `json:"price_rules"`
 }
 
-// PriceRuleRequest is the body of POST and PATCH /admin/price_rules.
+// AdminPriceRuleRequest is the body of POST and PATCH /admin/price_rules.
 // Properties is whatever the kind takes (see KindsResponse); the server
 // validates it with the kind's own rules.
-type PriceRuleRequest struct {
+type AdminPriceRuleRequest struct {
 	Name       string          `json:"name"`
 	Kind       string          `json:"kind"`
 	Properties json.RawMessage `json:"properties"`

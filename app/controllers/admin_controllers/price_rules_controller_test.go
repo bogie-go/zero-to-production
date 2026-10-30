@@ -44,7 +44,7 @@ var _ = Describe("/admin/price_rules", func() {
 				})
 
 				It("says where each rule stands: active, off, scheduled or ended", func() {
-					var list views.PriceRulesResponse
+					var list views.AdminPriceRulesResponse
 					app.Get("/admin/price_rules").AsUser(staff).Do().Status(http.StatusOK).JSON(&list)
 
 					status := map[string]string{}
@@ -71,7 +71,7 @@ var _ = Describe("/admin/price_rules", func() {
 			})
 
 			It("updates it", func() {
-				var updated views.PriceRuleResponse
+				var updated views.AdminPriceRuleResponse
 				app.Patch(path, `{"name":"Renamed","kind":"fixed_discount","properties":{"amount_cents":500},"active":true,"priority":7}`).
 					AsUser(staff).Do().Status(http.StatusOK).JSON(&updated)
 				Expect(updated.ID).To(Equal(rule.ID))
@@ -105,7 +105,7 @@ var _ = Describe("/admin/price_rules", func() {
 			It("is closed to the customer, who changes nothing", func() {
 				app.Post("/admin/price_rules", `{"name":"x","kind":"fixed_discount","properties":{"amount_cents":1}}`).AsUser(customer).Do().Status(http.StatusForbidden)
 
-				var list views.PriceRulesResponse
+				var list views.AdminPriceRulesResponse
 				app.Get("/admin/price_rules").AsUser(staff).Do().JSON(&list)
 				Expect(list.PriceRules).To(BeEmpty())
 			})
@@ -123,7 +123,7 @@ var _ = Describe("/admin/price_rules", func() {
 			const spring = `{"name":"Spring sale","kind":"fixed_discount","properties":{"amount_cents":250,"junk":1},"active":false}`
 
 			It("creates a rule that is off, with a summary, dropping unknown keys", func() {
-				var rule views.PriceRuleResponse
+				var rule views.AdminPriceRuleResponse
 				app.Post("/admin/price_rules", spring).AsUser(staff).Do().Status(http.StatusCreated).JSON(&rule)
 				Expect(rule.Status).To(Equal("off"))
 				Expect(rule.Summary).NotTo(BeEmpty())
@@ -134,7 +134,7 @@ var _ = Describe("/admin/price_rules", func() {
 				var path string
 
 				BeforeEach(func() {
-					var rule views.PriceRuleResponse
+					var rule views.AdminPriceRuleResponse
 					app.Post("/admin/price_rules", spring).AsUser(staff).Do().Status(http.StatusCreated).JSON(&rule)
 					path = "/admin/price_rules/" + strconv.FormatInt(rule.ID, 10)
 				})

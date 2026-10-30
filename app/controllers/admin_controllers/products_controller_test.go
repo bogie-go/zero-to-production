@@ -22,16 +22,16 @@ var _ = Describe("/admin/products", func() {
 
 		Describe("the collection", func() {
 			It("refuses a product without a name", func() {
-				app.Post("/admin/products", views.ProductRequest{Name: ""}).AsUser(staff).Do().Status(http.StatusUnprocessableEntity)
+				app.Post("/admin/products", views.AdminProductRequest{Name: ""}).AsUser(staff).Do().Status(http.StatusUnprocessableEntity)
 			})
 
 			Context("with a category", func() {
 				var category models.Category
-				var request views.ProductRequest
+				var request views.AdminProductRequest
 
 				BeforeEach(func() {
 					category = factories.Category(GinkgoT(), app.Store)
-					request = views.ProductRequest{
+					request = views.AdminProductRequest{
 						Name: "Desk Lamp", Description: "warm light", PriceCents: 2500, Stock: 4, ImageUrl: "/lamp.webp", CategoryID: &category.ID,
 					}
 				})
@@ -44,7 +44,7 @@ var _ = Describe("/admin/products", func() {
 					var id string
 
 					BeforeEach(func() {
-						var created views.ProductResponse
+						var created views.AdminProductResponse
 						app.Post("/admin/products", request).AsUser(staff).Do().Status(http.StatusCreated).JSON(&created)
 						id = strconv.FormatInt(created.ID, 10)
 					})
@@ -54,7 +54,7 @@ var _ = Describe("/admin/products", func() {
 					})
 
 					Context("when it is archived", func() {
-						var all views.ProductsResponse
+						var all views.AdminProductsResponse
 
 						BeforeEach(func() {
 							app.Post("/admin/products/"+id+"/archive", nil).AsUser(staff).Do().Status(http.StatusOK)
@@ -90,14 +90,14 @@ var _ = Describe("/admin/products", func() {
 				})
 
 				It("shows it", func() {
-					var shown views.ProductResponse
+					var shown views.AdminProductResponse
 					app.Get(path).AsUser(staff).Do().Status(http.StatusOK).JSON(&shown)
 					Expect(shown.ID).To(Equal(product.ID))
 				})
 
 				It("updates it", func() {
-					var updated views.ProductResponse
-					app.Patch(path, views.ProductRequest{Name: "Renamed", PriceCents: 1234, Stock: 3, ImageUrl: "/r.webp"}).
+					var updated views.AdminProductResponse
+					app.Patch(path, views.AdminProductRequest{Name: "Renamed", PriceCents: 1234, Stock: 3, ImageUrl: "/r.webp"}).
 						AsUser(staff).Do().Status(http.StatusOK).JSON(&updated)
 					Expect(updated.ID).To(Equal(product.ID), "the id is carried over")
 					Expect(updated.Name).To(Equal("Renamed"))
@@ -110,7 +110,7 @@ var _ = Describe("/admin/products", func() {
 				})
 
 				It("archives it", func() {
-					var archived views.ProductResponse
+					var archived views.AdminProductResponse
 					app.Post(path+"/archive", nil).AsUser(staff).Do().Status(http.StatusOK).JSON(&archived)
 					Expect(archived.ArchivedAt).NotTo(BeNil())
 				})
@@ -121,7 +121,7 @@ var _ = Describe("/admin/products", func() {
 					})
 
 					It("restores it, with archived_at null again", func() {
-						var restored views.ProductResponse
+						var restored views.AdminProductResponse
 						app.Post(path+"/restore", nil).AsUser(staff).Do().Status(http.StatusOK).JSON(&restored)
 						Expect(restored.ArchivedAt).To(BeNil())
 					})
@@ -147,14 +147,14 @@ var _ = Describe("/admin/products", func() {
 					})
 
 					expectUntouched := func() {
-						var list views.ProductsResponse
+						var list views.AdminProductsResponse
 						app.Get("/admin/products").AsUser(staff).Do().JSON(&list)
 						Expect(list.Products).To(HaveLen(1))
 						Expect(list.Products[0].ArchivedAt).To(BeNil())
 					}
 
 					It("cannot create a product", func() {
-						app.Post("/admin/products", views.ProductRequest{Name: "Sneaky", PriceCents: 1, Stock: 1, ImageUrl: "/s"}).AsUser(customer).Do().Status(http.StatusForbidden)
+						app.Post("/admin/products", views.AdminProductRequest{Name: "Sneaky", PriceCents: 1, Stock: 1, ImageUrl: "/s"}).AsUser(customer).Do().Status(http.StatusForbidden)
 						expectUntouched()
 					})
 
@@ -165,7 +165,7 @@ var _ = Describe("/admin/products", func() {
 				})
 
 				Context("with twenty-one more products", func() {
-					var list views.ProductsResponse
+					var list views.AdminProductsResponse
 
 					BeforeEach(func() {
 						for i := 0; i < 21; i++ {

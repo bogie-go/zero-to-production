@@ -12,8 +12,3 @@ type CategoryResponse struct {
 type CategoriesResponse struct {
 	Categories []CategoryResponse `json:"categories"`
 }
-
-// CategoryRequest is the body of POST and PATCH /admin/categories.
-type CategoryRequest struct {
-	Name string `json:"name"`
-}
