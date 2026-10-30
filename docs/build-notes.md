@@ -773,3 +773,12 @@ How we got there, in the order the arguments went (worth telling in the chapter 
 Mechanical consequences: the adapter qualifies sqlc's types (`sqlc.Product`, `sqlc.Queries`); `withTx` passes its closure the `pgx.Tx` as well as the bound queries, because the old helper reached into sqlc's unexported field, which only worked while they shared a package; and the model specs became `package adapter_test`, in `db/adapter` beside the code they test.
 
 An existing Bogie app cannot take this with `app:update` (it renames two packages); see Bogie's `docs/STATUS.md`. Bogie `main` generates this layout; there is no release yet, so the shop's `bogie.toml` still says v0.4.2.
+
+## Products in many categories (2026-10-30)
+
+Chapter 16 puts a product in many categories, so the shop matches: `products.category_id` is gone and a join table, `product_categories`, replaces it (`bogie g model product_category product:references category:references`, with `ON DELETE CASCADE` and a unique index on the pair edited in by hand). One migration moves each product's category into the join table and drops the column; `bogie model:sync products` then removed `CategoryID` from the model, queries and store, and left one conflict where we had also hand-removed `archived_at` from Create/Update (resolved by keeping ours).
+
+- `PUT /admin/products/:id/categories` takes `{"category_ids": [...]}` and makes the product's categories exactly that set, in one transaction (`Store.SetProductCategories`): ids are de-duplicated, the product row is locked with `FOR UPDATE`, and a category that does not exist is a 422 that changes nothing. Inside the transaction the store calls sqlc directly, so it maps SQLSTATE 23503 itself.
+- `GET /products/:id` and `GET /admin/products/:id` return the product with `categories: [{id, name}]`. The lists no longer carry a category; `category_id` and `category_name` are gone from every product response, and the admin form is a set of tick boxes saved with the PUT.
+- The catalog filter is an `EXISTS` over `product_categories`, not a JOIN, so a product in two categories is listed once. The category counts are two LEFT JOINs with the archive check in `ON`, so an empty category, or one whose only product is archived, still shows with 0.
+- Where the chapter and the shop differ: the shop already paged the catalog (`pagination` object, `page`/`per_page`) and answers a bad `category_id` with 422, not 400.

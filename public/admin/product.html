@@ -35,14 +35,13 @@
             <div class="wide"><label for="description">Description</label><textarea id="description" rows="3" x-model="form.description"></textarea></div>
             <div><label for="price">Price (USD)</label><input id="price" x-model="form.price" inputmode="decimal" required></div>
             <div><label for="stock">Stock</label><input id="stock" type="number" min="0" step="1" x-model="form.stock" required></div>
-            <div class="wide"><label for="category">Category</label>
-              <!-- :selected on each option, not just x-model on the select: the
-                   options are rendered after the select is bound, and a value
-                   set before its option exists is silently dropped. -->
-              <select id="category" x-model="form.category_id">
-                <option value="" :selected="!form.category_id">No category</option>
-                <template x-for="c in categories" :key="c.id"><option :value="String(c.id)" :selected="String(c.id) === form.category_id" x-text="c.name"></option></template>
-              </select></div>
+            <div class="wide"><label>Categories</label>
+              <!-- A product is in many categories: tick every one it belongs
+                   in. They are saved as a set, with PUT /admin/products/:id/categories. -->
+              <p class="state" x-show="categories.length === 0">No categories yet.</p>
+              <template x-for="c in categories" :key="c.id">
+                <label class="check"><input type="checkbox" :value="c.id" x-model.number="form.category_ids"> <span x-text="c.name"></span></label>
+              </template></div>
             <div class="wide"><label for="image">Image URL</label><input id="image" x-model="form.image_url" placeholder="/images/products/example.webp"></div>
           </div>
           <p class="err" x-show="formError" x-text="formError"></p>
@@ -70,7 +69,7 @@
           id: null,
           notFound: false,
           categories: [],
-          form: { name: '', description: '', price: '', stock: '0', image_url: '', category_id: '' },
+          form: { name: '', description: '', price: '', stock: '0', image_url: '', category_ids: [] },
           formError: '',
           saving: false,
           async load() {
@@ -85,7 +84,7 @@
                 if (!res.ok) throw new Error('status ' + res.status);
                 const p = await res.json();
                 this.form = { name: p.name, description: p.description, price: (p.price_cents / 100).toFixed(2), stock: String(p.stock),
-                              image_url: p.image_url, category_id: p.category_id ? String(p.category_id) : '' };
+                              image_url: p.image_url, category_ids: p.categories.map((c) => c.id) };
               }
             } catch (e) {
               this.error = 'Could not load the product: ' + e.message;
@@ -105,11 +104,17 @@
                 body: JSON.stringify({
                   name: this.form.name, description: this.form.description, price_cents: cents,
                   stock: parseInt(this.form.stock, 10), image_url: this.form.image_url,
-                  category_id: this.form.category_id ? parseInt(this.form.category_id, 10) : null,
                 }),
               });
               const data = await res.json();
               if (!res.ok) throw new Error(friendly(data.error) || 'status ' + res.status);
+              // The product is saved; now the set of categories it is in.
+              const set = await this.api('/admin/products/' + data.id + '/categories', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category_ids: this.form.category_ids }),
+              });
+              if (!set.ok) throw new Error(friendly((await set.json()).error) || 'status ' + set.status);
               location.href = '/admin/products.html';
             } catch (e) {
               this.formError = e.message;

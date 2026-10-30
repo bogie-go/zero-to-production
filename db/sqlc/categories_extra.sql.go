@@ -27,10 +27,44 @@ func (q *Queries) GetCategoryByName(ctx context.Context, name string) (Category,
 	return i, err
 }
 
+const listCategoriesForProduct = `-- name: ListCategoriesForProduct :many
+SELECT c.id, c.name, c.created_at, c.updated_at FROM categories c
+JOIN product_categories pc ON pc.category_id = c.id
+WHERE pc.product_id = $1
+ORDER BY c.name
+`
+
+// The categories one product is in: the "through" of a many-to-many.
+func (q *Queries) ListCategoriesForProduct(ctx context.Context, productID int64) ([]Category, error) {
+	rows, err := q.db.Query(ctx, listCategoriesForProduct, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Category{}
+	for rows.Next() {
+		var i Category
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCategoriesWithCounts = `-- name: ListCategoriesWithCounts :many
 SELECT c.id, c.name, c.created_at, c.updated_at, COUNT(p.id) AS product_count
 FROM categories c
-LEFT JOIN products p ON p.category_id = c.id AND p.archived_at IS NULL
+LEFT JOIN product_categories pc ON pc.category_id = c.id
+LEFT JOIN products p ON p.id = pc.product_id AND p.archived_at IS NULL
 GROUP BY c.id
 ORDER BY c.name
 `
@@ -43,8 +77,10 @@ type ListCategoriesWithCountsRow struct {
 	ProductCount int64
 }
 
-// Every category with how many ACTIVE products it holds: a LEFT JOIN with an
-// aggregate, so an empty category appears with a count of 0.
+// Every category with how many ACTIVE products it holds. Both joins are LEFT,
+// so an empty category still appears with a count of 0 and a membership of an
+// archived product only fails to count. The archive check is in ON, not in a
+// WHERE: a WHERE would drop the category whose only product is archived.
 func (q *Queries) ListCategoriesWithCounts(ctx context.Context) ([]ListCategoriesWithCountsRow, error) {
 	rows, err := q.db.Query(ctx, listCategoriesWithCounts)
 	if err != nil {

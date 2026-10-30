@@ -7,12 +7,10 @@ package sqlc
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const archiveProduct = `-- name: ArchiveProduct :one
-UPDATE products SET archived_at = COALESCE(archived_at, now()), updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at, category_id
+UPDATE products SET archived_at = COALESCE(archived_at, now()), updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at
 `
 
 func (q *Queries) ArchiveProduct(ctx context.Context, id int64) (Product, error) {
@@ -28,7 +26,6 @@ func (q *Queries) ArchiveProduct(ctx context.Context, id int64) (Product, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
-		&i.CategoryID,
 	)
 	return i, err
 }
@@ -36,7 +33,9 @@ func (q *Queries) ArchiveProduct(ctx context.Context, id int64) (Product, error)
 const countActiveProducts = `-- name: CountActiveProducts :one
 SELECT count(*) FROM products p
 WHERE p.archived_at IS NULL
-  AND ($1::bigint IS NULL OR p.category_id = $1::bigint)
+  AND ($1::bigint IS NULL OR EXISTS (
+        SELECT 1 FROM product_categories pc
+        WHERE pc.product_id = p.id AND pc.category_id = $1::bigint))
 `
 
 // How many products that list holds in all, for the pager. The same filter,
@@ -78,30 +77,12 @@ func (q *Queries) DecrementProductStock(ctx context.Context, arg DecrementProduc
 }
 
 const getActiveProduct = `-- name: GetActiveProduct :one
-SELECT p.id, p.name, p.description, p.price_cents, p.stock, p.image_url, p.archived_at,
-       p.category_id, p.created_at, p.updated_at, c.name AS category_name
-FROM products p
-LEFT JOIN categories c ON c.id = p.category_id
-WHERE p.id = $1 AND p.archived_at IS NULL
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE id = $1 AND archived_at IS NULL
 `
 
-type GetActiveProductRow struct {
-	ID           int64
-	Name         string
-	Description  string
-	PriceCents   int32
-	Stock        int32
-	ImageUrl     string
-	ArchivedAt   pgtype.Timestamptz
-	CategoryID   *int64
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	CategoryName *string
-}
-
-func (q *Queries) GetActiveProduct(ctx context.Context, id int64) (GetActiveProductRow, error) {
+func (q *Queries) GetActiveProduct(ctx context.Context, id int64) (Product, error) {
 	row := q.db.QueryRow(ctx, getActiveProduct, id)
-	var i GetActiveProductRow
+	var i Product
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -109,17 +90,15 @@ func (q *Queries) GetActiveProduct(ctx context.Context, id int64) (GetActiveProd
 		&i.PriceCents,
 		&i.Stock,
 		&i.ImageUrl,
-		&i.ArchivedAt,
-		&i.CategoryID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.CategoryName,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const getProductByName = `-- name: GetProductByName :one
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at, category_id FROM products WHERE name = $1
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE name = $1
 `
 
 func (q *Queries) GetProductByName(ctx context.Context, name string) (Product, error) {
@@ -135,18 +114,39 @@ func (q *Queries) GetProductByName(ctx context.Context, name string) (Product, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
-		&i.CategoryID,
+	)
+	return i, err
+}
+
+const getProductForUpdate = `-- name: GetProductForUpdate :one
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products WHERE id = $1 FOR UPDATE
+`
+
+// Locks the product's row until the transaction ends, so two writers of its
+// categories take turns.
+func (q *Queries) GetProductForUpdate(ctx context.Context, id int64) (Product, error) {
+	row := q.db.QueryRow(ctx, getProductForUpdate, id)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.Stock,
+		&i.ImageUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const listActiveProducts = `-- name: ListActiveProducts :many
-SELECT p.id, p.name, p.description, p.price_cents, p.stock, p.image_url, p.archived_at,
-       p.category_id, p.created_at, p.updated_at, c.name AS category_name
-FROM products p
-LEFT JOIN categories c ON c.id = p.category_id
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products p
 WHERE p.archived_at IS NULL
-  AND ($1::bigint IS NULL OR p.category_id = $1::bigint)
+  AND ($1::bigint IS NULL OR EXISTS (
+        SELECT 1 FROM product_categories pc
+        WHERE pc.product_id = p.id AND pc.category_id = $1::bigint))
 ORDER BY p.created_at DESC, p.id DESC
 LIMIT $3 OFFSET $2
 `
@@ -157,32 +157,18 @@ type ListActiveProductsParams struct {
 	RowLimit   int32
 }
 
-type ListActiveProductsRow struct {
-	ID           int64
-	Name         string
-	Description  string
-	PriceCents   int32
-	Stock        int32
-	ImageUrl     string
-	ArchivedAt   pgtype.Timestamptz
-	CategoryID   *int64
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	CategoryName *string
-}
-
-// The shop's catalog: active products, each with its category's name (a LEFT
-// JOIN, so an uncategorized product still appears), optionally one category's.
-// narg makes category_id optional: NULL means every category.
-func (q *Queries) ListActiveProducts(ctx context.Context, arg ListActiveProductsParams) ([]ListActiveProductsRow, error) {
+// The shop's catalog: active products, optionally one category's. narg makes
+// category_id optional: NULL means every category. The filter is an EXISTS,
+// not a JOIN: a product in several categories must still appear once.
+func (q *Queries) ListActiveProducts(ctx context.Context, arg ListActiveProductsParams) ([]Product, error) {
 	rows, err := q.db.Query(ctx, listActiveProducts, arg.CategoryID, arg.RowOffset, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListActiveProductsRow{}
+	items := []Product{}
 	for rows.Next() {
-		var i ListActiveProductsRow
+		var i Product
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -190,11 +176,9 @@ func (q *Queries) ListActiveProducts(ctx context.Context, arg ListActiveProducts
 			&i.PriceCents,
 			&i.Stock,
 			&i.ImageUrl,
-			&i.ArchivedAt,
-			&i.CategoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.CategoryName,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -207,7 +191,7 @@ func (q *Queries) ListActiveProducts(ctx context.Context, arg ListActiveProducts
 }
 
 const listProductsPage = `-- name: ListProductsPage :many
-SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at, category_id FROM products
+SELECT id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at FROM products
 WHERE ($1::boolean OR archived_at IS NULL)
 ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $2
@@ -240,7 +224,6 @@ func (q *Queries) ListProductsPage(ctx context.Context, arg ListProductsPagePara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ArchivedAt,
-			&i.CategoryID,
 		); err != nil {
 			return nil, err
 		}
@@ -253,7 +236,7 @@ func (q *Queries) ListProductsPage(ctx context.Context, arg ListProductsPagePara
 }
 
 const restoreProduct = `-- name: RestoreProduct :one
-UPDATE products SET archived_at = NULL, updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at, category_id
+UPDATE products SET archived_at = NULL, updated_at = now() WHERE id = $1 RETURNING id, name, description, price_cents, stock, image_url, created_at, updated_at, archived_at
 `
 
 func (q *Queries) RestoreProduct(ctx context.Context, id int64) (Product, error) {
@@ -269,7 +252,6 @@ func (q *Queries) RestoreProduct(ctx context.Context, id int64) (Product, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
-		&i.CategoryID,
 	)
 	return i, err
 }

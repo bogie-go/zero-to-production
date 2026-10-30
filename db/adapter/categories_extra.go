@@ -27,6 +27,20 @@ func (s *Store) ListCategoriesWithCounts(ctx context.Context) ([]models.Category
 	return out, nil
 }
 
+// ListCategoriesForProduct is the categories a product is in, by name: the
+// store's version of product.categories.
+func (s *Store) ListCategoriesForProduct(ctx context.Context, productID int64) ([]models.Category, error) {
+	rows, err := s.q.ListCategoriesForProduct(ctx, productID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list categories for product %d: %w", productID, err)
+	}
+	out := make([]models.Category, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, categoryFromRow(r))
+	}
+	return out, nil
+}
+
 // GetCategoryByName finds one category by its name.
 func (s *Store) GetCategoryByName(ctx context.Context, name string) (models.Category, error) {
 	row, err := s.q.GetCategoryByName(ctx, name)
@@ -51,13 +65,4 @@ func (s *Store) FindOrCreateCategoryByName(ctx context.Context, c models.Categor
 	default:
 		return models.Category{}, err
 	}
-}
-
-// orEmpty reads a nullable text column (a LEFT JOIN's right side, absent when
-// there is no match) as the empty string, which is how the models say "none".
-func orEmpty(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

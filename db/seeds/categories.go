@@ -23,7 +23,7 @@ var categorized = []struct {
 
 // SeedCategories seeds categories, then puts the seeded products in them. db
 // seed can run this any number of times: a category that exists is left alone,
-// and a product that already has a category (one an admin chose) is never
+// and a product that already has categories (ones an admin chose) is never
 // moved, so re-running cannot undo anyone's edit.
 func SeedCategories(ctx context.Context, s *adapter.Store) error {
 	for _, c := range categorized {
@@ -39,11 +39,14 @@ func SeedCategories(ctx context.Context, s *adapter.Store) error {
 			if err != nil {
 				return err
 			}
-			if product.CategoryID != nil {
+			existing, err := s.ListCategoriesForProduct(ctx, product.ID)
+			if err != nil {
+				return err
+			}
+			if len(existing) > 0 {
 				continue
 			}
-			product.CategoryID = &category.ID
-			if _, err := s.UpdateProduct(ctx, product); err != nil {
+			if err := s.SetProductCategories(ctx, fmt.Sprint(product.ID), []int64{category.ID}); err != nil {
 				return fmt.Errorf("seeds: categorize %q: %w", name, err)
 			}
 		}

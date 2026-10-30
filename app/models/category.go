@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Category groups products: a product belongs to at most one. Imports nothing
+// Category groups products: a product can be in many, through product_categories. Imports nothing
 // third-party: ids are int64s here and become bigint at the store boundary.
 // ProductCount is how many active products it has, filled only by the query
 // that counts them (the shop's category list); it is never written back.

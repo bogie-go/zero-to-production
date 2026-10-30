@@ -20,6 +20,7 @@ import (
 // test's fake is a few lines.
 type productsStore interface {
 	GetActiveProduct(ctx context.Context, id string) (models.Product, error)
+	ListCategoriesForProduct(ctx context.Context, productID int64) ([]models.Category, error)
 	ListActiveProducts(ctx context.Context, categoryID *int64, limit, offset int32) ([]models.Product, error)
 	CountActiveProducts(ctx context.Context, categoryID *int64) (int64, error)
 }
@@ -98,7 +99,16 @@ func (ctl *ProductsController) Show(c *gin.Context) {
 		ctl.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, productView(product))
+	categories, err := ctl.Store.ListCategoriesForProduct(c.Request.Context(), product.ID)
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	resp := views.ProductDetailResponse{ProductResponse: productView(product), Categories: make([]views.CategoryNameResponse, 0, len(categories))}
+	for _, cat := range categories {
+		resp.Categories = append(resp.Categories, views.CategoryNameResponse{ID: cat.ID, Name: cat.Name})
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // fail maps a domain error to a status, the one place that mapping lives:
@@ -120,17 +130,15 @@ func (ctl *ProductsController) fail(c *gin.Context, err error) {
 
 func productView(p models.Product) views.ProductResponse {
 	return views.ProductResponse{
-		ID:           p.ID,
-		Name:         p.Name,
-		Description:  p.Description,
-		PriceCents:   p.PriceCents,
-		Stock:        p.Stock,
-		ImageUrl:     p.ImageUrl,
-		ArchivedAt:   p.ArchivedAt,
-		CategoryID:   p.CategoryID,
-		CategoryName: p.CategoryName,
-		CreatedAt:    p.CreatedAt,
-		UpdatedAt:    p.UpdatedAt,
+		ID:          p.ID,
+		Name:        p.Name,
+		Description: p.Description,
+		PriceCents:  p.PriceCents,
+		Stock:       p.Stock,
+		ImageUrl:    p.ImageUrl,
+		ArchivedAt:  p.ArchivedAt,
+		CreatedAt:   p.CreatedAt,
+		UpdatedAt:   p.UpdatedAt,
 	}
 }
 

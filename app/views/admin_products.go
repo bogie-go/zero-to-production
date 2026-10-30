@@ -13,12 +13,8 @@ type AdminProductResponse struct {
 	Stock       int32      `json:"stock"`
 	ImageUrl    string     `json:"image_url"`
 	ArchivedAt  *time.Time `json:"archived_at"`
-	// CategoryID is null for an uncategorized product; CategoryName is filled
-	// where the response joined the category and empty otherwise.
-	CategoryID   *int64    `json:"category_id"`
-	CategoryName string    `json:"category_name"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // AdminProductsResponse is a page of a listing.
@@ -36,5 +32,21 @@ type AdminProductRequest struct {
 	PriceCents  int32  `json:"price_cents"`
 	Stock       int32  `json:"stock"`
 	ImageUrl    string `json:"image_url"`
-	CategoryID  *int64 `json:"category_id"`
+}
+
+// AdminProductDetailResponse is one product with the categories it is in.
+type AdminProductDetailResponse struct {
+	AdminProductResponse
+	Categories []CategoryNameResponse `json:"categories"`
+}
+
+// ProductCategoriesResponse is the categories a product is in.
+type ProductCategoriesResponse struct {
+	Categories []CategoryNameResponse `json:"categories"`
+}
+
+// ProductCategoriesRequest is the body of PUT /admin/products/:id/categories:
+// the whole set the product should be in afterwards.
+type ProductCategoriesRequest struct {
+	CategoryIDs []int64 `json:"category_ids"`
 }

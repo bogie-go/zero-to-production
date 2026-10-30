@@ -171,10 +171,10 @@ paths:
       responses:
         "500": { $ref: "#/components/responses/ServerError" }
         "200":
-          description: The product.
+          description: The product, with the categories it is in.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Product" }
+              schema: { $ref: "#/components/schemas/ProductDetail" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /categories:
@@ -367,7 +367,7 @@ paths:
   /admin/products/{id}:
     get:
       tags: [Admin products]
-      summary: One product, archived or not
+      summary: One product, archived or not, with the categories it is in
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/Id"
@@ -377,7 +377,7 @@ paths:
           description: The product.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Product" }
+              schema: { $ref: "#/components/schemas/ProductDetail" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -414,6 +414,35 @@ paths:
       responses:
         "500": { $ref: "#/components/responses/ServerError" }
         "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /admin/products/{id}/categories:
+    put:
+      tags: [Admin products]
+      summary: Set a product's categories
+      description: >
+        The product is in exactly the categories sent afterwards; a category
+        named twice is saved once. If any of them does not exist, the answer is
+        422 and the product keeps the categories it had.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductCategoriesInput" }
+      responses:
+        "500": { $ref: "#/components/responses/ServerError" }
+        "200":
+          description: The categories the product is in now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductCategories" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -812,7 +841,7 @@ components:
     Product:
       type: object
       additionalProperties: false
-      required: [id, name, description, price_cents, stock, image_url, archived_at, category_id, category_name, created_at, updated_at]
+      required: [id, name, description, price_cents, stock, image_url, archived_at, created_at, updated_at]
       properties:
         id: { type: integer, format: int64 }
         name: { type: string }
@@ -821,10 +850,52 @@ components:
         stock: { type: integer }
         image_url: { type: string }
         archived_at: { type: string, format: date-time, nullable: true }
-        category_id: { type: integer, format: int64, nullable: true }
-        category_name: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    CategoryRef:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+
+    ProductDetail:
+      description: A product with the categories it is in.
+      type: object
+      additionalProperties: false
+      required: [id, name, description, price_cents, stock, image_url, archived_at, created_at, updated_at, categories]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string }
+        price_cents: { type: integer }
+        stock: { type: integer }
+        image_url: { type: string }
+        archived_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/CategoryRef" }
+
+    ProductCategories:
+      type: object
+      additionalProperties: false
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/CategoryRef" }
+
+    ProductCategoriesInput:
+      type: object
+      required: [category_ids]
+      properties:
+        category_ids:
+          type: array
+          items: { type: integer, format: int64 }
 
     Products:
       type: object
@@ -844,7 +915,6 @@ components:
         price_cents: { type: integer }
         stock: { type: integer }
         image_url: { type: string }
-        category_id: { type: integer, format: int64, nullable: true }
 
     Category:
       type: object

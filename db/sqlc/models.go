@@ -75,7 +75,14 @@ type Product struct {
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	ArchivedAt  pgtype.Timestamptz
-	CategoryID  *int64
+}
+
+type ProductCategory struct {
+	ID         int64
+	ProductID  int64
+	CategoryID int64
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
 }
 
 type User struct {

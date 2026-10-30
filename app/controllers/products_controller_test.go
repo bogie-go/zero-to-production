@@ -36,16 +36,22 @@ var _ = Describe("GET /products", func() {
 
 		BeforeEach(func() {
 			audio = factories.Category(GinkgoT(), app.Store)
-			inAudio = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.CategoryID = &audio.ID })
+			inAudio = factories.Categorize(GinkgoT(), app.Store, factories.Product(GinkgoT(), app.Store), audio)
 			factories.Product(GinkgoT(), app.Store)
 		})
 
-		It("lists only that category's products, with its name", func() {
+		It("lists only that category's products", func() {
 			app.Get("/products?category_id=" + strconv.FormatInt(audio.ID, 10)).Do().Status(http.StatusOK).JSON(&list)
 
 			Expect(list.Products).To(HaveLen(1))
 			Expect(list.Products[0].ID).To(Equal(inAudio.ID))
-			Expect(list.Products[0].CategoryName).To(Equal(audio.Name))
+		})
+
+		It("names the category on the product's own page", func() {
+			var shown views.ProductDetailResponse
+			app.Get("/products/" + strconv.FormatInt(inAudio.ID, 10)).Do().Status(http.StatusOK).JSON(&shown)
+
+			Expect(shown.Categories).To(Equal([]views.CategoryNameResponse{{ID: audio.ID, Name: audio.Name}}))
 		})
 	})
 

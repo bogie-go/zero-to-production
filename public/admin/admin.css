@@ -86,3 +86,6 @@ tr.archived td.actions { opacity: 1; }
 }
 
 .pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.5rem 0 0; color: var(--muted); font-size: .9rem; }
+
+/* A row of tick boxes: label and box on one line, not stacked. */
+label.check { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; margin: 0.25rem 0; }

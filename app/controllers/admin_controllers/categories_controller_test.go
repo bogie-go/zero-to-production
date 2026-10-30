@@ -60,7 +60,7 @@ var _ = Describe("/admin/categories", func() {
 
 			BeforeEach(func() {
 				category = factories.Category(GinkgoT(), app.Store)
-				product = factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.CategoryID = &category.ID })
+				product = factories.Categorize(GinkgoT(), app.Store, factories.Product(GinkgoT(), app.Store), category)
 			})
 
 			It("lists categories with their product counts", func() {
@@ -73,10 +73,9 @@ var _ = Describe("/admin/categories", func() {
 			It("keeps a deleted category's products, just without a category", func() {
 				app.Delete("/admin/categories/" + strconv.FormatInt(category.ID, 10)).AsUser(staff).Do().Status(http.StatusNoContent)
 
-				var shown views.AdminProductResponse
+				var shown views.ProductDetailResponse
 				app.Get("/products/" + strconv.FormatInt(product.ID, 10)).Do().Status(http.StatusOK).JSON(&shown)
-				Expect(shown.CategoryID).To(BeNil())
-				Expect(shown.CategoryName).To(BeEmpty())
+				Expect(shown.Categories).To(BeEmpty())
 			})
 		})
 

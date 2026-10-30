@@ -155,8 +155,9 @@ var _ = Describe("Archiving products", func() {
 
 var _ = Describe("Paging products", func() {
 
-	named := func(name string, categoryID *int64) models.Product {
-		return factories.Product(GinkgoT(), store, func(p *models.Product) { p.Name = name; p.CategoryID = categoryID })
+	named := func(name string, categories ...models.Category) models.Product {
+		p := factories.Product(GinkgoT(), store, func(p *models.Product) { p.Name = name })
+		return factories.Categorize(GinkgoT(), store, p, categories...)
 	}
 	names := func(products []models.Product) []string {
 		out := make([]string, len(products))
@@ -176,10 +177,10 @@ var _ = Describe("Paging products", func() {
 			BeforeEach(func() {
 				audio = factories.Category(GinkgoT(), store, func(c *models.Category) { c.Name = "Audio" })
 				for _, n := range []string{"A", "B", "C", "D", "E"} {
-					named(n, &audio.ID)
+					named(n, audio)
 				}
-				named("Other", nil)
-				gone := named("Gone", nil)
+				named("Other")
+				gone := named("Gone")
 				_, err := store.ArchiveProduct(GinkgoT().Context(), strconv.FormatInt(gone.ID, 10))
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -210,8 +211,8 @@ var _ = Describe("Paging products", func() {
 	Describe("the admin's pages", func() {
 		Context("with a live and an archived product", func() {
 			BeforeEach(func() {
-				named("Live", nil)
-				gone := named("Gone", nil)
+				named("Live")
+				gone := named("Gone")
 				_, err := store.ArchiveProduct(GinkgoT().Context(), strconv.FormatInt(gone.ID, 10))
 				Expect(err).NotTo(HaveOccurred())
 			})

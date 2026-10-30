@@ -26,12 +26,8 @@ func (s *Store) CreateProduct(ctx context.Context, p models.Product) (models.Pro
 	if err := p.Validate(); err != nil {
 		return models.Product{}, err
 	}
-	row, err := s.q.CreateProduct(ctx, sqlc.CreateProductParams{Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl, CategoryID: p.CategoryID})
+	row, err := s.q.CreateProduct(ctx, sqlc.CreateProductParams{Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			return models.Product{}, fmt.Errorf("%w: category does not exist", models.ErrInvalid)
-		}
 		return models.Product{}, fmt.Errorf("store: create product: %w", err)
 	}
 	return productFromRow(row), nil
@@ -72,13 +68,10 @@ func (s *Store) UpdateProduct(ctx context.Context, p models.Product) (models.Pro
 		return models.Product{}, err
 	}
 	pk := p.ID
-	row, err := s.q.UpdateProduct(ctx, sqlc.UpdateProductParams{ID: pk, Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl, CategoryID: p.CategoryID})
-	var pgErr *pgconn.PgError
+	row, err := s.q.UpdateProduct(ctx, sqlc.UpdateProductParams{ID: pk, Name: p.Name, Description: p.Description, PriceCents: p.PriceCents, Stock: p.Stock, ImageUrl: p.ImageUrl})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return models.Product{}, models.ErrNotFound
-	case errors.As(err, &pgErr) && pgErr.Code == "23503":
-		return models.Product{}, fmt.Errorf("%w: category does not exist", models.ErrInvalid)
 	case err != nil:
 		return models.Product{}, fmt.Errorf("store: update product %v: %w", p.ID, err)
 	}
@@ -114,7 +107,6 @@ func productFromRow(r sqlc.Product) models.Product {
 		Stock:       r.Stock,
 		ImageUrl:    r.ImageUrl,
 		ArchivedAt:  timestamptzToTimePtr(r.ArchivedAt),
-		CategoryID:  r.CategoryID,
 		CreatedAt:   r.CreatedAt.Time,
 		UpdatedAt:   r.UpdatedAt.Time,
 	}

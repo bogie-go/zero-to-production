@@ -2,6 +2,7 @@ package factories
 
 import (
 	"context"
+	"strconv"
 
 	"ecommerce/app/models"
 	"ecommerce/db/adapter"
@@ -64,6 +65,20 @@ func Product(t T, s *adapter.Store, with ...func(*models.Product)) models.Produc
 		t.Fatal(err)
 	}
 	return created
+}
+
+// Categorize puts a product in exactly these categories, through the store's
+// own SetProductCategories, and returns the product for chaining.
+func Categorize(t T, s *adapter.Store, p models.Product, categories ...models.Category) models.Product {
+	t.Helper()
+	ids := make([]int64, len(categories))
+	for i, c := range categories {
+		ids[i] = c.ID
+	}
+	if err := s.SetProductCategories(context.Background(), strconv.FormatInt(p.ID, 10), ids); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
 
 // Cart is an empty cart with a unique token.

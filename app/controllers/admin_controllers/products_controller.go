@@ -17,6 +17,8 @@ import (
 // call. *adapter.Store satisfies it.
 type productsStore interface {
 	GetProduct(ctx context.Context, id string) (models.Product, error)
+	ListCategoriesForProduct(ctx context.Context, productID int64) ([]models.Category, error)
+	SetProductCategories(ctx context.Context, productID string, categoryIDs []int64) error
 	ListProductsPage(ctx context.Context, includeArchived bool, limit, offset int32) ([]models.Product, error)
 	CountProducts(ctx context.Context, includeArchived bool) (int64, error)
 	CreateProduct(ctx context.Context, p models.Product) (models.Product, error)
@@ -55,6 +57,7 @@ func (ctl *ProductsController) SetupRoutes(router *gin.RouterGroup) {
 	products.POST("", ctl.Create)
 	products.PATCH("/:id", ctl.Update)
 	products.DELETE("/:id", ctl.Destroy)
+	products.PUT("/:id/categories", ctl.SetCategories)
 	products.POST("/:id/archive", ctl.Archive)
 	products.POST("/:id/restore", ctl.Restore)
 }
@@ -89,7 +92,39 @@ func (ctl *ProductsController) Show(c *gin.Context) {
 		ctl.fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, productView(product))
+	categories, err := ctl.Store.ListCategoriesForProduct(c.Request.Context(), product.ID)
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, views.AdminProductDetailResponse{AdminProductResponse: productView(product), Categories: categoryNames(categories)})
+}
+
+// SetCategories handles PUT /admin/products/:id/categories: the product is
+// in exactly the categories sent afterwards, or in the ones it had if any
+// of them does not exist.
+func (ctl *ProductsController) SetCategories(c *gin.Context) {
+	var req views.ProductCategoriesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, views.Error(err))
+		return
+	}
+	ctx := c.Request.Context()
+	if err := ctl.Store.SetProductCategories(ctx, c.Param("id"), req.CategoryIDs); err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	product, err := ctl.Store.GetProduct(ctx, c.Param("id"))
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	categories, err := ctl.Store.ListCategoriesForProduct(ctx, product.ID)
+	if err != nil {
+		ctl.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, views.ProductCategoriesResponse{Categories: categoryNames(categories)})
 }
 
 // Create handles POST /admin/products.
@@ -101,7 +136,6 @@ func (ctl *ProductsController) Create(c *gin.Context) {
 	}
 	product, err := ctl.Store.CreateProduct(c.Request.Context(), models.Product{
 		Name: req.Name, Description: req.Description, PriceCents: req.PriceCents, Stock: req.Stock, ImageUrl: req.ImageUrl,
-		CategoryID: req.CategoryID,
 	})
 	if err != nil {
 		ctl.fail(c, err)
@@ -127,7 +161,6 @@ func (ctl *ProductsController) Update(c *gin.Context) {
 	existing.PriceCents = req.PriceCents
 	existing.Stock = req.Stock
 	existing.ImageUrl = req.ImageUrl
-	existing.CategoryID = req.CategoryID
 	product, err := ctl.Store.UpdateProduct(c.Request.Context(), existing)
 	if err != nil {
 		ctl.fail(c, err)
@@ -200,7 +233,6 @@ func productView(p models.Product) views.AdminProductResponse {
 		Stock:       p.Stock,
 		ImageUrl:    p.ImageUrl,
 		ArchivedAt:  p.ArchivedAt,
-		CategoryID:  p.CategoryID,
 		CreatedAt:   p.CreatedAt,
 		UpdatedAt:   p.UpdatedAt,
 	}
@@ -210,6 +242,14 @@ func productsView(products []models.Product, pagination views.Pagination) views.
 	out := views.AdminProductsResponse{Products: make([]views.AdminProductResponse, 0, len(products)), Pagination: pagination}
 	for _, p := range products {
 		out.Products = append(out.Products, productView(p))
+	}
+	return out
+}
+
+func categoryNames(categories []models.Category) []views.CategoryNameResponse {
+	out := make([]views.CategoryNameResponse, 0, len(categories))
+	for _, c := range categories {
+		out = append(out, views.CategoryNameResponse{ID: c.ID, Name: c.Name})
 	}
 	return out
 }

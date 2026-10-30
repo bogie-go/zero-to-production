@@ -25,14 +25,12 @@ var _ = Describe("/admin/products", func() {
 				app.Post("/admin/products", views.AdminProductRequest{Name: ""}).AsUser(staff).Do().Status(http.StatusUnprocessableEntity)
 			})
 
-			Context("with a category", func() {
-				var category models.Category
+			Context("with a product to create", func() {
 				var request views.AdminProductRequest
 
 				BeforeEach(func() {
-					category = factories.Category(GinkgoT(), app.Store)
 					request = views.AdminProductRequest{
-						Name: "Desk Lamp", Description: "warm light", PriceCents: 2500, Stock: 4, ImageUrl: "/lamp.webp", CategoryID: &category.ID,
+						Name: "Desk Lamp", Description: "warm light", PriceCents: 2500, Stock: 4, ImageUrl: "/lamp.webp",
 					}
 				})
 
@@ -124,6 +122,82 @@ var _ = Describe("/admin/products", func() {
 						var restored views.AdminProductResponse
 						app.Post(path+"/restore", nil).AsUser(staff).Do().Status(http.StatusOK).JSON(&restored)
 						Expect(restored.ArchivedAt).To(BeNil())
+					})
+				})
+
+				Describe("PUT /admin/products/:id/categories", func() {
+					var gifts, drinkware models.Category
+
+					BeforeEach(func() {
+						gifts = factories.Category(GinkgoT(), app.Store, func(c *models.Category) { c.Name = "Gifts" })
+						drinkware = factories.Category(GinkgoT(), app.Store, func(c *models.Category) { c.Name = "Drinkware" })
+					})
+
+					It("puts the product in the categories sent, once each", func() {
+						var set views.ProductCategoriesResponse
+						app.Put(path+"/categories", views.ProductCategoriesRequest{CategoryIDs: []int64{gifts.ID, drinkware.ID, gifts.ID}}).
+							AsUser(staff).Do().Status(http.StatusOK).JSON(&set)
+						Expect(set.Categories).To(HaveLen(2))
+						Expect(set.Categories[0].Name).To(Equal("Drinkware"))
+						Expect(set.Categories[1].Name).To(Equal("Gifts"))
+					})
+
+					It("shows them on the product", func() {
+						app.Put(path+"/categories", views.ProductCategoriesRequest{CategoryIDs: []int64{gifts.ID}}).AsUser(staff).Do().Status(http.StatusOK)
+
+						var shown views.AdminProductDetailResponse
+						app.Get(path).AsUser(staff).Do().Status(http.StatusOK).JSON(&shown)
+						Expect(shown.Categories).To(HaveLen(1))
+						Expect(shown.Categories[0].ID).To(Equal(gifts.ID))
+					})
+
+					It("answers 404 for a product that is not there", func() {
+						app.Put("/admin/products/999999999/categories", views.ProductCategoriesRequest{CategoryIDs: []int64{gifts.ID}}).
+							AsUser(staff).Do().Status(http.StatusNotFound)
+					})
+
+					Context("when the product is in Gifts", func() {
+						BeforeEach(func() {
+							factories.Categorize(GinkgoT(), app.Store, product, gifts)
+						})
+
+						It("takes it out of the ones left out", func() {
+							var set views.ProductCategoriesResponse
+							app.Put(path+"/categories", views.ProductCategoriesRequest{CategoryIDs: []int64{drinkware.ID}}).
+								AsUser(staff).Do().Status(http.StatusOK).JSON(&set)
+							Expect(set.Categories).To(HaveLen(1))
+							Expect(set.Categories[0].Name).To(Equal("Drinkware"))
+						})
+
+						It("takes it out of all of them when none are sent", func() {
+							var set views.ProductCategoriesResponse
+							app.Put(path+"/categories", views.ProductCategoriesRequest{CategoryIDs: []int64{}}).
+								AsUser(staff).Do().Status(http.StatusOK).JSON(&set)
+							Expect(set.Categories).To(BeEmpty())
+						})
+
+						It("refuses a category that does not exist, with 422", func() {
+							res := app.Put(path+"/categories", views.ProductCategoriesRequest{CategoryIDs: []int64{drinkware.ID, 999999999}}).
+								AsUser(staff).Do().Status(http.StatusUnprocessableEntity)
+							Expect(string(res.Body)).To(ContainSubstring("category 999999999 does not exist"))
+						})
+
+						It("changes nothing when it refuses", func() {
+							app.Put(path+"/categories", views.ProductCategoriesRequest{CategoryIDs: []int64{drinkware.ID, 999999999}}).
+								AsUser(staff).Do().Status(http.StatusUnprocessableEntity)
+							categories, err := app.Store.ListCategoriesForProduct(GinkgoT().Context(), product.ID)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(categories).To(HaveLen(1))
+							Expect(categories[0].ID).To(Equal(gifts.ID))
+						})
+
+						It("is closed to customers", func() {
+							customer := factories.User(GinkgoT(), app.Store)
+							app.Put(path+"/categories", views.ProductCategoriesRequest{CategoryIDs: []int64{}}).AsUser(customer).Do().Status(http.StatusForbidden)
+							categories, err := app.Store.ListCategoriesForProduct(GinkgoT().Context(), product.ID)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(categories).To(HaveLen(1))
+						})
 					})
 				})
 

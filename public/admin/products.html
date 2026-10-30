@@ -37,13 +37,12 @@
         <p class="state" x-show="products === null">Loading&hellip;</p>
         <p class="state" x-show="products !== null && products.length === 0">No products to show.</p>
         <table x-show="products !== null && products.length > 0">
-          <thead><tr><th></th><th>Name</th><th>Category</th><th class="num">Price</th><th class="num">Stock</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Name</th><th class="num">Price</th><th class="num">Stock</th><th></th></tr></thead>
           <tbody>
             <template x-for="p in products" :key="p.id">
               <tr :class="{ archived: p.archived_at }">
                 <td><div class="thumb"><img :src="p.image_url" :alt="p.name" loading="lazy"></div></td>
                 <td><span x-text="p.name"></span> <span class="badge" x-show="p.archived_at">Archived</span></td>
-                <td x-text="categoryName(p.category_id)"></td>
                 <td class="num" x-text="formatPrice(p.price_cents)"></td>
                 <td class="num" :class="{ low: p.stock <= 5 }" x-text="p.stock"></td>
                 <td class="actions">
@@ -74,7 +73,6 @@
         return {
           ...adminShell(),
           products: null,
-          categories: [],
           showArchived: false,
           page: 1,
           pagination: { page: 1, per_page: 0, total: 0, total_pages: 0 },
@@ -84,15 +82,8 @@
             this.loading = false;
             await this.refresh();
           },
-          // The categories name each row's.
-          categoryName(id) {
-            const c = this.categories.find((c) => c.id === id);
-            return c ? c.name : '';
-          },
           async refresh() {
             try {
-              const cats = await this.api('/admin/categories');
-              if (cats.ok) this.categories = (await cats.json()).categories || [];
               const res = await this.api('/admin/products?page=' + this.page + '&include_archived=' + this.showArchived);
               if (!res.ok) throw new Error('status ' + res.status);
               const data = await res.json();

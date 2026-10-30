@@ -22,8 +22,8 @@ var _ = Describe("GET /categories", func() {
 
 		BeforeEach(func() {
 			audio, empty = factories.Category(GinkgoT(), app.Store), factories.Category(GinkgoT(), app.Store)
-			factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.CategoryID = &audio.ID })
-			gone := factories.Product(GinkgoT(), app.Store, func(p *models.Product) { p.CategoryID = &audio.ID })
+			factories.Categorize(GinkgoT(), app.Store, factories.Product(GinkgoT(), app.Store), audio)
+			gone := factories.Categorize(GinkgoT(), app.Store, factories.Product(GinkgoT(), app.Store), audio)
 			_, err := app.Store.ArchiveProduct(GinkgoT().Context(), strconv.FormatInt(gone.ID, 10))
 			Expect(err).NotTo(HaveOccurred())
 		})

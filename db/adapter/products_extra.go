@@ -40,8 +40,7 @@ func (s *Store) FindOrCreateProductByName(ctx context.Context, p models.Product)
 }
 
 // ListActiveProducts is one page of the shop's catalog: products that are not
-// archived, newest first, each with its category's name, and only one
-// category's when categoryID is given. limit and offset pick the page;
+// archived, newest first, and only one category's when categoryID is given. limit and offset pick the page;
 // CountActiveProducts says how many there are in all. ListProducts
 // (generated) still returns all of them, archived included.
 func (s *Store) ListActiveProducts(ctx context.Context, categoryID *int64, limit, offset int32) ([]models.Product, error) {
@@ -51,11 +50,7 @@ func (s *Store) ListActiveProducts(ctx context.Context, categoryID *int64, limit
 	}
 	out := make([]models.Product, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, models.Product{
-			ID: r.ID, Name: r.Name, Description: r.Description, PriceCents: r.PriceCents, Stock: r.Stock,
-			ImageUrl: r.ImageUrl, ArchivedAt: timestamptzToTimePtr(r.ArchivedAt), CategoryID: r.CategoryID,
-			CategoryName: orEmpty(r.CategoryName), CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time,
-		})
+		out = append(out, productFromRow(r))
 	}
 	return out, nil
 }
@@ -93,8 +88,7 @@ func (s *Store) CountProducts(ctx context.Context, includeArchived bool) (int64,
 	return n, nil
 }
 
-// GetActiveProduct finds one product the shop is still selling, with its
-// category's name. An archived product is not found here, exactly as a
+// GetActiveProduct finds one product the shop is still selling. An archived product is not found here, exactly as a
 // nonexistent one is.
 func (s *Store) GetActiveProduct(ctx context.Context, id string) (models.Product, error) {
 	pk, err := parseID(id)
@@ -108,11 +102,7 @@ func (s *Store) GetActiveProduct(ctx context.Context, id string) (models.Product
 	case err != nil:
 		return models.Product{}, fmt.Errorf("store: get active product %s: %w", id, err)
 	}
-	return models.Product{
-		ID: r.ID, Name: r.Name, Description: r.Description, PriceCents: r.PriceCents, Stock: r.Stock,
-		ImageUrl: r.ImageUrl, ArchivedAt: timestamptzToTimePtr(r.ArchivedAt), CategoryID: r.CategoryID,
-		CategoryName: orEmpty(r.CategoryName), CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time,
-	}, nil
+	return productFromRow(r), nil
 }
 
 // ArchiveProduct retires a product: the soft delete. Archiving one already

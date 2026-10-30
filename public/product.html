@@ -93,8 +93,8 @@
           <img :src="product && product.image_url" :alt="product && product.name" loading="lazy">
         </div>
         <div>
-          <p class="cat" x-show="product && product.category_name">
-            <a :href="'/?category_id=' + (product && product.category_id)" x-text="product && product.category_name"></a>
+          <p class="cat" x-show="product && product.categories.length">
+            <template x-for="(c, i) in (product ? product.categories : [])" :key="c.id"><span><span x-show="i > 0">, </span><a :href="'/?category_id=' + c.id" x-text="c.name"></a></span></template>
           </p>
           <h1 x-text="product && product.name"></h1>
           <p class="desc" x-text="product && product.description"></p>
