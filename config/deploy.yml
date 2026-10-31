@@ -18,11 +18,7 @@ servers:
   # serves again instead of working.
   job:
     hosts:
-<<<<<<< yours
       - depot.bogie-go.com
-=======
-      - CHANGE-ME.example.com
->>>>>>> bogie v0.6.6
     cmd: worker
 
 proxy:
