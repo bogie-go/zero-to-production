@@ -115,5 +115,5 @@ accessories:
 aliases:
   logs: app logs -f
   shell: app exec --interactive --reuse "sh"
-  status: app exec --reuse "wget -qO- http://localhost:8080/healthz"
+  status: app exec --reuse -r web "wget -qO- http://localhost:8080/healthz"
   ready: app exec --reuse "wget -qO- http://localhost:8080/readyz"
