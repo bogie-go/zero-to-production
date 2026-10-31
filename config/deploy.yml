@@ -12,10 +12,17 @@ servers:
     - depot.bogie-go.com
   # The worker is this same image started with a different argument, so a
   # web container and a job container cannot be built from different
-  # commits. Same host as web until the queue needs its own.
+  # commits. Same host as web until the queue needs its own. The image's
+  # ENTRYPOINT is already `ecommerce`, so `cmd` is only its argument:
+  # `cmd: ecommerce worker` would run `ecommerce ecommerce worker`, which
+  # serves again instead of working.
   job:
     hosts:
+<<<<<<< yours
       - depot.bogie-go.com
+=======
+      - CHANGE-ME.example.com
+>>>>>>> bogie v0.6.6
     cmd: worker
 
 proxy:
@@ -105,6 +112,10 @@ accessories:
     roles: [web]
     port: "127.0.0.1:8025:8025"
 
+# `app exec --reuse` runs in the container that is up, so it takes the whole
+# command (`app exec --reuse "ecommerce db seed"`). Without --reuse Kamal starts
+# a new container through the ENTRYPOINT, so leave the binary off:
+# `app exec "db seed"`.
 aliases:
   logs: app logs -f
   shell: app exec --interactive --reuse "sh"
