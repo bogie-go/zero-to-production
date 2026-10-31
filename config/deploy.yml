@@ -16,7 +16,7 @@ servers:
   job:
     hosts:
       - depot.bogie-go.com
-    cmd: ecommerce worker
+    cmd: worker
 
 proxy:
   ssl: true

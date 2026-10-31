@@ -57,14 +57,20 @@ schema in two releases, never one:
   Health page's release). The previous image starts, passes `/readyz`, and
   takes over.
 - **Schema, only if a migration itself is the problem:**
-  `kamal app exec "ecommerce migrate status"`, then
-  `kamal app exec "ecommerce migrate down --yes"`. Migrations drop on the way
+  `kamal app exec --reuse "ecommerce migrate status"`, then
+  `kamal app exec --reuse "ecommerce migrate down --yes"`. Migrations drop on the way
   down and there is no undo, so prefer fixing forward with a new migration.
+
+`--reuse` runs the command in the container that is already up, so it is the
+whole command, binary included. Without it Kamal starts a new container, and
+the image's ENTRYPOINT is already `ecommerce`: write `kamal app exec "migrate
+status"`, not `kamal app exec "ecommerce migrate status"`, which would run
+`ecommerce ecommerce migrate status`.
 
 ## Accounts
 
 The first staff account is made by signing up on the site, then
-`kamal app exec "ecommerce staff promote you@example.com"`. The development
+`kamal app exec --reuse "ecommerce staff promote you@example.com"`. The development
 staff login in `db/seeds` never exists on a deployed system.
 
 ## Backups
